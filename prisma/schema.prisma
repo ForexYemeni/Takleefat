@@ -1,0 +1,183 @@
+// ============================================================
+// Takleefat | تكليفات — Prisma Schema (PostgreSQL)
+// منصة إدارة التكليفات الطبية والتمريضية
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- التعدادات (Enums) ----------
+
+/// أدوار المستخدمين
+enum Role {
+  ADMIN
+  NURSE
+  RECEIVER
+}
+
+/// حالة الحساب (يعمل النظام بموافقة المدير)
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+/// أنواع المستندات
+enum DocumentType {
+  ID_CARD
+  PRACTICE_LICENSE
+  EXPERIENCE_CERT
+  OTHER
+}
+
+/// حالة مراجعة المستند
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// حالة التكليف
+enum AssignmentStatus {
+  ACTIVE
+  RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+/// أنواع الإشعارات
+enum NotificationType {
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+  DOCUMENT_UPLOADED
+  DOCUMENT_REVIEWED
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_RECEIVED
+  ASSIGNMENT_COMPLETED
+  ASSIGNMENT_CANCELLED
+  GENERIC
+}
+
+// ---------- النماذج (Models) ----------
+
+/// المستخدم: مدير النظام / الكادر التمريضي / المستلم الإداري
+model User {
+  id                String     @id @default(cuid())
+  name              String
+  phone             String     @unique
+  password          String
+  role              Role       @default(NURSE)
+  status            UserStatus @default(PENDING)
+  // حقول خاصة بالكادر التمريضي
+  specialty         String?
+  qualification     String?
+  yearsOfExperience Int?
+  // ملاحظة الرفض في حال عدم اعتماد الحساب
+  rejectNote        String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  documents           Document[]
+  assignments         Assignment[]   @relation("NurseAssignments")
+  receivedAssignments Assignment[]   @relation("ReceiverAssignments")
+  createdAssignments  Assignment[]   @relation("AssignmentCreator")
+  notifications       Notification[]
+  assignmentLogs      AssignmentLog[]
+  documentsReviewed   Document[]     @relation("DocumentReviewer")
+
+  @@index([role, status])
+  @@map("users")
+}
+
+/// مستندات الكادر التمريضي (يُحفظ رابط الملف فقط في قاعدة البيانات)
+model Document {
+  id           String          @id @default(cuid())
+  userId       String
+  type         DocumentType    @default(OTHER)
+  title        String
+  fileUrl      String
+  fileName     String
+  fileSize     Int?
+  mimeType     String?
+  status       DocumentStatus  @default(PENDING)
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("documents")
+}
+
+/// التكليف الطبي / التمريضي
+model Assignment {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  facility    String
+  department  String?
+  startDate   DateTime
+  endDate     DateTime?
+  status      AssignmentStatus @default(ACTIVE)
+  nurseId     String
+  receiverId  String
+  createdById String
+  receivedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  nurse     User            @relation("NurseAssignments", fields: [nurseId], references: [id])
+  receiver  User            @relation("ReceiverAssignments", fields: [receiverId], references: [id])
+  createdBy User            @relation("AssignmentCreator", fields: [createdById], references: [id])
+  logs      AssignmentLog[]
+
+  @@index([nurseId])
+  @@index([receiverId])
+  @@index([status])
+  @@map("assignments")
+}
+
+/// سجل أحداث التكليف
+model AssignmentLog {
+  id           String   @id @default(cuid())
+  assignmentId String
+  userId       String
+  action       String
+  note         String?
+  createdAt    DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@index([assignmentId])
+  @@map("assignment_logs")
+}
+
+/// الإشعارات داخل التطبيق
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  body      String?
+  type      NotificationType @default(GENERIC)
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}

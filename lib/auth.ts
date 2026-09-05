@@ -1,0 +1,116 @@
+import type { NextAuthOptions } from 'next-auth'
+import Credentials from 'next-auth/providers/credentials'
+import { compare } from 'bcryptjs'
+import { db } from '@/lib/db'
+import { loginSchema } from '@/lib/validations/auth'
+
+/**
+ * يضمن وجود حساب المدير الافتراضي.
+ * يُنشأ تلقائياً من متغيرات البيئة ADMIN_PHONE / ADMIN_PASSWORD
+ * إذا لم يوجد أي مدير في قاعدة البيانات.
+ */
+export async function ensureAdmin() {
+  const adminPhone = process.env.ADMIN_PHONE
+  const adminPassword = process.env.ADMIN_PASSWORD
+  if (!adminPhone || !adminPassword) return
+
+  const adminExists = await db.user.findFirst({ where: { role: 'ADMIN' } })
+  if (adminExists) return
+
+  const bcrypt = await import('bcryptjs')
+  const hashed = await bcrypt.hash(adminPassword, 12)
+  await db.user.upsert({
+    where: { phone: adminPhone },
+    update: { role: 'ADMIN', status: 'APPROVED', password: hashed },
+    create: {
+      name: 'مدير النظام',
+      phone: adminPhone,
+      password: hashed,
+      role: 'ADMIN',
+      status: 'APPROVED',
+    },
+  })
+}
+
+export const authOptions: NextAuthOptions = {
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: 'jwt',
+    maxAge: 60 * 60 * 24, // 24 ساعة
+  },
+  pages: {
+    signIn: '/login',
+    error: '/login',
+  },
+  providers: [
+    Credentials({
+      name: 'تسجيل الدخول',
+      credentials: {
+        phone: { label: 'رقم الهاتف', type: 'tel' },
+        password: { label: 'كلمة المرور', type: 'password' },
+      },
+      async authorize(credentials) {
+        await ensureAdmin()
+
+        const parsed = loginSchema.safeParse(credentials)
+        if (!parsed.success) return null
+
+        const { phone, password } = parsed.data
+
+        const user = await db.user.findUnique({ where: { phone } })
+        if (!user) return null
+
+        const valid = await compare(password, user.password)
+        if (!valid) return null
+
+        // الحسابات المعلّقة لا يمكنها الدخول
+        if (user.status === 'SUSPENDED') return null
+
+        return {
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          role: user.role,
+          status: user.status,
+        }
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+        token.role = (user as { role: 'ADMIN' | 'NURSE' | 'RECEIVER' }).role
+        token.status = (
+          user as { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
+        ).status
+        token.phone = (user as { phone: string }).phone
+      }
+      return token
+    },
+    async session({ session, token }) {
+      if (session.user && token.id) {
+        // جلب أحدث حالة للمستخدم من قاعدة البيانات (اعتماد الحساب / تغيير الدور)
+        const fresh = await db.user.findUnique({
+          where: { id: token.id as string },
+          select: { id: true, name: true, phone: true, role: true, status: true },
+        })
+
+        if (fresh) {
+          session.user.id = fresh.id
+          session.user.name = fresh.name
+          session.user.phone = fresh.phone
+          session.user.role = fresh.role
+          session.user.status = fresh.status
+        } else {
+          session.user.id = (token.id as string) ?? ''
+          session.user.name = (token.name as string) ?? ''
+          session.user.phone = (token.phone as string) ?? ''
+          session.user.role = (token.role as 'ADMIN' | 'NURSE' | 'RECEIVER') ?? 'NURSE'
+          session.user.status = (token.status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED') ?? 'PENDING'
+        }
+      }
+      return session
+    },
+  },
+}

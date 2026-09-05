@@ -1,0 +1,59 @@
+# ============================================================
+# تكليفات | Takleefat — Git Ignore
+# ============================================================
+
+# ---------- متغيرات البيئة (سرية — ممنوع رفعها نهائياً) ----------
+.env
+.env.*
+!.env.example
+
+# ---------- قواعد البيانات ----------
+db/*.db
+db/*.db-journal
+db/pgdata/
+db/uploads/
+db/pg-server.log
+*.sqlite
+*.sqlite3
+
+# ---------- التبعيات ----------
+node_modules/
+.pnp
+.pnp.js
+bun.lockb
+
+# ---------- Next.js ----------
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# ---------- سجلات التشغيل ----------
+dev.log
+server.log
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------- أدوات النظام والمحررات ----------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---------- مجلدات بيئة العمل (غير جزء من المشروع) ----------
+.zscripts/
+scripts/
+download/
+upload/
+examples/
+tests/
+mini-services/
+skills/
+agent-ctx/
+.caddy/
+Caddyfile
+vercel-errors.log
