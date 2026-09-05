@@ -4,7 +4,19 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react'
+import {
+  ClipboardList,
+  FileCheck2,
+  Inbox,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Moon,
+  Sun,
+  UserCog,
+  UserRound,
+  Users,
+} from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
@@ -21,15 +33,48 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
-export interface NavItem {
+export type DashboardRole = 'ADMIN' | 'NURSE' | 'RECEIVER'
+
+interface NavItem {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string }>
 }
 
+/**
+ * قوائم التنقل — تُعرَّف داخل مكوّن العميل لتوافق RSC
+ */
+const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; items: NavItem[] }> = {
+  ADMIN: {
+    roleLabel: 'مدير النظام',
+    items: [
+      { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
+      { href: '/admin/nurses', label: 'الكادر التمريضي', icon: Users },
+      { href: '/admin/receivers', label: 'المستلمون الإداريون', icon: UserCog },
+      { href: '/admin/assignments', label: 'التكليفات', icon: ClipboardList },
+      { href: '/admin/documents', label: 'مراجعة المستندات', icon: FileCheck2 },
+    ],
+  },
+  NURSE: {
+    roleLabel: 'الكادر التمريضي',
+    items: [
+      { href: '/nurse', label: 'نظرة عامة', icon: LayoutDashboard },
+      { href: '/nurse/assignments', label: 'تكليفاتي', icon: ClipboardList },
+      { href: '/nurse/documents', label: 'مستنداتي', icon: FileCheck2 },
+      { href: '/nurse/profile', label: 'الملف الشخصي', icon: UserRound },
+    ],
+  },
+  RECEIVER: {
+    roleLabel: 'المستلم الإداري',
+    items: [
+      { href: '/receiver', label: 'نظرة عامة', icon: LayoutDashboard },
+      { href: '/receiver/assignments', label: 'التكليفات الواردة', icon: Inbox },
+    ],
+  },
+}
+
 interface DashboardShellProps {
-  navItems: NavItem[]
-  roleLabel: string
+  role: DashboardRole
   userName: string
   children: React.ReactNode
 }
@@ -38,11 +83,13 @@ interface DashboardShellProps {
  * هيكل لوحة التحكم — تكليفات | Takleefat
  * شريط جانبي ثابت على الشاشات الكبيرة + قائمة منزلقة على الجوال
  */
-export function DashboardShell({ navItems, roleLabel, userName, children }: DashboardShellProps) {
+export function DashboardShell({ role, userName, children }: DashboardShellProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const navItems = NAV_CONFIG[role].items
+  const roleLabel = NAV_CONFIG[role].roleLabel
 
   const initials = userName
     .split(' ')
