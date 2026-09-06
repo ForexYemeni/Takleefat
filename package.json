@@ -5,7 +5,7 @@
   "description": "Takleefat | تكليفات — منصة احترافية لإدارة التكليفات الطبية والتمريضية",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "prisma db push && node prisma/seed.js || echo '[takleefat] DB setup skipped — DATABASE_URL missing or unreachable (check /api/health after deploy)'; next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "build": "prisma db push --accept-data-loss && node prisma/seed.js || echo '[takleefat] DB setup skipped — DATABASE_URL missing or unreachable (check /api/health after deploy)'; next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "postinstall": "prisma generate",
     "lint": "eslint .",

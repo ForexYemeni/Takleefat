@@ -56,12 +56,15 @@ function LoginForm() {
 
     if (result?.error) {
       // CredentialsSignin: بيانات خاطئة أو حساب غير معتمد
-      // Configuration: مشكلة إعدادات الخادم (المفتاح السري / قاعدة البيانات)
-      setError(
-        result.error === 'CredentialsSignin'
-          ? 'رقم الهاتف أو كلمة المرور غير صحيحة، أو أن الحساب بانتظار الاعتماد أو موقوف'
-          : 'خطأ في إعدادات الخادم — افتح المسار /api/health لعرض التشخيص الكامل'
-      )
+      // أي رمز آخر (Configuration / خطأ قاعدة بيانات / انزياح مخطط):
+      // نشخّص السبب الحقيقي عبر /api/health بدل رسالة إعدادات عامة غامضة
+      if (result.error === 'CredentialsSignin') {
+        setError(
+          'رقم الهاتف أو كلمة المرور غير صحيحة، أو أن الحساب بانتظار الاعتماد أو موقوف'
+        )
+      } else {
+        setError(await getServerIssueMessage())
+      }
       return
     }
 

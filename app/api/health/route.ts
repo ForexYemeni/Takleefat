@@ -12,6 +12,12 @@ import { db } from '@/lib/db'
  */
 export const dynamic = 'force-dynamic'
 
+/// انزياح المخطط: عمود/جدول موجود في الكود وغائب عن قاعدة البيانات
+function isSchemaDrift(error?: string): boolean {
+  if (!error) return false
+  return /does not exist|P2021|P2022|missing column|unknown column/i.test(error)
+}
+
 export async function GET() {
   const env = (key: string) => {
     const value = process.env[key]
@@ -30,8 +36,9 @@ export async function GET() {
   let databaseError: string | undefined
 
   try {
-    // فحص الاتصال + وجود الجداول معاً (وليس مجرد SELECT 1)
-    await db.user.count()
+    // فحص الاتصال + وجود الجداول + تطابق الأعمدة معاً
+    // (count() لا يقرأ الأعمدة فلن يكشف انزياح المخطط مثل عمود مُضاف في الكود وغائب في القاعدة)
+    await db.user.findMany({ take: 1 })
     database = 'ok'
   } catch (error) {
     databaseError = error instanceof Error ? error.message.split('\n')[0] : 'Unknown error'
@@ -52,7 +59,9 @@ export async function GET() {
     database,
     databaseUrlConfigured,
     ...(databaseError ? { databaseError } : {}),
-    ...(database !== 'ok' ? { setup: setupSteps } : {}),
+    ...(database !== 'ok'
+      ? { setup: setupSteps, ...(isSchemaDrift(databaseError) ? { schemaDrift: true } : {}) }
+      : {}),
     env: {
       DATABASE_URL: env('DATABASE_URL'),
       AUTH_SECRET: env('AUTH_SECRET'),
@@ -73,6 +82,8 @@ export async function GET() {
         'إن كان AUTH_SECRET و NEXTAUTH_SECRET كلاهما MISSING فلن يعمل تسجيل الدخول — أنشئ مفتاحاً بالأمر: openssl rand -base64 32',
       database_error:
         'تأكد من صحة DATABASE_URL ثم أعد النشر — أثناء البناء تُنفَّذ prisma db push + seed تلقائياً (لا حاجة لأوامر يدوية)',
+      schema_drift:
+        'بنية قاعدة البيانات غير متزامنة مع الكود (عمود أو جدول مفقود) — اضغط Redeploy من تبويب Deployments في Vercel وسيُزامن المخطط تلقائياً أثناء البناء؛ لا تحاول تعديل قاعدة البيانات يدوياً',
       login_not_working:
         'الشروط الثلاثة لتسجيل الدخول: (1) مفتاح سري NEXTAUTH_SECRET (2) قاعدة بيانات متصلة (3) إعادة نشر بعد ربط القاعدة — الحسابات التجريبية تُنشأ تلقائياً',
     },
