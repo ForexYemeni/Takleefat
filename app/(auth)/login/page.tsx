@@ -38,14 +38,26 @@ function LoginForm() {
   const onSubmit = async (values: LoginInput) => {
     setError(null)
 
+    // .catch() لالتقاط أعطال الشبكة — signIn يعيد null عند الفشل الكامل
     const result = await signIn('credentials', {
       phone: values.phone,
       password: values.password,
       redirect: false,
-    })
+    }).catch(() => null)
+
+    if (!result) {
+      setError('تعذر الاتصال بالخادم — تحقق من اتصالك بالإنترنت ثم أعد المحاولة')
+      return
+    }
 
     if (result?.error) {
-      setError('رقم الهاتف أو كلمة المرور غير صحيحة، أو أن الحساب موقوف')
+      // CredentialsSignin: بيانات خاطئة أو حساب غير معتمد
+      // Configuration: مشكلة إعدادات الخادم (المفتاح السري / قاعدة البيانات)
+      setError(
+        result.error === 'CredentialsSignin'
+          ? 'رقم الهاتف أو كلمة المرور غير صحيحة، أو أن الحساب بانتظار الاعتماد أو موقوف'
+          : 'خطأ في إعدادات الخادم — افتح المسار /api/health للتحقق من متغيرات البيئة وقاعدة البيانات'
+      )
       return
     }
 
@@ -54,11 +66,17 @@ function LoginForm() {
     const session = await sessionRes.json()
     const role = session?.user?.role as string | undefined
 
+    // حماية إضافية: جلسة بلا دور تعني خللاً في الإعدادات
+    if (!role) {
+      setError('تعذر جلب بيانات الجلسة — افتح المسار /api/health للتحقق من إعدادات الخادم')
+      return
+    }
+
     toast.success('تم تسجيل الدخول بنجاح — مرحباً بك في تكليفات')
 
     const callbackUrl = searchParams.get('callbackUrl')
     const destination =
-      callbackUrl && callbackUrl.startsWith('/') ? callbackUrl : ROLE_HOME[role ?? ''] ?? '/'
+      callbackUrl && callbackUrl.startsWith('/') ? callbackUrl : ROLE_HOME[role] ?? '/'
 
     router.push(destination)
     router.refresh()

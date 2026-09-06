@@ -63,8 +63,9 @@ export const authOptions: NextAuthOptions = {
         const valid = await compare(password, user.password)
         if (!valid) return null
 
-        // الحسابات المعلّقة لا يمكنها الدخول
-        if (user.status === 'SUSPENDED') return null
+        // الحسابات غير المعتمدة لا يمكنها الدخول:
+        // PENDING (بانتظار موافقة المدير) / REJECTED (مرفوض) / SUSPENDED (موقوف)
+        if (user.status !== 'APPROVED') return null
 
         return {
           id: user.id,
