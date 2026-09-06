@@ -48,7 +48,6 @@ Thumbs.db
 
 # ---------- مجلدات بيئة العمل (غير جزء من المشروع) ----------
 .zscripts/
-scripts/
 download/
 
 examples/
