@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
@@ -20,7 +20,11 @@ const ROLE_HOME: Record<string, string> = {
   RECEIVER: '/receiver',
 }
 
-export default function LoginPage() {
+/**
+ * نموذج تسجيل الدخول — يقرأ callbackUrl من معاملات الرابط
+ * لذلك يجب لفّه داخل Suspense boundary أثناء التوليد الساكن.
+ */
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
@@ -142,5 +146,24 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  )
+}
+
+/**
+ * صفحة تسجيل الدخول — لفّ النموذج داخل Suspense
+ * لأن useSearchParams() لا يعمل أثناء prerendering بدونه.
+ */
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center gap-3 py-10 text-muted-foreground">
+          <Loader2 className="size-5 animate-spin" />
+          <span className="text-sm">جارٍ تحميل نموذج تسجيل الدخول...</span>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   )
 }
