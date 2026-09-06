@@ -57,6 +57,16 @@ export async function GET() {
     const approvedCount = await db.user.count({ where: { status: 'APPROVED' } })
     const totalCount = await db.user.count()
 
+    // 5) محاكاة خطوات authorize بالضبط للحساب الإداري — مؤشرات منطقية فقط (بلا أي تسريب)
+    const { loginSchema } = await import('@/lib/validations/auth')
+    const parsed = loginSchema.safeParse({ phone: '773178684', password: 'Admin@1234' })
+    const admin = parsed.success
+      ? await db.user.findUnique({ where: { phone: '773178684' } })
+      : null
+    const compareOk = admin
+      ? await compare('Admin@1234', admin.password).catch(() => false)
+      : false
+
     return NextResponse.json({
       time: new Date().toISOString(),
       bcryptSelfTest,
@@ -65,6 +75,12 @@ export async function GET() {
       ...(compareFlowError ? { compareFlowError } : {}),
       accountChecks,
       counts: { total: totalCount, approved: approvedCount },
+      authorizeSim: {
+        schemaParseOk: parsed.success,
+        userFound: Boolean(admin),
+        passwordCompareOk: compareOk,
+        statusApproved: admin?.status === 'APPROVED',
+      },
       note: 'نقطة تشخيص مؤقتة — تُحذف بعد حل مشكلة الدخول',
     })
   } catch (error) {
