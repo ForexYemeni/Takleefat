@@ -80,6 +80,13 @@ enum PaymentStatus {
   PAID
 }
 
+/// حالة طلب سحب أرباح المستلم الإداري
+enum WithdrawalStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
 /// أنواع الإشعارات
 enum NotificationType {
   ACCOUNT_APPROVED
@@ -127,6 +134,13 @@ model User {
   posts               Post[]
   applications        Application[]
   applicationsReviewed Application[] @relation("ApplicationReviewer")
+  // حقول خاصة بالمستلم الإداري — بيانات السحب (تُحفظ بشكل رئيسي للسحب)
+  walletAddress       String?
+  accountNumber       String?
+  ratingsReceived     NurseRating[]      @relation("RatingNurse")
+  ratingsGiven        NurseRating[]      @relation("RatingReceiver")
+  earnings            ReceiverEarning[]
+  withdrawals         Withdrawal[]
 
   @@index([role, status])
   @@map("users")
@@ -179,6 +193,17 @@ model Assignment {
   paymentStatus PaymentStatus  @default(UNPAID)
   /// التكليف المُعلن الذي نتج عنه هذا التكليف (إن وجد)
   postId        String?
+  // ---------- دورة الإنهاء والدفع ----------
+  /// تأكيد الكادر من إنهاء التكليف واستلام مبلغ التكليف
+  nurseDoneAt          DateTime?
+  nurseConfirmedReceipt Boolean @default(false)
+  /// إنهاء التكليف من جهة المستلم الإداري
+  receiverDoneAt       DateTime?
+  /// إجابة المستلم الإداري: هل تم الدفع للممرض؟
+  nursePaid            Boolean?
+  /// لقطة شاشة إثبات الدفع المرفوعة من الكادر (تظهر للإدارة بتكبير احترافي)
+  paymentScreenshotUrl  String?
+  paymentScreenshotName String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -187,6 +212,8 @@ model Assignment {
   createdBy User            @relation("AssignmentCreator", fields: [createdById], references: [id])
   post      Post?           @relation(fields: [postId], references: [id])
   logs      AssignmentLog[]
+  rating    NurseRating?
+  earning   ReceiverEarning?
 
   @@index([nurseId])
   @@index([receiverId])
@@ -308,6 +335,72 @@ model AssignmentLog {
 
   @@index([assignmentId])
   @@map("assignment_logs")
+}
+
+/// تقييم الكادر التمريضي من المستلم الإداري — احترافي ومتعدد المحاور
+/// يظهر ضمن التقييمات في ملف الكادر ويُضاف إلى السيرة الذاتية عند التقديم لأي تكليف آخر
+model NurseRating {
+  id           String   @id @default(cuid())
+  assignmentId String   @unique
+  nurseId      String
+  receiverId   String
+  /// التقييم العام (1..5 نجوم)
+  overall      Int
+  /// الالتزام بالمواعيد (1..5)
+  punctuality  Int?
+  /// جودة الأداء الطبي (1..5)
+  quality      Int?
+  /// التعامل والتواصل (1..5)
+  communication Int?
+  /// الانضباط المهني (1..5)
+  discipline   Int?
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  nurse      User       @relation("RatingNurse", fields: [nurseId], references: [id], onDelete: Cascade)
+  receiver   User       @relation("RatingReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([nurseId])
+  @@index([receiverId])
+  @@map("nurse_ratings")
+}
+
+/// أرباح المستلم الإداري — نسبة من كل تكليف تُحتسب من حساب الإدارة
+model ReceiverEarning {
+  id           String   @id @default(cuid())
+  assignmentId String   @unique
+  receiverId   String
+  /// قيمة حصة المستلم الإداري من التكليف (ريال يمني)
+  amount       Int
+  /// النسبة المئوية لحظة الاحتساب (لقطة تاريخية)
+  percent      Float
+  createdAt    DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  receiver   User       @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([receiverId])
+  @@map("receiver_earnings")
+}
+
+/// طلب سحب أرباح المستلم الإداري — يظهر للإدارة بالمبلغ ورقم الحساب وعنوان المحفظة
+model Withdrawal {
+  id            String           @id @default(cuid())
+  receiverId    String
+  amount        Int
+  walletAddress String
+  accountNumber String
+  status        WithdrawalStatus @default(PENDING)
+  note          String?
+  createdAt     DateTime @default(now())
+  processedAt   DateTime?
+
+  receiver User @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([receiverId])
+  @@index([status])
+  @@map("withdrawals")
 }
 
 /// الإشعارات داخل التطبيق

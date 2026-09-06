@@ -13,15 +13,17 @@ import {
   UserCheck,
   UserX,
   Wallet,
+  X,
 } from 'lucide-react'
 import { timeAgo, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Badge } from '@/components/ui/badge'
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 
 /**
- * جرس الإشعارات — لوحة احترافية تفتح جهة اليمين (بداية السطر في RTL)
+ * جرس الإشعارات — درج احترافي ينزلق من جهة البداية (يمين الشاشة في RTL)
+ * بعيد عن محتوى الصفحة، بكامل الارتفاع، وقابل للتمرير بسلاسة.
  * بطاقات ملونة بحسب النوع + تعليم كمقروء + حذف فردي + حذف الكل.
  */
 
@@ -57,147 +59,208 @@ export function NotificationBell() {
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative" aria-label="الإشعارات">
-            <Bell className="size-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -end-0.5 -top-0.5 flex size-5 animate-pulse items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground shadow">
-                {unreadCount > 9 ? '+9' : unreadCount}
-              </span>
-            )}
-          </Button>
-        </PopoverTrigger>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative"
+        aria-label="الإشعارات"
+        onClick={() => setOpen(true)}
+      >
+        <Bell className="size-5" />
+        {unreadCount > 0 && (
+          <span className="absolute -end-0.5 -top-0.5 flex size-5 animate-pulse items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground shadow">
+            {unreadCount > 9 ? '+9' : unreadCount}
+          </span>
+        )}
+      </Button>
 
-        {/* align="start" تفتح اللوحة من جهة اليمين في واجهة RTL */}
-        <PopoverContent align="start" sideOffset={10} className="w-[22rem] rounded-2xl border-border/70 p-0 shadow-xl">
-          <div className="flex items-center justify-between gap-2 rounded-t-2xl border-b bg-muted/50 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="relative flex size-2">
-                <span className={cn('absolute inline-flex size-2 rounded-full', unreadCount > 0 ? 'animate-ping bg-destructive/60' : 'bg-emerald-500')} />
-                <span className={cn('relative inline-flex size-2 rounded-full', unreadCount > 0 ? 'bg-destructive' : 'bg-emerald-500')} />
+      {/* درج الإشعارات — ينزلق من جهة اليمين (بداية RTL) بكامل الارتفاع مع تمرير سلس */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+          hideClose={false}
+        >
+          <SheetTitle className="sr-only">الإشعارات</SheetTitle>
+          <SheetDescription className="sr-only">قائمة الإشعارات والتحديثات</SheetDescription>
+
+          {/* رأس الدرج */}
+          <div className="flex items-center justify-between gap-2 border-b bg-gradient-to-bl from-teal-50 to-transparent px-4 py-4 dark:from-teal-950/40">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10">
+                <Bell className="size-5 text-primary" />
               </span>
-              <span className="text-sm font-extrabold">الإشعارات</span>
-              {unreadCount > 0 && (
-                <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-white">
-                  {unreadCount} جديد
-                </span>
-              )}
+              <div>
+                <p className="text-base font-extrabold leading-tight">الإشعارات</p>
+                <p className="text-xs text-muted-foreground">
+                  {unreadCount > 0 ? `لديك ${unreadCount} إشعار جديد` : 'كل الإشعارات مقروءة'}
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              {unreadCount > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-xl"
+              aria-label="إغلاق الإشعارات"
+              onClick={() => setOpen(false)}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          {/* شريط الأدوات */}
+          {(unreadCount > 0 || notifications.length > 0) && (
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2">
+              {unreadCount > 0 ? (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 rounded-lg text-[11px]"
+                  className="h-7 gap-1.5 rounded-lg text-[11px] font-bold"
                   onClick={() => markRead({ all: true })}
                 >
                   <CheckCheck className="size-3.5" />
                   تعليم الكل كمقروء
                 </Button>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">
+                  {notifications.length} إشعار
+                </span>
               )}
               {notifications.length > 0 && (
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="size-7 rounded-lg text-muted-foreground hover:text-destructive"
-                  aria-label="حذف جميع الإشعارات"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-destructive"
                   onClick={() => setConfirmClear(true)}
                 >
                   <Trash2 className="size-3.5" />
+                  حذف جميع الإشعارات
                 </Button>
               )}
             </div>
-          </div>
+          )}
 
-          <ScrollArea className="max-h-[26rem]">
+          {/* القائمة — تمرير أصلي سلس بكامل المساحة المتاحة */}
+          <div className="flex-1 overflow-y-auto overscroll-contain">
             {isLoading ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+              <div className="space-y-3 p-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex animate-pulse gap-3 rounded-2xl border p-4">
+                    <span className="size-10 shrink-0 rounded-xl bg-muted" />
+                    <span className="flex-1 space-y-2">
+                      <span className="block h-3.5 w-2/3 rounded bg-muted" />
+                      <span className="block h-3 w-full rounded bg-muted" />
+                      <span className="block h-2.5 w-1/4 rounded bg-muted" />
+                    </span>
+                  </div>
+                ))}
+              </div>
             ) : notifications.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 p-10 text-center">
-                <span className="flex size-14 items-center justify-center rounded-2xl bg-muted">
-                  <Bell className="size-7 text-muted-foreground/50" />
+              <div className="flex flex-col items-center gap-4 p-12 text-center">
+                <span className="flex size-20 items-center justify-center rounded-3xl bg-muted">
+                  <Bell className="size-9 text-muted-foreground/40" />
                 </span>
                 <div>
-                  <p className="text-sm font-bold">لا توجد إشعارات</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="font-extrabold">لا توجد إشعارات</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                     ستصلك هنا الإشعارات والتحدَّثات المهمة
+                    <br />
+                    المتعلقة بحسابك وتكليفاتك
                   </p>
                 </div>
               </div>
             ) : (
-              notifications.map((n: AppNotification) => {
-                const { icon: Icon, tint } = iconFor(n.type)
-                const inner = (
-                  <div
-                    className={cn(
-                      'group relative flex w-full gap-3 border-b px-4 py-3 text-start transition-colors last:border-0 hover:bg-accent/60',
-                      !n.isRead && 'bg-primary/[0.045]'
-                    )}
-                  >
-                    <span className={cn('mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl', tint)}>
-                      <Icon className="size-4.5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className={cn('text-[13px] leading-snug', n.isRead ? 'font-semibold text-foreground/80' : 'font-extrabold')}>
-                          {n.title}
+              <ul className="divide-y">
+                {notifications.map((n: AppNotification) => {
+                  const { icon: Icon, tint } = iconFor(n.type)
+                  const inner = (
+                    <>
+                      <span
+                        className={cn(
+                          'mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl',
+                          tint
+                        )}
+                      >
+                        <Icon className="size-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p
+                            className={cn(
+                              'text-[13.5px] leading-snug',
+                              n.isRead ? 'font-semibold text-foreground/80' : 'font-extrabold'
+                            )}
+                          >
+                            {n.title}
+                          </p>
+                          {!n.isRead && (
+                            <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        {n.body && (
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            {n.body}
+                          </p>
+                        )}
+                        <p className="mt-1.5 flex items-center gap-2 text-[10.5px] font-medium text-muted-foreground/70">
+                          {timeAgo(n.createdAt)}
+                          {!n.isRead && (
+                            <Badge
+                              variant="secondary"
+                              className="h-4 px-1.5 text-[9px] font-bold text-primary"
+                            >
+                              جديد
+                            </Badge>
+                          )}
                         </p>
-                        {!n.isRead && <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />}
                       </div>
-                      {n.body && (
-                        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                          {n.body}
-                        </p>
-                      )}
-                      <p className="mt-1 text-[10.5px] font-medium text-muted-foreground/70">
-                        {timeAgo(n.createdAt)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="حذف الإشعار"
-                      className="absolute end-2 top-2 flex size-6 items-center justify-center rounded-lg text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setPendingDelete(n)
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                )
+                      <button
+                        type="button"
+                        aria-label="حذف الإشعار"
+                        className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setPendingDelete(n)
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </>
+                  )
 
-                return n.link ? (
-                  <Link
-                    key={n.id}
-                    href={n.link}
-                    onClick={() => {
-                      if (!n.isRead) markRead({ id: n.id })
-                      setOpen(false)
-                    }}
-                    className="block"
-                  >
-                    {inner}
-                  </Link>
-                ) : (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => {
-                      if (!n.isRead) markRead({ id: n.id })
-                    }}
-                    className="block w-full"
-                  >
-                    {inner}
-                  </button>
-                )
-              })
+                  return (
+                    <li key={n.id} className={cn(!n.isRead && 'bg-primary/[0.045]')}>
+                      {n.link ? (
+                        <Link
+                          href={n.link}
+                          onClick={() => {
+                            if (!n.isRead) markRead({ id: n.id })
+                            setOpen(false)
+                          }}
+                          className="flex w-full gap-3 px-4 py-4 text-start transition-colors hover:bg-accent/60"
+                        >
+                          {inner}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!n.isRead) markRead({ id: n.id })
+                          }}
+                          className="flex w-full gap-3 px-4 py-4 text-start transition-colors hover:bg-accent/60"
+                        >
+                          {inner}
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
             )}
-          </ScrollArea>
-        </PopoverContent>
-      </Popover>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* تأكيد حذف إشعار واحد */}
       <ConfirmDialog

@@ -11,6 +11,7 @@ import {
   MapPin,
   PackageCheck,
   Plus,
+  Star,
   UserRound,
   Users,
   XCircle,
@@ -20,6 +21,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPost, apiPatch } from '@/lib/api-client'
 import {
+  cn,
   formatDate,
   formatDateTime,
   formatCurrency,
@@ -34,8 +36,9 @@ import {
 } from '@/lib/validations/post'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
-import { PaymentCard } from '@/components/shared/payment-card'
 import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant-cv'
+import { Stars, StarRatingInput } from '@/components/shared/star-rating'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -91,9 +94,13 @@ interface ReceiverAssignment {
   status: string
   receivedAt: string | null
   value: number | null
-  adminFee: number | null
-  paymentStatus: string | null
+  nurseDoneAt: string | null
+  nurseConfirmedReceipt: boolean
+  receiverDoneAt: string | null
+  nursePaid: boolean | null
   nurse: { id: string; name: string; specialty: string | null }
+  rating?: { overall: number; comment: string | null; createdAt: string } | null
+  earning?: { amount: number; percent: number } | null
 }
 
 interface PlatformSettings {
@@ -272,18 +279,6 @@ function MyPosts({
                   </p>
                 </div>
                 <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">حصة الإدارة</p>
-                  <p className="mt-0.5 font-bold" dir="ltr">
-                    {settings
-                      ? settings.feeMode === 'ADMIN'
-                        ? settings.adminFeeType === 'FIXED'
-                          ? `${formatCurrency(settings.adminFeeFixed)} ثابت`
-                          : `${formatCurrency(Math.round((post.value * settings.adminPercentage) / 100))} (${settings.adminPercentage}٪)`
-                        : '— (نمط رسوم التقديم)'
-                      : '—'}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-secondary/60 p-2.5">
                   <p className="text-muted-foreground">تاريخ البدء</p>
                   <p className="mt-0.5 font-bold">{formatDate(post.startDate)}</p>
                 </div>
@@ -322,36 +317,9 @@ function MyPosts({
               ) : (
                 <p className="flex items-center gap-1.5 rounded-xl bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">
                   <BadgeCheck className="size-3.5" />
-                  اكتمل اختيار الكادر لهذا التكليف
+                  اكتمل اختيار الكادر لهذا التكليف — تابع التكليف المؤكد من تبويب «التكليفات المؤكدة»
                 </p>
               )}
-
-              {post.status !== 'OPEN' && post.status !== 'CANCELLED' && settings && (() => {
-                // يُحصّل نوع واحد فقط حسب نمط الرسوم المختار من الإدارة
-                const count = Math.max(1, approvedCount)
-                const breakdown =
-                  settings.feeMode === 'ADMIN'
-                    ? [
-                        {
-                          label:
-                            settings.adminFeeType === 'FIXED'
-                              ? `حصة الإدارة (مبلغ ثابت × ${count})`
-                              : `حصة الإدارة (${settings.adminPercentage}٪ × ${count})`,
-                          amount:
-                            (settings.adminFeeType === 'FIXED'
-                              ? settings.adminFeeFixed
-                              : Math.round((post.value * settings.adminPercentage) / 100)) * count,
-                        },
-                      ]
-                    : [
-                        {
-                          label: `رسوم التقديم (لكل كادر معتمد × ${count})`,
-                          amount: settings.applicationFee * count,
-                        },
-                      ]
-                const due = breakdown.reduce((s, b) => s + b.amount, 0)
-                return <PaymentCard settings={settings} breakdown={breakdown} dueAmount={due} />
-              })()}
 
               {post.status === 'OPEN' && (
                 <Button
@@ -428,6 +396,7 @@ function ApplicationsReview({ postId, nursesNeeded }: { postId: string; nursesNe
 
 function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment[] }) {
   const queryClient = useQueryClient()
+  const [completing, setCompleting] = useState<ReceiverAssignment | null>(null)
 
   const receiveMutation = useMutation({
     mutationFn: (id: string) => apiPost<{ message: string }>(`/api/me/assignments/${id}/receive`, {}),
@@ -449,19 +418,21 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
     )
   }
 
-  const pending = assignments.filter((a) => a.status === 'ACTIVE')
-  const others = assignments.filter((a) => a.status !== 'ACTIVE')
+  const pendingReceipt = assignments.filter((a) => a.status === 'ACTIVE')
+  const working = assignments.filter((a) => a.status === 'RECEIVED')
+  const finished = assignments.filter((a) => a.status === 'COMPLETED' || a.status === 'CANCELLED')
 
   return (
-    <div className="space-y-4">
-      {pending.length > 0 && (
+    <div className="space-y-5">
+      {/* بانتظار تأكيد الاستلام — تكليفات الإسناد المباشر */}
+      {pendingReceipt.length > 0 && (
         <div className="space-y-3">
           <p className="flex items-center gap-2 text-sm font-bold text-amber-700">
             <Inbox className="size-4" />
-            بانتظار تأكيد الاستلام ({pending.length})
+            بانتظار تأكيد الاستلام ({pendingReceipt.length})
           </p>
           <div className="grid gap-4 md:grid-cols-2">
-            {pending.map((a) => (
+            {pendingReceipt.map((a) => (
               <Card key={a.id} className="border-amber-200 bg-amber-50/40">
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-2">
@@ -490,7 +461,6 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
 
                   <p className="text-xs text-muted-foreground">
                     تاريخ البدء: {formatDate(a.startDate)}
-                    {a.endDate ? ` — حتى ${formatDate(a.endDate)}` : ''}
                   </p>
 
                   <Button
@@ -508,11 +478,76 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
         </div>
       )}
 
-      {others.length > 0 && (
+      {/* تكليفات جارية — تم اختيار الكادر */}
+      {working.length > 0 && (
         <div className="space-y-3">
-          <p className="text-sm font-bold">تكليفات سابقة</p>
+          <p className="flex items-center gap-2 text-sm font-bold text-cyan-700">
+            <PackageCheck className="size-4" />
+            تكليفات جارية ({working.length})
+          </p>
           <div className="grid gap-4 md:grid-cols-2">
-            {others.map((a) => (
+            {working.map((a) => (
+              <Card key={a.id} className="border-cyan-200 bg-cyan-50/30">
+                <CardContent className="space-y-3 p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold">{a.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {a.facility}
+                        {a.department ? ` — ${a.department}` : ''}
+                      </p>
+                    </div>
+                    <StatusBadge status={a.status} labels={ASSIGNMENT_STATUS_LABELS} />
+                  </div>
+
+                  <p className="flex items-center gap-1.5 rounded-xl bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
+                    <BadgeCheck className="size-4" />
+                    تم اختيار الكادر: {a.nurse.name}
+                    {a.nurse.specialty ? ` — ${a.nurse.specialty}` : ''}
+                  </p>
+
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {a.value != null && (
+                      <Badge variant="outline" className="gap-1">
+                        <Banknote className="size-3" />
+                        قيمة التكليف {formatCurrency(a.value)}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="gap-1">
+                      <CalendarDays className="size-3" />
+                      {formatDate(a.startDate)}
+                    </Badge>
+                  </div>
+
+                  {a.nurseDoneAt ? (
+                    <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <BadgeCheck className="size-3.5" />
+                      أكد الكادر انتهاء التكليف واستلام المبلغ — {formatDateTime(a.nurseDoneAt)}
+                    </p>
+                  ) : (
+                    <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+                      الكادر يعمل على التكليف حالياً — عند الانتهاء اضغط «تم انتهاء التكليف» لتأكيد
+                      الدفع وتقييم الكادر
+                    </p>
+                  )}
+
+                  <Button className="w-full gap-2" onClick={() => setCompleting(a)}>
+                    <BadgeCheck className="size-4" />
+                    تم انتهاء التكليف
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* تكليفات منتهية */}
+      {finished.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-bold">تكليفات منتهية ({finished.length})</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {finished.map((a) => (
               <Card key={a.id}>
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-2">
@@ -530,22 +565,42 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                     <Badge variant="secondary" className="gap-1">
                       الكادر: {a.nurse.name}
                     </Badge>
-                    {a.value != null && (
+                    {a.status === 'COMPLETED' && a.nursePaid != null && (
+                      <Badge
+                        className={
+                          a.nursePaid
+                            ? 'gap-1 bg-emerald-600'
+                            : 'gap-1 bg-red-600'
+                        }
+                      >
+                        {a.nursePaid ? 'تم الدفع للممرض' : 'لم يتم الدفع للممرض'}
+                      </Badge>
+                    )}
+                    {a.earning && (
                       <Badge variant="outline" className="gap-1">
                         <Banknote className="size-3" />
-                        {formatCurrency(a.value)}
+                        ربحك: {formatCurrency(a.earning.amount)} ({a.earning.percent}٪)
                       </Badge>
                     )}
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    من {formatDate(a.startDate)}
-                    {a.endDate ? ` حتى ${formatDate(a.endDate)}` : ''}
-                  </p>
-                  {a.receivedAt && (
-                    <p className="flex items-center gap-1.5 text-xs text-emerald-700">
-                      <PackageCheck className="size-3.5" />
-                      تم الاستلام بتاريخ {formatDateTime(a.receivedAt)}
+                  {a.rating && (
+                    <div className="rounded-xl border bg-secondary/40 p-3">
+                      <p className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-bold">تقييمك للكادر</span>
+                        <Stars value={a.rating.overall} />
+                      </p>
+                      {a.rating.comment && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                          «{a.rating.comment}»
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {a.receiverDoneAt && (
+                    <p className="text-xs text-muted-foreground">
+                      تم الإنهاء بتاريخ {formatDateTime(a.receiverDoneAt)}
                     </p>
                   )}
                 </CardContent>
@@ -554,7 +609,178 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
           </div>
         </div>
       )}
+
+      {/* بطاقة الإنهاء والتقييم الاحترافية */}
+      <CompleteAssignmentDialog
+        assignment={completing}
+        onClose={() => setCompleting(null)}
+      />
     </div>
+  )
+}
+
+// ---------- بطاقة إنهاء التكليف + التقييم الاحترافي ----------
+
+const RATING_AXES = [
+  { key: 'punctuality', label: 'الالتزام بالمواعيد' },
+  { key: 'quality', label: 'جودة الأداء الطبي' },
+  { key: 'communication', label: 'التعامل والتواصل' },
+  { key: 'discipline', label: 'الانضباط المهني' },
+] as const
+
+function CompleteAssignmentDialog({
+  assignment,
+  onClose,
+}: {
+  assignment: ReceiverAssignment | null
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [nursePaid, setNursePaid] = useState<boolean | null>(null)
+  const [overall, setOverall] = useState(0)
+  const [axes, setAxes] = useState<Record<string, number>>({})
+  const [comment, setComment] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: (id: string) =>
+      apiPost<{ message: string }>(`/api/me/assignments/${id}/receiver-complete`, {
+        nursePaid,
+        rating: {
+          overall,
+          punctuality: axes.punctuality || undefined,
+          quality: axes.quality || undefined,
+          communication: axes.communication || undefined,
+          discipline: axes.discipline || undefined,
+          comment,
+        },
+      }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['my-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['receiver-earnings'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+      onClose()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (!assignment) return null
+
+  const canSubmit = nursePaid !== null && overall > 0
+
+  const submit = () => {
+    if (!canSubmit) {
+      toast.error('حدد هل تم الدفع للممرض وقيّم الكادر أولاً')
+      return
+    }
+    mutation.mutate(assignment.id)
+  }
+
+  return (
+    <Dialog open={!!assignment} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+              <BadgeCheck className="size-4.5" />
+            </span>
+            تم انتهاء التكليف — {assignment.title}
+          </DialogTitle>
+          <DialogDescription>
+            خطوتان أخيرتان: تأكيد الدفع للكادر، ثم تقييمه بشكل احترافي — يظهر تقييمك في ملف
+            الكادر ويُضاف إلى سيرته الذاتية عند التقديم لأي تكليف آخر
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          {/* السؤال الأول: هل تم الدفع للممرض؟ */}
+          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+            <p className="flex items-center gap-2 text-sm font-extrabold text-amber-800 dark:text-amber-200">
+              <Banknote className="size-4" />
+              هل تم الدفع للممرض ({assignment.nurse.name})؟
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setNursePaid(true)}
+                className={cn(
+                  'rounded-xl border-2 px-4 py-3 text-sm font-extrabold transition-all',
+                  nursePaid === true
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm dark:bg-emerald-950/40 dark:text-emerald-300'
+                    : 'border-border bg-background hover:border-emerald-300'
+                )}
+              >
+                نعم، تم الدفع
+              </button>
+              <button
+                type="button"
+                onClick={() => setNursePaid(false)}
+                className={cn(
+                  'rounded-xl border-2 px-4 py-3 text-sm font-extrabold transition-all',
+                  nursePaid === false
+                    ? 'border-red-500 bg-red-50 text-red-700 shadow-sm dark:bg-red-950/40 dark:text-red-300'
+                    : 'border-border bg-background hover:border-red-300'
+                )}
+              >
+                لا، لم يتم الدفع
+              </button>
+            </div>
+          </div>
+
+          {/* السؤال الثاني: التقييم الاحترافي */}
+          <div className="rounded-2xl border bg-gradient-to-bl from-amber-50 to-transparent p-4 dark:from-amber-950/20">
+            <p className="flex items-center gap-2 text-sm font-extrabold">
+              <Star className="size-4 fill-amber-400 text-amber-400" />
+              تقييم الكادر — {assignment.nurse.name}
+            </p>
+
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-bold">التقييم العام</span>
+                <StarRatingInput value={overall} onChange={setOverall} />
+              </div>
+
+              {RATING_AXES.map((axis) => (
+                <div key={axis.key} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{axis.label}</span>
+                  <StarRatingInput
+                    size="sm"
+                    value={axes[axis.key] ?? 0}
+                    onChange={(v) => setAxes((prev) => ({ ...prev, [axis.key]: v }))}
+                  />
+                </div>
+              ))}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rating-comment">تعليق على أداء الكادر (يظهر في سيرته الذاتية)</Label>
+                <Textarea
+                  id="rating-comment"
+                  rows={3}
+                  placeholder="مثال: أداء متميز والتزام عالٍ بالمسؤولية — أنصح بالتعامل معه"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={onClose}>
+              تراجع
+            </Button>
+            <Button
+              className="gap-2"
+              disabled={!canSubmit || mutation.isPending}
+              onClick={submit}
+            >
+              <BadgeCheck className="size-4" />
+              {mutation.isPending ? 'جارٍ الإنهاء...' : 'إنهاء التكليف وإرسال التقييم'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

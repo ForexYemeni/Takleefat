@@ -34,6 +34,8 @@ export interface PlatformSettings {
   paymentAccountName: string
   /** ملاحظات إضافية على الدفع */
   paymentNotes: string
+  /** نسبة المستلم الإداري من كل تكليف (٪) — تُحتسب من حساب الإدارة */
+  receiverSharePercent: number
 }
 
 export const SETTINGS_DEFAULTS: PlatformSettings = {
@@ -46,6 +48,7 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   paymentAccountNumber: '',
   paymentAccountName: 'منصة تكليفات',
   paymentNotes: '',
+  receiverSharePercent: 10,
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
@@ -58,6 +61,7 @@ const KEYS: Record<keyof PlatformSettings, string> = {
   paymentAccountNumber: 'paymentAccountNumber',
   paymentAccountName: 'paymentAccountName',
   paymentNotes: 'paymentNotes',
+  receiverSharePercent: 'receiverSharePercent',
 }
 
 /**
@@ -130,6 +134,10 @@ export async function getSettings(): Promise<PlatformSettings> {
       paymentAccountNumber: str('paymentAccountNumber', SETTINGS_DEFAULTS.paymentAccountNumber),
       paymentAccountName: str('paymentAccountName', SETTINGS_DEFAULTS.paymentAccountName),
       paymentNotes: map.get(KEYS.paymentNotes) ?? SETTINGS_DEFAULTS.paymentNotes,
+      receiverSharePercent: Math.min(
+        100,
+        num('receiverSharePercent', SETTINGS_DEFAULTS.receiverSharePercent)
+      ),
     }
   } catch {
     // في حال عدم توفر الجداول بعد — نُرجع الافتراضي بدل تعطيل الخدمة

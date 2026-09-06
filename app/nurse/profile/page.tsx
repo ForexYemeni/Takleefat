@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { Lock, Loader2, KeyRound } from 'lucide-react'
+import { Award, Lock, Loader2, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPatch } from '@/lib/api-client'
 import { formatDate, ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { Stars } from '@/components/shared/star-rating'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -163,7 +165,118 @@ export default function NurseProfilePage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* تقييماتي من المستلمين الإداريين — تُضاف تلقائياً للسيرة الذاتية */}
+      <MyRatingsCard />
     </div>
+  )
+}
+
+interface MyRating {
+  id: string
+  overall: number
+  punctuality: number | null
+  quality: number | null
+  communication: number | null
+  discipline: number | null
+  comment: string | null
+  createdAt: string
+  receiver: { name: string }
+  assignment: { id: string; title: string; facility: string }
+}
+
+function MyRatingsCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['my-ratings'],
+    queryFn: () =>
+      apiFetcher<{ ratings: MyRating[]; average: number; count: number }>('/api/me/ratings'),
+  })
+
+  if (isLoading) return null
+  const ratings = data?.ratings ?? []
+  if (ratings.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Award className="size-4 text-amber-500" />
+            تقييماتي
+          </CardTitle>
+          <CardDescription>
+            بعد إنهاء أول تكليف سيقيّمك المستلم الإداري — تُعرض التقييمات هنا وتُضاف تلقائياً إلى
+            سيرتك الذاتية عند التقديم لأي تكليف آخر
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2 text-lg">
+          <span className="flex items-center gap-2">
+            <Award className="size-4 text-amber-500" />
+            تقييماتي من المستلمين الإداريين
+          </span>
+          <span className="flex items-center gap-2">
+            <Stars value={data?.average ?? 0} size="md" />
+            <Badge className="bg-amber-500 text-white">
+              {data?.average} من 5 — {data?.count} تقييم
+            </Badge>
+          </span>
+        </CardTitle>
+        <CardDescription>
+          هذه التقييمات تُعرض في سيرتك الذاتية عند التقديم على أي تكليف جديد
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {ratings.map((r) => (
+          <div key={r.id} className="rounded-2xl border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-extrabold">{r.assignment.title}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {r.assignment.facility} — قيّمك {r.receiver.name} بتاريخ {formatDate(r.createdAt)}
+                </p>
+              </div>
+              <Stars value={r.overall} size="md" />
+            </div>
+
+            {(r.punctuality != null || r.quality != null || r.communication != null || r.discipline != null) && (
+              <div className="mt-2.5 grid gap-1.5 text-xs sm:grid-cols-2">
+                {(
+                  [
+                    ['الالتزام بالمواعيد', r.punctuality],
+                    ['جودة الأداء الطبي', r.quality],
+                    ['التعامل والتواصل', r.communication],
+                    ['الانضباط المهني', r.discipline],
+                  ] as const
+                )
+                  .filter(([, v]) => v != null)
+                  .map(([label, v]) => (
+                    <p
+                      key={label}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-secondary/60 px-3 py-1.5"
+                    >
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="flex items-center gap-1.5 font-bold">
+                        {v}/5 <Stars value={v!} size="sm" />
+                      </span>
+                    </p>
+                  ))}
+              </div>
+            )}
+
+            {r.comment && (
+              <p className="mt-2.5 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                «{r.comment}»
+              </p>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   )
 }
 

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeDollarSign,
   Banknote,
+  Coins,
   Hash,
   Percent,
   PiggyBank,
@@ -79,6 +80,7 @@ export default function AdminSettingsPage() {
       paymentAccountNumber: '',
       paymentAccountName: 'منصة تكليفات',
       paymentNotes: '',
+      receiverSharePercent: 10,
     },
   })
 
@@ -103,6 +105,7 @@ export default function AdminSettingsPage() {
   const adminPercentage = Number(form.watch('adminPercentage')) || 0
   const adminFeeFixed = Number(form.watch('adminFeeFixed')) || 0
   const adminFeeType = form.watch('adminFeeType')
+  const receiverSharePercent = Number(form.watch('receiverSharePercent')) || 0
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -281,6 +284,48 @@ export default function AdminSettingsPage() {
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* نسبة المستلم الإداري */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Coins className="size-4 text-amber-600" />
+              نسبة المستلم الإداري من كل تكليف
+            </CardTitle>
+            <CardDescription>
+              تُضاف هذه النسبة من قيمة كل تكليف إلى قسم «أرباحي» لدى المستلم الإداري — وتُحتسب من
+              حساب الإدارة — ويمكنه طلب سحبها ببيانات محفظته
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 rounded-2xl bg-muted/40 p-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="s-receiver-share">نسبة المستلم الإداري (٪ من قيمة التكليف)</Label>
+                <Input
+                  id="s-receiver-share"
+                  type="number"
+                  min={0}
+                  max={100}
+                  {...form.register('receiverSharePercent')}
+                />
+                {form.formState.errors.receiverSharePercent && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.receiverSharePercent.message}
+                  </p>
+                )}
+              </div>
+              <p className="self-center text-xs leading-relaxed text-muted-foreground">
+                مثال: تكليف بقيمة 100,000 ريال بنسبة{' '}
+                <span className="font-bold text-foreground">{receiverSharePercent}٪</span> → ربح
+                المستلم{' '}
+                <span className="font-bold text-amber-700" dir="ltr">
+                  {formatCurrency(Math.round((100000 * receiverSharePercent) / 100))}
+                </span>{' '}
+                تُضاف لأرباحه بعد إنهاء التكليف
+              </p>
+            </div>
           </CardContent>
         </Card>
 

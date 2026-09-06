@@ -40,6 +40,7 @@ export async function PATCH(req: NextRequest) {
       paymentAccountNumber,
       paymentAccountName,
       paymentNotes,
+      receiverSharePercent,
     } = parsed.data
 
     await Promise.all([
@@ -52,6 +53,9 @@ export async function PATCH(req: NextRequest) {
       setSetting('paymentAccountNumber', paymentAccountNumber),
       setSetting('paymentAccountName', paymentAccountName),
       setSetting('paymentNotes', paymentNotes || ''),
+      ...(receiverSharePercent != null
+        ? [setSetting('receiverSharePercent', String(receiverSharePercent))]
+        : []),
     ])
 
     const settings = await getSettings()

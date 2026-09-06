@@ -117,7 +117,7 @@ export async function PATCH(
       }),
     ])
 
-    // إشعار الكادر المقبول مع تفاصيل الدفع
+    // إشعار الكادر المقبول مع تفاصيل الدفع — الكادر وحده من يرى طرق الدفع والمبالغ
     // يُحصّل نوع واحد فقط حسب نمط الرسوم: حصة الإدارة أو رسوم التقديم
     const applicationFee = calcApplicationFee(settings)
     const dueAmount = adminFee + applicationFee
@@ -129,7 +129,7 @@ export async function PATCH(
           : 'رسوم التقديم'
     await notify(application.nurseId, {
       title: 'تهانينا! تم اعتماد تقديمك',
-      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (${dueBreakdown}) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName}`,
+      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (${dueBreakdown}) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName} — بعد الدفع ارفع لقطة شاشة إثبات الدفع من صفحة تكليفاتك`,
       type: 'APPLICATION_APPROVED',
       link: '/nurse/assignments',
     })
@@ -177,7 +177,8 @@ export async function PATCH(
     }
 
     return NextResponse.json({
-      message: `تم اعتماد التقديم وإنشاء التكليف — المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)}`,
+      // رسالة المستلم الإداري — بلا أي تفاصيل مالية: فقط تأكيد اختيار الكادر
+      message: 'تم اختيار الكادر بنجاح — أصبح التكليف مؤكداً وستتابع حالته من قائمة التكليفات المؤكدة',
       application: updatedApplication,
       assignment,
       postClosed,

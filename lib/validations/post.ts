@@ -106,6 +106,13 @@ export const settingsSchema = z
       .min(2, 'اسم الحساب مطلوب')
       .max(80, 'اسم الحساب طويل جداً'),
     paymentNotes: z.string().max(500, 'الملاحظات طويلة جداً').optional().or(z.literal('')),
+    // نسبة المستلم الإداري من كل تكليف — تُحتسب من حساب الإدارة (اختياري للتوافق)
+    receiverSharePercent: z.coerce
+      .number({ error: 'نسبة المستلم الإداري غير صحيحة' })
+      .int('النسبة يجب أن تكون رقماً صحيحاً')
+      .min(0, 'النسبة لا يمكن أن تكون سالبة')
+      .max(100, 'النسبة لا تتجاوز 100٪')
+      .optional(),
   })
   .refine(
     (data) =>

@@ -37,6 +37,23 @@ export async function POST(
       return jsonError('لقد قدّمت على هذا التكليف مسبقاً — بانتظار مراجعة الجهة المُعلنة', 409)
     }
 
+    // منع التقديم على تكليف جديد قبل تأكيد الإدارة دفع رسوم/نسبة الإدارة لتكليف سابق
+    const unpaid = await db.assignment.findFirst({
+      where: {
+        nurseId: session.user.id,
+        paymentStatus: 'UNPAID',
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true, title: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (unpaid) {
+      return jsonError(
+        `لا يمكنك التقديم على تكليف جديد قبل أن تؤكد إدارة المنصة دفع رسوم أو نسبة الإدارة لتكليفك (${unpaid.title}) — ارفع إثبات الدفع وتابع مع الإدارة`,
+        403
+      )
+    }
+
     const settings = await getSettings()
 
     const application = await db.application.create({

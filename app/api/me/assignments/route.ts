@@ -21,6 +21,12 @@ export async function GET() {
           nurse: { select: { id: true, name: true, specialty: true, phone: true } },
           receiver: { select: { id: true, name: true, phone: true } },
           post: { select: { id: true, title: true } },
+          rating: {
+            select: { overall: true, comment: true, createdAt: true },
+          },
+          earning: {
+            select: { amount: true, percent: true },
+          },
         },
       }),
       getSettings(),

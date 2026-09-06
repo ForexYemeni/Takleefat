@@ -16,8 +16,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { Stars } from '@/components/shared/star-rating'
 import {
   APPLICATION_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -36,6 +38,24 @@ export interface ApplicantDocument {
   status: string
 }
 
+export interface ApplicantRatings {
+  average: number
+  count: number
+  axes: {
+    punctuality: number | null
+    quality: number | null
+    communication: number | null
+    discipline: number | null
+  }
+  latest: Array<{
+    overall: number
+    comment: string | null
+    createdAt: string
+    receiverName: string
+    assignmentTitle: string
+  }>
+}
+
 export interface ApplicantData {
   applicationId: string
   status: string
@@ -51,6 +71,7 @@ export interface ApplicantData {
     qualification: string | null
     yearsOfExperience: number | null
     documents: ApplicantDocument[]
+    ratings?: ApplicantRatings
   }
 }
 
@@ -107,6 +128,71 @@ export function ApplicantCV({
           value={nurse.yearsOfExperience != null ? `${nurse.yearsOfExperience} سنة` : '—'}
         />
       </div>
+
+      {/* التقييمات الاحترافية — تُضاف للسيرة الذاتية من المستلمين السابقين */}
+      {nurse.ratings && nurse.ratings.count > 0 && (
+        <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-bl from-amber-50 to-transparent p-4 dark:border-amber-900 dark:from-amber-950/20">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-extrabold">التقييمات من المستلمين الإداريين</p>
+            <div className="flex items-center gap-2">
+              <Stars value={nurse.ratings.average} size="md" />
+              <Badge className="bg-amber-500 text-white">
+                {nurse.ratings.average} من 5
+              </Badge>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {nurse.ratings.count} تقييم من تكليفات سابقة — تظهر تلقائياً في سيرته الذاتية عند التقديم
+          </p>
+
+          <div className="mt-3 grid gap-1.5 text-xs sm:grid-cols-2">
+            {(
+              [
+                ['الالتزام بالمواعيد', nurse.ratings.axes.punctuality],
+                ['جودة الأداء الطبي', nurse.ratings.axes.quality],
+                ['التعامل والتواصل', nurse.ratings.axes.communication],
+                ['الانضباط المهني', nurse.ratings.axes.discipline],
+              ] as const
+            )
+              .filter(([, v]) => v != null)
+              .map(([label, v]) => (
+                <p
+                  key={label}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-background/70 px-3 py-1.5"
+                >
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="flex items-center gap-1.5 font-bold">
+                    {v}/5 <Stars value={v!} size="sm" />
+                  </span>
+                </p>
+              ))}
+          </div>
+
+          {nurse.ratings.latest.filter((r) => r.comment).length > 0 && (
+            <div className="mt-3 space-y-2">
+              {nurse.ratings.latest
+                .filter((r) => r.comment)
+                .map((r, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl bg-background/70 p-3"
+                  >
+                    <p className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="font-bold">{r.receiverName}</span>
+                      <Stars value={r.overall} size="sm" />
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      «{r.comment}»
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                      من تكليف: {r.assignmentTitle}
+                    </p>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* رسالة التقديم */}
       {applicant.coverNote && (
@@ -217,7 +303,7 @@ export function ApplicantCV({
       {applicant.status === 'APPROVED' && (
         <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
           <CalendarClock className="size-3.5" />
-          تم اعتماد هذا التقديم وإنشاء التكليف المؤكد — تظهر طرق الدفع في صفحة التكليفات
+          تم اعتماد هذا التقديم واختيار الكادر — أصبح التكليف مؤكداً وتتابع حالته من قائمة التكليفات المؤكدة
         </p>
       )}
 

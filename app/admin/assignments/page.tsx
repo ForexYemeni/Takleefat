@@ -3,14 +3,20 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  Banknote,
   CalendarDays,
   ClipboardList,
+  Coins,
   CheckCircle2,
   History,
+  ImagePlus,
+  Landmark,
   Pencil,
   Plus,
+  Star,
   Trash2,
   UserRound,
+  Wallet,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,9 +27,11 @@ import {
   formatDateTime,
   formatDate,
   formatCurrency,
+  cn,
   ASSIGNMENT_STATUS_LABELS,
   POST_STATUS_LABELS,
   POST_GENDER_LABELS,
+  PAYMENT_STATUS_LABELS,
 } from '@/lib/utils'
 import {
   updatePostSchema,
@@ -34,7 +42,10 @@ import { createAssignmentSchema, type CreateAssignmentInput } from '@/lib/valida
 import { StatusBadge } from '@/components/shared/status-badge'
 import { CreatePostDialog } from '@/components/shared/create-post-dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
+import { Stars } from '@/components/shared/star-rating'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -75,8 +86,19 @@ export interface AdminAssignment {
   status: string
   receivedAt: string | null
   createdAt: string
+  value: number | null
+  adminFee: number | null
+  paymentStatus: string
+  nurseDoneAt: string | null
+  nurseConfirmedReceipt: boolean
+  receiverDoneAt: string | null
+  nursePaid: boolean | null
+  paymentScreenshotUrl: string | null
+  paymentScreenshotName: string | null
   nurse: { id: string; name: string; specialty: string | null }
   receiver: { id: string; name: string }
+  rating?: { overall: number; comment: string | null } | null
+  earning?: { amount: number; percent: number } | null
   _count?: { logs: number }
 }
 
@@ -115,6 +137,24 @@ const STATUS_TABS = [
   { value: 'CANCELLED', label: 'ملغي' },
 ] as const
 
+const WITHDRAWAL_STATUS: Record<string, { label: string; className: string }> = {
+  PENDING: {
+    label: 'قيد المعالجة',
+    className:
+      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900',
+  },
+  PAID: {
+    label: 'تم الصرف',
+    className:
+      'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900',
+  },
+  REJECTED: {
+    label: 'مرفوض',
+    className:
+      'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900',
+  },
+}
+
 export default function AdminAssignmentsPage() {
   const queryClient = useQueryClient()
   const [view, setView] = useState('posts')
@@ -122,6 +162,7 @@ export default function AdminAssignmentsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [details, setDetails] = useState<AdminAssignment | null>(null)
   const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<AdminAssignment | null>(null)
+  const [viewScreenshot, setViewScreenshot] = useState<ViewableDocument | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-assignments'],
@@ -164,6 +205,18 @@ export default function AdminAssignmentsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // تأكيد/إلغاء دفع رسوم التكليف للإدارة — يفتح التقديم للكادر بعد التأكيد
+  const paymentMutation = useMutation({
+    mutationFn: ({ id, paymentStatus }: { id: string; paymentStatus: 'PAID' | 'UNPAID' }) =>
+      apiPatch<{ message: string }>(`/api/admin/assignments/${id}`, { paymentStatus }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   if (isLoading || postsLoading) return <DashboardSkeleton />
 
   return (
@@ -191,10 +244,16 @@ export default function AdminAssignmentsPage() {
             التكليفات المؤكدة
             <span className="text-xs text-muted-foreground">{data?.assignments.length ?? 0}</span>
           </TabsTrigger>
+          <TabsTrigger value="withdrawals" className="gap-1.5">
+            <Coins className="size-3.5" />
+            طلبات سحب الأرباح
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
       {view === 'posts' && <AdminPostsTab />}
+
+      {view === 'withdrawals' && <WithdrawalsTab />}
 
       {view === 'assignments' && (
       <>
@@ -298,6 +357,145 @@ export default function AdminAssignmentsPage() {
                 </div>
               </div>
 
+              {/* ---------- اللوحة المالية والإشراف ---------- */}
+              <div className="space-y-3 rounded-2xl border-2 border-teal-100 bg-teal-50/40 p-4 dark:border-teal-900 dark:bg-teal-950/20">
+                <p className="flex items-center gap-2 text-sm font-extrabold text-teal-800 dark:text-teal-300">
+                  <Wallet className="size-4" />
+                  اللوحة المالية — رسوم الإدارة والدفع
+                </p>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <InfoRow label="قيمة التكليف" value={formatCurrency(details.value)} />
+                  <InfoRow label="حصة الإدارة" value={formatCurrency(details.adminFee)} />
+                  <div>
+                    <p className="text-xs text-muted-foreground">حالة الدفع للإدارة</p>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <StatusBadge status={details.paymentStatus} labels={PAYMENT_STATUS_LABELS} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  <p className="flex items-center gap-1.5 rounded-lg bg-background/70 px-3 py-2">
+                    {details.nurseDoneAt ? (
+                      <>
+                        <CheckCircle2 className="size-3.5 text-emerald-600" />
+                        <span className="font-bold">
+                          الكادر أكد إنهاء التكليف واستلام المبلغ — {formatDateTime(details.nurseDoneAt)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <History className="size-3.5 text-muted-foreground" />
+                        الكادر لم يكد إنهاء التكليف بعد
+                      </>
+                    )}
+                  </p>
+                  <p className="flex items-center gap-1.5 rounded-lg bg-background/70 px-3 py-2">
+                    {details.nursePaid != null ? (
+                      <>
+                        <CheckCircle2 className={cn('size-3.5', details.nursePaid ? 'text-emerald-600' : 'text-red-500')} />
+                        <span className="font-bold">
+                          تم الدفع للممرض: {details.nursePaid ? 'نعم' : 'لا'} (تأكيد المستلم الإداري)
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <History className="size-3.5 text-muted-foreground" />
+                        المستلم الإداري لم ينهِ التكليف بعد
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                {/* إثبات دفع الكادر — عرض احترافي مع التكبير */}
+                <div className="rounded-xl border bg-background/70 p-3">
+                  <p className="flex items-center gap-1.5 text-xs font-extrabold">
+                    <ImagePlus className="size-3.5 text-primary" />
+                    إثبات دفع الكادر (لقطة الشاشة)
+                  </p>
+                  {details.paymentScreenshotUrl ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewScreenshot({
+                          fileUrl: details.paymentScreenshotUrl!,
+                          fileName: details.paymentScreenshotName ?? 'إثبات الدفع',
+                          title: 'لقطة شاشة إثبات الدفع',
+                          mimeType: 'image/*',
+                        })
+                      }
+                      className="mt-2 flex items-center gap-3 rounded-lg border p-2 text-start transition-colors hover:bg-accent"
+                    >
+                      <img
+                        src={details.paymentScreenshotUrl}
+                        alt="إثبات الدفع"
+                        className="size-16 rounded-md border object-cover"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold">اضغط للتكبير والمراجعة</span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {details.paymentScreenshotName ?? 'لقطة الشاشة'}
+                        </span>
+                      </span>
+                    </button>
+                  ) : (
+                    <p className="mt-2 rounded-lg border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
+                      لم يرفع الكادر إثبات دفع بعد
+                    </p>
+                  )}
+                </div>
+
+                {/* تقييم الكادر من المستلم */}
+                {details.rating && (
+                  <div className="rounded-xl border bg-background/70 p-3">
+                    <p className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 font-extrabold">
+                        <Star className="size-3.5 fill-amber-400 text-amber-400" />
+                        تقييم المستلم للكادر
+                      </span>
+                      <Stars value={details.rating.overall} />
+                    </p>
+                    {details.rating.comment && (
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                        «{details.rating.comment}»
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* أزرار تأكيد/إلغاء الدفع */}
+                <div className="flex flex-wrap gap-2 border-t pt-3">
+                  {details.paymentStatus === 'UNPAID' ? (
+                    <Button
+                      size="sm"
+                      className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                      disabled={paymentMutation.isPending}
+                      onClick={() => paymentMutation.mutate({ id: details.id, paymentStatus: 'PAID' })}
+                    >
+                      <CheckCircle2 className="size-4" />
+                      تأكيد دفع الرسوم للإدارة
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      disabled={paymentMutation.isPending}
+                      onClick={() => paymentMutation.mutate({ id: details.id, paymentStatus: 'UNPAID' })}
+                    >
+                      <History className="size-4" />
+                      إلغاء تأكيد الدفع
+                    </Button>
+                  )}
+                  {details.paymentStatus === 'UNPAID' && (
+                    <p className="text-[11px] leading-snug text-amber-700">
+                      لن يتمكن الكادر من التقديم على تكليفات جديدة قبل تأكيد الدفع
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {details.description && (
                 <div>
                   <p className="mb-1 text-sm font-bold">وصف التكليف</p>
@@ -395,6 +593,13 @@ export default function AdminAssignmentsPage() {
           })
         }}
       />
+
+      {/* عارض لقطة شاشة إثبات الدفع — تكبير احترافي */}
+      <DocumentViewer
+        document={viewScreenshot}
+        open={!!viewScreenshot}
+        onOpenChange={(open) => !open && setViewScreenshot(null)}
+      />
     </div>
   )
 }
@@ -405,6 +610,218 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-bold">{value}</p>
     </div>
+  )
+}
+
+// ---------- تبويب طلبات سحب الأرباح ----------
+
+interface AdminWithdrawal {
+  id: string
+  amount: number
+  walletAddress: string
+  accountNumber: string
+  status: string
+  note: string | null
+  createdAt: string
+  processedAt: string | null
+  receiver: { id: string; name: string; phone: string }
+}
+
+function WithdrawalsTab() {
+  const queryClient = useQueryClient()
+  const [processing, setProcessing] = useState<AdminWithdrawal | null>(null)
+  const [rejecting, setRejecting] = useState<AdminWithdrawal | null>(null)
+  const [rejectNote, setRejectNote] = useState('')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-withdrawals'],
+    queryFn: () => apiFetcher<{ withdrawals: AdminWithdrawal[] }>('/api/admin/withdrawals'),
+  })
+
+  const processMutation = useMutation({
+    mutationFn: ({ id, status, note }: { id: string; status: 'PAID' | 'REJECTED'; note?: string }) =>
+      apiPatch<{ message: string }>(`/api/admin/withdrawals/${id}`, { status, note: note ?? '' }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-withdrawals'] })
+      setProcessing(null)
+      setRejecting(null)
+      setRejectNote('')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (isLoading) return <DashboardSkeleton />
+
+  const withdrawals = data?.withdrawals ?? []
+  const pendingCount = withdrawals.filter((w) => w.status === 'PENDING').length
+
+  if (withdrawals.length === 0) {
+    return (
+      <EmptyState
+        icon={Landmark}
+        title="لا توجد طلبات سحب"
+        description="عندما يطلب المستلم الإداري سحب أرباحه سيظهر الطلب هنا مع المبلغ ورقم الحساب وعنوان المحفظة."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className="gap-1">
+          <Landmark className="size-3" />
+          {withdrawals.length} طلب
+        </Badge>
+        {pendingCount > 0 && (
+          <Badge className="gap-1 bg-amber-600">
+            <Coins className="size-3" />
+            {pendingCount} بانتظار المعالجة
+          </Badge>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {withdrawals.map((w) => {
+          const st = WITHDRAWAL_STATUS[w.status] ?? WITHDRAWAL_STATUS.PENDING
+          return (
+            <div key={w.id} className="rounded-2xl border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1.5">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold">
+                    <UserRound className="size-4 text-primary" />
+                    {w.receiver.name}
+                    <Badge variant="outline" className={cn('border text-[10px]', st.className)}>
+                      {st.label}
+                    </Badge>
+                  </p>
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <PhoneLabel phone={w.receiver.phone} />
+                  </p>
+                  <div className="grid gap-1.5 text-xs sm:grid-cols-2">
+                    <p className="flex items-center gap-1.5 rounded-lg bg-secondary/60 px-3 py-1.5">
+                      <Banknote className="size-3.5 text-amber-600" />
+                      <span className="text-muted-foreground">المبلغ المطلوب سحبه:</span>
+                      <span className="font-extrabold" dir="ltr">{formatCurrency(w.amount)}</span>
+                    </p>
+                    <p className="flex items-center gap-1.5 rounded-lg bg-secondary/60 px-3 py-1.5">
+                      <Wallet className="size-3.5 text-primary" />
+                      <span className="text-muted-foreground">عنوان المحفظة:</span>
+                      <span className="font-bold" dir="auto">{w.walletAddress}</span>
+                    </p>
+                    <p className="flex items-center gap-1.5 rounded-lg bg-secondary/60 px-3 py-1.5 sm:col-span-2">
+                      <Landmark className="size-3.5 text-primary" />
+                      <span className="text-muted-foreground">رقم الحساب:</span>
+                      <span className="font-bold" dir="ltr">{w.accountNumber}</span>
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/80">
+                    طُلب بتاريخ {formatDateTime(w.createdAt)}
+                    {w.processedAt ? ` — عولج بتاريخ ${formatDateTime(w.processedAt)}` : ''}
+                  </p>
+                  {w.note && (
+                    <p className="rounded-lg bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground">
+                      ملاحظة: {w.note}
+                    </p>
+                  )}
+                </div>
+
+                {w.status === 'PENDING' && (
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <Button
+                      size="sm"
+                      className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                      disabled={processMutation.isPending}
+                      onClick={() => setProcessing(w)}
+                    >
+                      <CheckCircle2 className="size-4" />
+                      تم الدفع للمستلم
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2 text-red-600 hover:text-red-700"
+                      disabled={processMutation.isPending}
+                      onClick={() => setRejecting(w)}
+                    >
+                      <XCircle className="size-4" />
+                      رفض الطلب
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* تأكيد صرف الأرباح */}
+      <ConfirmDialog
+        open={!!processing}
+        onOpenChange={(v) => !v && setProcessing(null)}
+        tone="success"
+        icon={CheckCircle2}
+        title="تأكيد صرف أرباح المستلم"
+        description={
+          processing
+            ? `سيتم تأكيد صرف ${formatCurrency(processing.amount)} إلى المستلم «${processing.receiver.name}» — الحساب: ${processing.accountNumber} — المحفظة: ${processing.walletAddress} ويُشعَر المستلم بالصرف.`
+            : ''
+        }
+        confirmLabel="نعم، تم الصرف"
+        processing={processMutation.isPending}
+        onConfirm={() => {
+          if (!processing) return
+          processMutation.mutate({ id: processing.id, status: 'PAID' })
+        }}
+      />
+
+      {/* رفض طلب السحب */}
+      <Dialog open={!!rejecting} onOpenChange={(open) => !open && setRejecting(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>رفض طلب السحب</DialogTitle>
+            <DialogDescription>
+              سيتم رفض طلب {rejecting?.receiver.name} بمبلغ{' '}
+              {rejecting ? formatCurrency(rejecting.amount) : ''} وإشعاره بالسبب.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="withdrawal-reject">سبب الرفض (يُرسل للمستلم)</Label>
+            <Textarea
+              id="withdrawal-reject"
+              rows={2}
+              placeholder="مثال: بيانات المحفظة غير صحيحة — يُرجى تحديثها وإعادة الطلب"
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejecting(null)}>
+              تراجع
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectNote.trim() || processMutation.isPending}
+              onClick={() => {
+                if (!rejecting) return
+                processMutation.mutate({ id: rejecting.id, status: 'REJECTED', note: rejectNote })
+              }}
+            >
+              تأكيد الرفض
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function PhoneLabel({ phone }: { phone: string }) {
+  return (
+    <>
+      <span>هاتف المستلم:</span>
+      <span className="font-bold" dir="ltr">{phone}</span>
+    </>
   )
 }
 

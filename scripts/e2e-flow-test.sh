@@ -313,6 +313,15 @@ a=[x for x in d.get('assignments',[]) if x.get('postId')=='$P3_ID']
 print(a[0].get('adminFee','?') if a else '?')")
 check "نمط رسوم التقديم: تكليف مؤكد بلا حصة إدارة" "0" "$AASSIGN"
 
+# تأكيد الإدارة دفع رسوم التكليف الأول للكادر الثاني — بدونها يُمنع من التقديم الجديد (جولة 4)
+P3_ASSIGN_ID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d.get('assignments',[]) if x.get('postId')=='$P3_ID']
+print(a[0]['id'] if a else '')")
+PAY3=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$P3_ASSIGN_ID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "تأكيد دفع رسوم التكليف السابق للكادر الثاني (شرط التقديم الجديد) → 200" "200" "$PAY3"
+
 # العودة لنمط حصة الإدارة
 SET_ADM=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/settings -H "Content-Type: application/json" \
   -d '{"feeMode":"ADMIN","applicationFee":1000,"adminFeeType":"PERCENTAGE","adminPercentage":10,"adminFeeFixed":0,"paymentMethod":"محفظة جيب","paymentAccountNumber":"777123456","paymentAccountName":"منصة تكليفات"}')
@@ -340,14 +349,128 @@ BADFIXED=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/settings -H "Content-Type
   -d '{"feeMode":"ADMIN","applicationFee":1000,"adminFeeType":"FIXED","adminPercentage":0,"adminFeeFixed":0,"paymentMethod":"محفظة جيب","paymentAccountNumber":"777123456","paymentAccountName":"منصة تكليفات"}')
 check "رفض نمط ثابت بمبلغ صفر → 422" "422" "$BADFIXED"
 
-echo "=========== 17) الحذف النهائي للحسابات ==========="
+echo "=========== 17) دورة الإنهاء والدفع والتقييم وأرباح المستلم (جولة 4) ==========="
+# رسالة الاعتماد للمستلم بلا أي تفاعل مالي
+APPROVE_MSG_4=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$POST_ID/applications | python3 -c "import json,sys;print('ok')")
+HAS_MONEY=$(curl -s -b "$DIR/nurse.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+n=[x for x in d.get('notifications',[]) if 'تهانينا' in x.get('title','')]
+print('yes' if n and 'المبلغ الواجب' in (n[0].get('body') or '') else 'no')")
+check "إشعار الكادر عند الاعتماد يتضمن تفاصيل الدفع (للكادر فقط)" "yes" "$HAS_MONEY"
+
+# 17-أ) منع التقديم قبل تأكيد دفع الرسوم
+P5=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":6,\"gender\":\"ANY\",\"value\":50000}")
+P5_ID=$(echo "$P5" | jget "['post']['id']")
+BLOCKED=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P5_ID/apply -H "Content-Type: application/json" -d '{}')
+check "منع التقديم على تكليف جديد قبل تأكيد الإدارة دفع الرسوم → 403" "403" "$BLOCKED"
+
+# 17-ب) رفع لقطة شاشة إثبات الدفع في نفس الصفحة
+A4_ID=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d.get('assignments',[]) if x.get('postId')=='$POST_ID']
+print(a[0]['id'] if a else '')")
+SHOT=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/me/assignments/$A4_ID/payment-screenshot -F "file=@$DIR/test.png;type=image/png")
+check "رفع لقطة شاشة إثبات الدفع من صفحة الكادر → 200" "200" "$SHOT"
+
+SHOT_ADMIN=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d.get('assignments',[]) if x.get('id')=='$A4_ID']
+print('yes' if a and a[0].get('paymentScreenshotUrl') else 'no')")
+check "لقطة إثبات الدفع تظهر للإدارة (تكبير مثل المستندات)" "yes" "$SHOT_ADMIN"
+
+# 17-ج) الإدارة تؤكد دفع الرسوم → يُفتح التقديم من جديد
+CONFIRM_PAY=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A4_ID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "الإدارة تؤكد دفع رسوم/نسبة الإدارة → 200" "200" "$CONFIRM_PAY"
+
+UNBLOCKED=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P5_ID/apply -H "Content-Type: application/json" -d '{}')
+check "بعد تأكيد الدفع يستطيع الكادر التقديم → 201" "201" "$UNBLOCKED"
+
+# 17-د) الكادر يكد إنهاء التكليف واستلام المبلغ
+NCOMP=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/me/assignments/$A4_ID/nurse-complete -H "Content-Type: application/json" -d '{"receivedAmount":true}')
+check "الكادر يؤكد: تم الانتهاء واستلام المبلغ → 200" "200" "$NCOMP"
+
+NCOMP2=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/me/assignments/$A4_ID/nurse-complete -H "Content-Type: application/json" -d '{"receivedAmount":true}')
+check "منع تكرار تأكيد الإنهاء → 409" "409" "$NCOMP2"
+
+# 17-هـ) المستلم الإداري: تم انتهاء التكليف + هل تم الدفع للممرض + تقييم احترافي
+RCOMP=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A4_ID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":5,"punctuality":5,"quality":5,"communication":4,"discipline":5,"comment":"أداء متميز والتزام عالٍ"}}')
+check "المستلم ينهي التكليف مع الدفع والتقييم الاحترافي → 200" "200" "$RCOMP"
+
+RCOMP2=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A4_ID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":5}}')
+check "منع إنهاء تكليف منتهٍ → 409" "409" "$RCOMP2"
+
+A4_STATUS=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d.get('assignments',[]) if x.get('id')=='$A4_ID']
+print(a[0]['status'] if a else '?')")
+check "حالة التكليف بعد الإنهاء: COMPLETED" "COMPLETED" "$A4_STATUS"
+
+# 17-و) أرباح المستلم الإداري: 10٪ من 120000 = 12000
+EARN_TOTAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
+check "ربح المستلم من التكليف (10٪ من 120000)" "12000" "$EARN_TOTAL"
+EARN_AVAIL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['available']")
+check "الرصيد المتاح للسحب" "12000" "$EARN_AVAIL"
+
+# 17-ز) طلب سحب: رفض تجاوز الرصيد + طلب صحيح بالبيانات
+W_OVER=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/withdrawals -H "Content-Type: application/json" \
+  -d '{"amount":999999,"walletAddress":"جيب-777000000","accountNumber":"777000000"}')
+check "رفض سحب يتجاوز الرصيد → 422" "422" "$W_OVER"
+
+W_OK=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/withdrawals -H "Content-Type: application/json" \
+  -d '{"amount":5000,"walletAddress":"جيب-777000000","accountNumber":"777000000"}' | jget "['withdrawal']['status']")
+check "طلب سحب 5000 مع المحفظة والحساب → قيد المعالجة" "PENDING" "$W_OK"
+
+EARN_AVAIL2=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['available']")
+check "الرصيد بعد الطلب المعلق (12000-5000)" "7000" "$EARN_AVAIL2"
+
+W_DATA=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/withdrawals | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+w=d['withdrawals'][0] if d.get('withdrawals') else {}
+print(w.get('amount','?'), w.get('accountNumber','?'), w.get('walletAddress','?'), w.get('receiver',{}).get('name','?'))")
+WA=$(echo $W_DATA | cut -d' ' -f1)
+check "طلب السحب يظهر للإدارة بالمبلغ" "5000" "$WA"
+
+W_ID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/withdrawals | jget "['withdrawals'][0]['id']")
+W_PAY=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/withdrawals/$W_ID -H "Content-Type: application/json" \
+  -d '{"status":"PAID","note":"تم التحويل عبر جيب"}')
+check "الإدارة تؤكد صرف السحب → 200" "200" "$W_PAY"
+
+EARN_FINAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['summary']
+print(d['available'], d['withdrawn'])")
+check "الرصيد بعد الصرف (متاح 7000 | مسحوب 5000)" "7000 5000" "$EARN_FINAL"
+
+# 17-ح) التقييم يُضاف للسيرة الذاتية عند التقديم لأي تكليف آخر
+P6=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"حضانة\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":4,\"gender\":\"ANY\",\"value\":30000}")
+P6_ID=$(echo "$P6" | jget "['post']['id']")
+APPLY6=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P6_ID/apply -H "Content-Type: application/json" -d '{}')
+check "الكادر يتقدم على تكليف جديد (بعد تسوية الرسوم) → 201" "201" "$APPLY6"
+
+CV_RATING=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P6_ID/applications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+r=d['applications'][0]['nurse'].get('ratings',{}) if d.get('applications') else {}
+print(r.get('count','?'), r.get('average','?'))")
+check "التقييم في السيرة الذاتية للتقديم الجديد (عدد=1، متوسط=5)" "1 5" "$CV_RATING"
+
+echo "=========== 18) الحذف النهائي للحسابات ==========="
 DEL_USER=$(code -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$TMP_ID)
 check "الإدارة تحذف الحساب نهائياً → 200" "200" "$DEL_USER"
 
 GONE=$(code -b "$DIR/tmp5.jar" $BASE/api/stats)
 check "الحساب المحذوف لم يعد يدخل → 401" "401" "$GONE"
 
-echo "=========== 18) حذف التكليفات (تنظيف) ==========="
+echo "=========== 19) حذف التكليفات (تنظيف) ==========="
 DELP=$(curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P2_ID)
 DELP_MSG=$(echo "$DELP" | jget "['message']")
 [ -n "$DELP_MSG" ] && check "الإدارة تحذف تكليفاً معلناً" "ok" "ok"

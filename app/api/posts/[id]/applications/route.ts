@@ -52,14 +52,69 @@ export async function GET(
               },
               orderBy: { createdAt: 'desc' },
             },
+            // التقييمات الاحترافية — تُضاف إلى السيرة الذاتية عند التقديم لأي تكليف
+            ratingsReceived: {
+              orderBy: { createdAt: 'desc' },
+              select: {
+                overall: true,
+                punctuality: true,
+                quality: true,
+                communication: true,
+                discipline: true,
+                comment: true,
+                createdAt: true,
+                receiver: { select: { name: true } },
+                assignment: { select: { title: true } },
+              },
+            },
           },
         },
       },
     })
 
+    // ملخص التقييمات لكل متقدم (المتوسط + العدد + أحدث التعليقات)
+    const applicationsWithRatings = applications.map((a) => {
+      const rs = a.nurse.ratingsReceived
+      const count = rs.length
+      const average =
+        count > 0
+          ? Math.round((rs.reduce((s, r) => s + r.overall, 0) / count) * 10) / 10
+          : 0
+      const avg = (key: 'punctuality' | 'quality' | 'communication' | 'discipline') => {
+        const vals = rs.map((r) => r[key]).filter((v): v is number => typeof v === 'number')
+        return vals.length > 0
+          ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
+          : null
+      }
+      const { ratingsReceived, ...nurse } = a.nurse
+      return {
+        ...a,
+        nurse: {
+          ...nurse,
+          ratings: {
+            average,
+            count,
+            axes: {
+              punctuality: avg('punctuality'),
+              quality: avg('quality'),
+              communication: avg('communication'),
+              discipline: avg('discipline'),
+            },
+            latest: ratingsReceived.slice(0, 3).map((r) => ({
+              overall: r.overall,
+              comment: r.comment,
+              createdAt: r.createdAt,
+              receiverName: r.receiver.name,
+              assignmentTitle: r.assignment.title,
+            })),
+          },
+        },
+      }
+    })
+
     // applicationId = معرّف التقديم (تتوقعه بطاقة السيرة الذاتية في الواجهة)
     return NextResponse.json({
-      applications: applications.map((a) => ({ ...a, applicationId: a.id })),
+      applications: applicationsWithRatings.map((a) => ({ ...a, applicationId: a.id })),
     })
   } catch (error) {
     return handleApiError(error)

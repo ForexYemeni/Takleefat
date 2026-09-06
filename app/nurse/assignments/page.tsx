@@ -1,13 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertTriangle,
+  BadgeCheck,
   Banknote,
   Briefcase,
   CalendarDays,
+  CheckCircle2,
   ClipboardList,
   Clock,
+  ImagePlus,
   MapPin,
   Search,
   Send,
@@ -16,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPost } from '@/lib/api-client'
+import { compressImage } from '@/lib/compress-image'
 import {
   formatDate,
   formatDateTime,
@@ -27,6 +32,8 @@ import {
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { PaymentCard } from '@/components/shared/payment-card'
+import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -115,6 +122,12 @@ interface MyAssignment {
   receivedAt: string | null
   value: number | null
   adminFee: number | null
+  paymentStatus: string | null
+  nurseDoneAt: string | null
+  nurseConfirmedReceipt: boolean
+  paymentScreenshotUrl: string | null
+  paymentScreenshotName: string | null
+  receiverDoneAt: string | null
   receiver: { name: string }
 }
 
@@ -176,6 +189,11 @@ export default function NurseAssignmentsPage() {
   const applications = appsData?.applications ?? []
   const assignments = assignmentsData?.assignments ?? []
 
+  // لا تقديم على تكليفات جديدة قبل تأكيد الإدارة دفع رسوم/نسبة الإدارة
+  const hasUnpaidFees = assignments.some(
+    (a) => a.paymentStatus === 'UNPAID' && a.status !== 'CANCELLED'
+  )
+
   return (
     <div className="space-y-4">
       <div>
@@ -202,13 +220,15 @@ export default function NurseAssignmentsPage() {
         </TabsList>
       </Tabs>
 
-      {tab === 'available' && <AvailablePosts posts={posts} settings={settings} />}
+      {tab === 'available' && <AvailablePosts posts={posts} settings={settings} blocked={hasUnpaidFees} />}
 
       {tab === 'applications' && (
         <MyApplications applications={applications} settings={settings} />
       )}
 
-      {tab === 'confirmed' && <ConfirmedAssignments assignments={assignments} />}
+      {tab === 'confirmed' && (
+        <ConfirmedAssignments assignments={assignments} settings={settings} />
+      )}
     </div>
   )
 }
@@ -218,9 +238,11 @@ export default function NurseAssignmentsPage() {
 function AvailablePosts({
   posts,
   settings,
+  blocked,
 }: {
   posts: OpenPost[]
   settings?: PlatformSettings
+  blocked: boolean
 }) {
   const [search, setSearch] = useState('')
   const [applyPost, setApplyPost] = useState<OpenPost | null>(null)
@@ -236,6 +258,24 @@ function AvailablePosts({
 
   return (
     <div className="space-y-4">
+      {blocked && (
+        <div className="flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900">
+            <AlertTriangle className="size-5 text-amber-600 dark:text-amber-300" />
+          </span>
+          <div>
+            <p className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
+              التقديم على التكليفات الجديدة موقوف مؤقتاً
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+              لديك تكليف سابق لم يتم تأكيد دفع رسوم أو نسبة الإدارة له من إدارة المنصة — ارفع لقطة
+              شاشة إثبات الدفع من تبويب «تكليفاتي المؤكدة» وتابع مع الإدارة حتى التأكيد، ثم ستُتاح
+              لك التقديمات من جديد.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="relative w-full sm:w-72">
         <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -336,9 +376,13 @@ function AvailablePosts({
                       )}
                     </div>
                   ) : (
-                    <Button className="w-full gap-2" onClick={() => setApplyPost(post)}>
+                    <Button
+                      className="w-full gap-2"
+                      disabled={blocked}
+                      onClick={() => setApplyPost(post)}
+                    >
                       <Send className="size-4" />
-                      التقديم على التكليف
+                      {blocked ? 'التقديم موقوف — أكمل دفع الرسوم أولاً' : 'التقديم على التكليف'}
                     </Button>
                   )}
                 </CardContent>
@@ -432,8 +476,19 @@ function ApplyDialog({
             <div className="rounded-xl border bg-secondary/40 p-3 text-sm">
               <div className="space-y-1.5">
                 <FeeRow label="قيمة التكليف" amount={formatCurrency(fees.value)} />
-                <FeeRow label={`نسبة الإدارة (${settings.adminPercentage}٪)`} amount={formatCurrency(fees.adminFee)} />
-                <FeeRow label="رسوم التقديم" amount={formatCurrency(fees.applicationFee)} />
+                {settings.feeMode === 'ADMIN' && (
+                  <FeeRow
+                    label={
+                      settings.adminFeeType === 'FIXED'
+                        ? 'حصة الإدارة (مبلغ ثابت)'
+                        : `حصة الإدارة (${settings.adminPercentage}٪)`
+                    }
+                    amount={formatCurrency(fees.adminFee)}
+                  />
+                )}
+                {settings.feeMode === 'APPLICATION' && (
+                  <FeeRow label="رسوم التقديم" amount={formatCurrency(fees.applicationFee)} />
+                )}
                 <div className="flex justify-between border-t pt-1.5 font-extrabold text-emerald-700">
                   <span>الصافي المستحق لك</span>
                   <span dir="ltr">{formatCurrency(fees.netForNurse)}</span>
@@ -528,8 +583,24 @@ function MyApplications({
                 settings={settings}
                 breakdown={[
                   { label: 'قيمة التكليف', amount: app.fees.value },
-                  { label: `نسبة الإدارة (${settings.adminPercentage}٪)`, amount: app.fees.adminFee, negative: true },
-                  { label: 'رسوم التقديم', amount: app.fees.applicationFee, negative: true },
+                  ...(settings.feeMode === 'ADMIN'
+                    ? [
+                        {
+                          label:
+                            settings.adminFeeType === 'FIXED'
+                              ? 'حصة الإدارة (مبلغ ثابت)'
+                              : `حصة الإدارة (${settings.adminPercentage}٪)`,
+                          amount: app.fees.adminFee,
+                          negative: true,
+                        },
+                      ]
+                    : [
+                        {
+                          label: 'رسوم التقديم',
+                          amount: app.fees.applicationFee,
+                          negative: true,
+                        },
+                      ]),
                 ]}
                 dueAmount={app.fees.dueToAdmin}
               />
@@ -553,7 +624,13 @@ function MyApplications({
 
 // ---------- تكليفاتي المؤكدة ----------
 
-function ConfirmedAssignments({ assignments }: { assignments: MyAssignment[] }) {
+function ConfirmedAssignments({
+  assignments,
+  settings,
+}: {
+  assignments: MyAssignment[]
+  settings?: PlatformSettings
+}) {
   if (assignments.length === 0) {
     return (
       <EmptyState
@@ -567,61 +644,253 @@ function ConfirmedAssignments({ assignments }: { assignments: MyAssignment[] }) 
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {assignments.map((a) => (
-        <Card key={a.id}>
-          <CardContent className="space-y-3 p-5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-bold">{a.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {a.facility}
-                  {a.department ? ` — ${a.department}` : ''}
-                </p>
-              </div>
-              <StatusBadge status={a.status} labels={ASSIGNMENT_STATUS_LABELS} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg bg-secondary/60 p-2.5">
-                <p className="text-muted-foreground">تاريخ البدء</p>
-                <p className="mt-0.5 font-bold">{formatDate(a.startDate)}</p>
-              </div>
-              <div className="rounded-lg bg-secondary/60 p-2.5">
-                <p className="text-muted-foreground">تاريخ الانتهاء</p>
-                <p className="mt-0.5 font-bold">{a.endDate ? formatDate(a.endDate) : 'غير محدد'}</p>
-              </div>
-              {a.value != null && (
-                <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">قيمة التكليف</p>
-                  <p className="mt-0.5 font-extrabold text-primary" dir="ltr">
-                    {formatCurrency(a.value)}
-                  </p>
-                </div>
-              )}
-              {a.adminFee != null && (
-                <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">حصة الإدارة</p>
-                  <p className="mt-0.5 font-bold" dir="ltr">
-                    {formatCurrency(a.adminFee)}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="text-xs text-muted-foreground">
-              <p>
-                المستلم الإداري: <span className="font-bold text-foreground">{a.receiver.name}</span>
-              </p>
-              {a.receivedAt && <p>تم الاستلام من الجهة المستقبِلة ✓</p>}
-            </div>
-
-            {a.description && (
-              <p className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground">
-                {a.description}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <NurseAssignmentCard key={a.id} a={a} settings={settings} />
       ))}
     </div>
+  )
+}
+
+function NurseAssignmentCard({
+  a,
+  settings,
+}: {
+  a: MyAssignment
+  settings?: PlatformSettings
+}) {
+  const queryClient = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [confirmDone, setConfirmDone] = useState(false)
+  const [viewScreenshot, setViewScreenshot] = useState<ViewableDocument | null>(null)
+
+  // تأكيد إنهاء التكليف واستلام المبلغ
+  const completeMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiPost<{ message: string }>(`/api/me/assignments/${id}/nurse-complete`, {
+        receivedAmount: true,
+      }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      setConfirmDone(false)
+      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // رفع لقطة شاشة إثبات الدفع — ضغط من جهة العميل ثم رفع مباشر
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const { file: compressed } = await compressImage(file)
+      const formData = new FormData()
+      formData.append('file', compressed)
+      const response = await fetch(`/api/me/assignments/${a.id}/payment-screenshot`, {
+        method: 'POST',
+        body: formData,
+      })
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        throw new Error(`تعذر رفع الصورة (رمز ${response.status}) — أعد المحاولة`)
+      }
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error ?? 'فشل رفع الصورة')
+      return result as { message: string }
+    },
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const applicationFee =
+    settings?.feeMode === 'APPLICATION' ? Math.max(0, settings.applicationFee) : 0
+  const dueToAdmin = (a.adminFee ?? 0) + applicationFee
+  const canConfirmDone = !a.nurseDoneAt && a.status !== 'CANCELLED' && a.status !== 'COMPLETED'
+
+  return (
+    <Card className={a.paymentStatus === 'PAID' ? 'border-emerald-200' : undefined}>
+      <CardContent className="space-y-3 p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="font-bold">{a.title}</p>
+            <p className="text-sm text-muted-foreground">
+              {a.facility}
+              {a.department ? ` — ${a.department}` : ''}
+            </p>
+          </div>
+          <StatusBadge status={a.status} labels={ASSIGNMENT_STATUS_LABELS} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-lg bg-secondary/60 p-2.5">
+            <p className="text-muted-foreground">تاريخ البدء</p>
+            <p className="mt-0.5 font-bold">{formatDate(a.startDate)}</p>
+          </div>
+          {a.value != null && (
+            <div className="rounded-lg bg-secondary/60 p-2.5">
+              <p className="text-muted-foreground">قيمة التكليف</p>
+              <p className="mt-0.5 font-extrabold text-primary" dir="ltr">
+                {formatCurrency(a.value)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="text-xs text-muted-foreground">
+          <p>
+            المستلم الإداري: <span className="font-bold text-foreground">{a.receiver.name}</span>
+          </p>
+          {a.receivedAt && <p>تم الاستلام من الجهة المستقبِلة ✓</p>}
+        </div>
+
+        {/* حالة الإنهاء */}
+        {a.nurseDoneAt ? (
+          <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <BadgeCheck className="size-4" />
+            أكدت انتهاء التكليف واستلام المبلغ بتاريخ {formatDateTime(a.nurseDoneAt)}
+          </p>
+        ) : null}
+
+        {/* إنهاء التكليف واستلام المبلغ */}
+        {canConfirmDone && (
+          <Button className="w-full gap-2" onClick={() => setConfirmDone(true)}>
+            <CheckCircle2 className="size-4" />
+            تم الانتهاء من التكليف واستلام مبلغ التكليف
+          </Button>
+        )}
+
+        {/* بطاقة طرق الدفع للإدارة — للكادر فقط */}
+        {settings && a.status !== 'CANCELLED' && (
+          <PaymentCard
+            settings={settings}
+            dueAmount={dueToAdmin}
+            breakdown={[
+              { label: 'قيمة التكليف', amount: a.value ?? 0 },
+              ...(settings.feeMode === 'ADMIN'
+                ? [
+                    {
+                      label:
+                        settings.adminFeeType === 'FIXED'
+                          ? 'حصة الإدارة (مبلغ ثابت)'
+                          : `حصة الإدارة (${settings.adminPercentage}٪)`,
+                      amount: a.adminFee ?? 0,
+                      negative: true,
+                    },
+                  ]
+                : [{ label: 'رسوم التقديم', amount: applicationFee, negative: true }]),
+            ]}
+          />
+        )}
+
+        {/* إثبات دفع الرسوم — رفع لقطة الشاشة في نفس الصفحة */}
+        {a.status !== 'CANCELLED' && (
+          <div className="rounded-2xl border-2 border-dashed p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-xs font-extrabold">
+                <ImagePlus className="size-3.5 text-primary" />
+                إثبات دفع رسوم/نسبة الإدارة
+              </p>
+              {a.paymentStatus === 'PAID' ? (
+                <Badge className="gap-1 bg-emerald-600">
+                  <BadgeCheck className="size-3" />
+                  أكدت الإدارة الدفع
+                </Badge>
+              ) : a.paymentScreenshotUrl ? (
+                <Badge variant="secondary" className="text-[10px]">
+                  بانتظار تأكيد الإدارة
+                </Badge>
+              ) : null}
+            </div>
+
+            {a.paymentScreenshotUrl ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setViewScreenshot({
+                    fileUrl: a.paymentScreenshotUrl!,
+                    fileName: a.paymentScreenshotName ?? 'إثبات الدفع',
+                    title: 'لقطة شاشة إثبات الدفع',
+                    mimeType: 'image/*',
+                  })
+                }
+                className="mt-2.5 flex w-full items-center gap-3 rounded-xl border p-2.5 text-start transition-colors hover:bg-accent"
+              >
+                <img
+                  src={a.paymentScreenshotUrl}
+                  alt="إثبات الدفع"
+                  className="size-14 rounded-lg border object-cover"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-bold">
+                    {a.paymentScreenshotName ?? 'لقطة الشاشة'}
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    اضغط لعرض الصورة وتكبيرها
+                  </span>
+                </span>
+              </button>
+            ) : a.paymentStatus === 'PAID' ? (
+              <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                تم تأكيد دفع الرسوم من الإدارة — يمكنك التقديم على تكليفات جديدة
+              </p>
+            ) : (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) uploadMutation.mutate(file)
+                    e.target.value = ''
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2.5 w-full gap-2 border-dashed"
+                  disabled={uploadMutation.isPending}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlus className="size-4" />
+                  {uploadMutation.isPending ? 'جارٍ الرفع...' : 'رفع لقطة شاشة إثبات الدفع'}
+                </Button>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  بعد دفع المبلغ للإدارة عبر {settings?.paymentMethod ?? 'طريقة الدفع'} ارفع لقطة
+                  شاشة هنا — تظهر للإدارة بشكل احترافي للتأكيد
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {a.description && (
+          <p className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground">
+            {a.description}
+          </p>
+        )}
+      </CardContent>
+
+      {/* تأكيد إنهاء التكليف — بطاقة احترافية */}
+      <ConfirmDialog
+        open={confirmDone}
+        onOpenChange={setConfirmDone}
+        tone="success"
+        icon={CheckCircle2}
+        title="تأكيد انتهاء التكليف واستلام المبلغ"
+        description={`بالتأكيد أنك أنهيت التكليف «${a.title}» وأنك استلمت مبلغ التكليف كاملاً؟ سيرى المستلم الإداري والإدارة هذا التأكيد فوراً.`}
+        confirmLabel="نعم، أنهيت التكليف واستلمت المبلغ"
+        processing={completeMutation.isPending}
+        onConfirm={() => completeMutation.mutate(a.id)}
+      />
+
+      {/* عارض لقطة شاشة الدفع */}
+      <DocumentViewer
+        document={viewScreenshot}
+        open={!!viewScreenshot}
+        onOpenChange={(open) => !open && setViewScreenshot(null)}
+      />
+    </Card>
   )
 }
