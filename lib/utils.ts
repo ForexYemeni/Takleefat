@@ -58,6 +58,17 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PAID: 'مدفوع',
 }
 
+export const GENDER_LABELS: Record<string, string> = {
+  MALE: 'ذكر',
+  FEMALE: 'أنثى',
+}
+
+export const POST_GENDER_LABELS: Record<string, string> = {
+  MALE: 'ذكر',
+  FEMALE: 'أنثى',
+  ANY: 'أي جنس',
+}
+
 // ---------- ألوان الحالات (Tailwind classes) ----------
 
 export const STATUS_BADGE_CLASSES: Record<string, string> = {

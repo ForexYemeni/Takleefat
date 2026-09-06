@@ -2,15 +2,22 @@ import { db } from '@/lib/db'
 
 /**
  * إعدادات المنصة — تكليفات | Takleefat
- * رسوم التقديم، نسبة الإدارة، وطرق الدفع (مثل محفظة جيب).
+ * رسوم التقديم، حصة الإدارة (نسبة مئوية أو مبلغ ثابت)، وطرق الدفع (مثل محفظة جيب).
  * تُخزن في جدول settings كمفتاح/قيمة مع قيم افتراضية آمنة.
  */
+
+/** طريقة احتساب حصة الإدارة من التكليف */
+export type AdminFeeType = 'PERCENTAGE' | 'FIXED'
 
 export interface PlatformSettings {
   /** رسوم التقديم الثابتة على التكليف (ريال يمني) — يدفعها الكادر عند الاعتماد */
   applicationFee: number
-  /** نسبة الإدارة من قيمة التكليف (٪) */
+  /** نوع حصة الإدارة: نسبة مئوية من قيمة التكليف أو مبلغ ثابت */
+  adminFeeType: AdminFeeType
+  /** نسبة الإدارة (٪) — تُستخدم عندما يكون adminFeeType = PERCENTAGE */
   adminPercentage: number
+  /** مبلغ ثابت للإدارة (ريال يمني) — يُستخدم عندما يكون adminFeeType = FIXED */
+  adminFeeFixed: number
   /** اسم طريقة الدفع — مثال: محفظة جيب */
   paymentMethod: string
   /** رقم حساب الإدارة في طريقة الدفع */
@@ -23,7 +30,9 @@ export interface PlatformSettings {
 
 export const SETTINGS_DEFAULTS: PlatformSettings = {
   applicationFee: 1000,
+  adminFeeType: 'PERCENTAGE',
   adminPercentage: 10,
+  adminFeeFixed: 0,
   paymentMethod: 'محفظة جيب',
   paymentAccountNumber: '',
   paymentAccountName: 'منصة تكليفات',
@@ -32,7 +41,9 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
 
 const KEYS: Record<keyof PlatformSettings, string> = {
   applicationFee: 'applicationFee',
+  adminFeeType: 'adminFeeType',
   adminPercentage: 'adminPercentage',
+  adminFeeFixed: 'adminFeeFixed',
   paymentMethod: 'paymentMethod',
   paymentAccountNumber: 'paymentAccountNumber',
   paymentAccountName: 'paymentAccountName',
@@ -40,10 +51,23 @@ const KEYS: Record<keyof PlatformSettings, string> = {
 }
 
 /**
- * حساب حصة الإدارة من قيمة التكليف
+ * حساب حصة الإدارة من قيمة التكليف — نسبة مئوية أو مبلغ ثابت
  */
-export function calcAdminFee(value: number, adminPercentage: number): number {
-  return Math.round((value * adminPercentage) / 100)
+export function calcAdminFee(value: number, settings: PlatformSettings): number {
+  if (settings.adminFeeType === 'FIXED') {
+    return Math.max(0, Math.round(settings.adminFeeFixed))
+  }
+  return Math.round((value * settings.adminPercentage) / 100)
+}
+
+/**
+ * وصف نصي لاحتساب حصة الإدارة — يُعرض للكادر والجهات
+ * مثال: «10٪ من قيمة التكليف» أو «مبلغ ثابت: 5,000 ريال»
+ */
+export function adminFeeLabel(settings: PlatformSettings): string {
+  return settings.adminFeeType === 'FIXED'
+    ? `مبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
+    : `${settings.adminPercentage}٪ من قيمة التكليف`
 }
 
 /**
@@ -66,9 +90,13 @@ export async function getSettings(): Promise<PlatformSettings> {
       return raw != null && raw.trim() !== '' ? raw : fallback
     }
 
+    const adminFeeType = map.get(KEYS.adminFeeType) === 'FIXED' ? 'FIXED' : 'PERCENTAGE'
+
     return {
       applicationFee: num('applicationFee', SETTINGS_DEFAULTS.applicationFee),
+      adminFeeType,
       adminPercentage: Math.min(100, num('adminPercentage', SETTINGS_DEFAULTS.adminPercentage)),
+      adminFeeFixed: num('adminFeeFixed', SETTINGS_DEFAULTS.adminFeeFixed),
       paymentMethod: str('paymentMethod', SETTINGS_DEFAULTS.paymentMethod),
       paymentAccountNumber: str('paymentAccountNumber', SETTINGS_DEFAULTS.paymentAccountNumber),
       paymentAccountName: str('paymentAccountName', SETTINGS_DEFAULTS.paymentAccountName),

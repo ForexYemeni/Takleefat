@@ -50,7 +50,7 @@ Thumbs.db
 .zscripts/
 scripts/
 download/
-upload/
+
 examples/
 tests/
 mini-services/

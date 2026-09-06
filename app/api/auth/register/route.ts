@@ -20,8 +20,16 @@ export async function POST(req: NextRequest) {
       return jsonError(firstError, 422)
     }
 
-    const { role = 'NURSE', name, phone, password, specialty, qualification, yearsOfExperience } =
-      parsed.data
+    const {
+      role = 'NURSE',
+      name,
+      phone,
+      password,
+      specialty,
+      qualification,
+      yearsOfExperience,
+      gender,
+    } = parsed.data
 
     const existing = await db.user.findUnique({ where: { phone } })
     if (existing) {
@@ -38,7 +46,7 @@ export async function POST(req: NextRequest) {
         role,
         status: 'PENDING',
         ...(role === 'NURSE'
-          ? { specialty, qualification, yearsOfExperience }
+          ? { specialty, qualification, yearsOfExperience, gender: gender ?? null }
           : {}),
       },
       select: { id: true, name: true, phone: true, role: true },

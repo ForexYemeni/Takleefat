@@ -6,9 +6,12 @@ import {
   BadgeCheck,
   Banknote,
   CalendarDays,
+  Clock,
   Inbox,
+  MapPin,
   PackageCheck,
   Plus,
+  UserRound,
   Users,
   XCircle,
 } from 'lucide-react'
@@ -22,6 +25,7 @@ import {
   formatCurrency,
   ASSIGNMENT_STATUS_LABELS,
   POST_STATUS_LABELS,
+  POST_GENDER_LABELS,
 } from '@/lib/utils'
 import {
   createPostSchema,
@@ -40,6 +44,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -52,13 +63,15 @@ import {
 
 interface ReceiverPost {
   id: string
+  number: number
   title: string
   description: string | null
   facility: string
   department: string | null
   location: string | null
   startDate: string
-  endDate: string | null
+  hours: number | null
+  gender: string
   nursesNeeded: number
   value: number
   status: string
@@ -85,11 +98,24 @@ interface ReceiverAssignment {
 
 interface PlatformSettings {
   applicationFee: number
+  adminFeeType: 'PERCENTAGE' | 'FIXED'
   adminPercentage: number
+  adminFeeFixed: number
   paymentMethod: string
   paymentAccountNumber: string
   paymentAccountName: string
   paymentNotes: string
+}
+
+interface Hospital {
+  id: string
+  name: string
+  location: string | null
+}
+
+interface Department {
+  id: string
+  name: string
 }
 
 export default function ReceiverAssignmentsPage() {
@@ -100,7 +126,8 @@ export default function ReceiverAssignmentsPage() {
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['my-posts'],
-    queryFn: () => apiFetcher<{ posts: ReceiverPost[] }>('/api/posts'),
+    queryFn: () =>
+      apiFetcher<{ posts: ReceiverPost[]; nextNumber: number }>('/api/posts'),
   })
 
   const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery({
@@ -112,6 +139,7 @@ export default function ReceiverAssignmentsPage() {
   })
 
   const posts = postsData?.posts ?? []
+  const nextNumber = postsData?.nextNumber ?? 1
   const assignments = assignmentsData?.assignments ?? []
   const settings = assignmentsData?.settings
 
@@ -157,7 +185,7 @@ export default function ReceiverAssignmentsPage() {
 
       {tab === 'confirmed' && <ConfirmedAssignments assignments={assignments} />}
 
-      <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} nextNumber={nextNumber} />
 
       {/* حوار مراجعة التقديمات */}
       <Dialog
@@ -246,20 +274,18 @@ function MyPosts({
                   <p className="text-muted-foreground">حصة الإدارة</p>
                   <p className="mt-0.5 font-bold" dir="ltr">
                     {settings
-                      ? formatCurrency(Math.round((post.value * settings.adminPercentage) / 100))
-                      : '—'}{' '}
-                    {settings ? `(${settings.adminPercentage}٪)` : ''}
+                      ? settings.adminFeeType === 'FIXED'
+                        ? `${formatCurrency(settings.adminFeeFixed)} ثابت`
+                        : `${formatCurrency(Math.round((post.value * settings.adminPercentage) / 100))} (${settings.adminPercentage}٪)`
+                      : '—'}
                   </p>
                 </div>
                 <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">الفترة</p>
-                  <p className="mt-0.5 font-bold">
-                    {formatDate(post.startDate)}
-                    {post.endDate ? ` — ${formatDate(post.endDate)}` : ''}
-                  </p>
+                  <p className="text-muted-foreground">تاريخ البدء</p>
+                  <p className="mt-0.5 font-bold">{formatDate(post.startDate)}</p>
                 </div>
                 <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">الموقع</p>
+                  <p className="text-muted-foreground">الموقع (تلقائي من الجهة)</p>
                   <p className="mt-0.5 font-bold">{post.location ?? 'غير محدد'}</p>
                 </div>
               </div>
@@ -272,6 +298,16 @@ function MyPosts({
                 <Badge variant="outline" className="gap-1">
                   <BadgeCheck className="size-3" />
                   {approvedCount} / {post.nursesNeeded} كادر معتمد
+                </Badge>
+                {post.hours ? (
+                  <Badge variant="outline" className="gap-1">
+                    <Clock className="size-3" />
+                    {post.hours} ساعة
+                  </Badge>
+                ) : null}
+                <Badge variant="outline" className="gap-1">
+                  <UserRound className="size-3" />
+                  {POST_GENDER_LABELS[post.gender] ?? 'أي جنس'}
                 </Badge>
               </div>
 
@@ -511,61 +547,79 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
 function CreatePostDialog({
   open,
   onOpenChange,
+  nextNumber,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  nextNumber: number
 }) {
   const queryClient = useQueryClient()
-  const [endDate, setEndDate] = useState('')
+  const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null)
 
   const form = useForm<CreatePostFormValues, unknown, CreatePostInput>({
     resolver: zodResolver(createPostSchema),
     defaultValues: {
       title: '',
       description: '',
-      facility: '',
+      hospitalId: '',
       department: '',
       location: '',
       startDate: '',
-      endDate: '',
       nursesNeeded: '1',
+      hours: '',
+      gender: 'ANY',
       value: '',
     },
   })
+
+  // الجهات الصحية والأقسام — تُدار من حساب الإدارة
+  const { data: hospitalsData } = useQuery({
+    queryKey: ['hospitals'],
+    queryFn: () => apiFetcher<{ hospitals: Hospital[] }>('/api/hospitals'),
+    enabled: open,
+  })
+  const { data: departmentsData } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => apiFetcher<{ departments: Department[] }>('/api/departments'),
+    enabled: open,
+  })
+  const hospitals = hospitalsData?.hospitals ?? []
+  const departments = departmentsData?.departments ?? []
 
   const createMutation = useMutation({
     mutationFn: (values: CreatePostInput) => apiPost<{ message: string }>('/api/posts', values),
     onSuccess: (res) => {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['my-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['open-posts'] })
       queryClient.invalidateQueries({ queryKey: ['stats'] })
       onOpenChange(false)
       form.reset()
-      setEndDate('')
+      setSelectedHospital(null)
     },
     onError: (e: Error) => toast.error(e.message),
   })
 
   const onSubmit = (values: CreatePostInput) => {
-    createMutation.mutate({ ...values, endDate })
+    createMutation.mutate(values)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>إنشاء تكليف مُعلن جديد</DialogTitle>
+          <DialogTitle>إنشاء تكليف جديد — التكليف رقم {nextNumber}</DialogTitle>
           <DialogDescription>
-            يُنشر التكليف فوراً للكادر التمريضي المعتمد للتقديم — مع عرض قيمة التكليف وحصة الإدارة
-            ورسوم التقديم بشكل شفاف
+            سيظهر العنوان تلقائياً «التكليف رقم {nextNumber}» (ويمكن الإدارة تعديله لاحقاً) — الجهة
+            الصحية تُختار من مستشفيات الإدارة والموقع يُعبأ تلقائياً — بدون تاريخ انتهاء
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <div className="space-y-2">
-            <Label htmlFor="p-title">عنوان التكليف</Label>
+            <Label htmlFor="p-title">عنوان التكليف (اختياري)</Label>
             <Input
               id="p-title"
-              placeholder="مثال: تكليف تمريضي — قسم الطوارئ"
+              placeholder={`اتركه فارغاً ليكون: التكليف رقم ${nextNumber}`}
               {...form.register('title')}
             />
             {form.formState.errors.title && (
@@ -575,23 +629,69 @@ function CreatePostDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="p-facility">الجهة الصحية</Label>
-              <Input id="p-facility" placeholder="مثال: مستشفى الملكية" {...form.register('facility')} />
-              {form.formState.errors.facility && (
-                <p className="text-xs text-destructive">{form.formState.errors.facility.message}</p>
+              <Label>الجهة الصحية (من مستشفيات الإدارة)</Label>
+              <Select
+                onValueChange={(v) => {
+                  const h = hospitals.find((x) => x.id === v) ?? null
+                  setSelectedHospital(h)
+                  form.setValue('hospitalId', v, { shouldValidate: true })
+                  // الموقع الفعلي يُعبأ تلقائياً بحسب الجهة الصحية
+                  form.setValue('location', h?.location ?? '')
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر المستشفى" />
+                </SelectTrigger>
+                <SelectContent>
+                  {hospitals.map((h) => (
+                    <SelectItem key={h.id} value={h.id}>
+                      {h.name}
+                      {h.location ? ` — ${h.location}` : ''}
+                    </SelectItem>
+                  ))}
+                  {hospitals.length === 0 && (
+                    <SelectItem value="none" disabled>
+                      لا توجد مستشفيات — تُضاف من حساب الإدارة
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.hospitalId && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.hospitalId.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="p-department">القسم (اختياري)</Label>
-              <Input id="p-department" placeholder="مثال: العناية المركزة" {...form.register('department')} />
+              <Label>القسم (من قوائم الإدارة)</Label>
+              <Select onValueChange={(v) => form.setValue('department', v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر القسم" />
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.name}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                  {departments.length === 0 && (
+                    <SelectItem value="none" disabled>
+                      لا توجد أقسام — تُضاف من حساب الإدارة
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
+          {selectedHospital?.location && (
+            <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+              <MapPin className="size-3.5" />
+              الموقع الفعلي (تلقائي): {selectedHospital.location}
+            </p>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="p-location">الموقع (اختياري)</Label>
-              <Input id="p-location" placeholder="مثال: صنعاء" {...form.register('location')} />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="p-value">قيمة التكليف (ريال)</Label>
               <Input
@@ -606,30 +706,52 @@ function CreatePostDialog({
               )}
             </div>
             <div className="space-y-2">
+              <Label htmlFor="p-hours">عدد الساعات</Label>
+              <Input
+                id="p-hours"
+                type="number"
+                min={1}
+                max={999}
+                placeholder="مثال: 8"
+                {...form.register('hours')}
+              />
+              {form.formState.errors.hours && (
+                <p className="text-xs text-destructive">{form.formState.errors.hours.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="p-needed">عدد الكادر المطلوب</Label>
               <Input id="p-needed" type="number" min={1} max={50} {...form.register('nursesNeeded')} />
               {form.formState.errors.nursesNeeded && (
-                <p className="text-xs text-destructive">{form.formState.errors.nursesNeeded.message}</p>
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.nursesNeeded.message}
+                </p>
               )}
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
+              <Label>الجنس المطلوب</Label>
+              <Select onValueChange={(v) => form.setValue('gender', v as CreatePostInput['gender'])}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر الجنس" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ANY">أي جنس</SelectItem>
+                  <SelectItem value="MALE">ذكر</SelectItem>
+                  <SelectItem value="FEMALE">أنثى</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="p-start">تاريخ البدء</Label>
               <Input id="p-start" type="date" {...form.register('startDate')} />
               {form.formState.errors.startDate && (
-                <p className="text-xs text-destructive">{form.formState.errors.startDate.message}</p>
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.startDate.message}
+                </p>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="p-end">تاريخ الانتهاء (اختياري)</Label>
-              <Input
-                id="p-end"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
             </div>
           </div>
 

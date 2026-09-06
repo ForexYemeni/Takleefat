@@ -11,6 +11,7 @@ import {
   MapPin,
   Search,
   Send,
+  UserRound,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,6 +22,7 @@ import {
   formatCurrency,
   ASSIGNMENT_STATUS_LABELS,
   APPLICATION_STATUS_LABELS,
+  POST_GENDER_LABELS,
 } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
@@ -45,13 +47,15 @@ import {
 
 interface OpenPost {
   id: string
+  number: number
   title: string
   description: string | null
   facility: string
   department: string | null
   location: string | null
   startDate: string
-  endDate: string | null
+  hours: number | null
+  gender: string
   nursesNeeded: number
   value: number
   status: string
@@ -63,7 +67,9 @@ interface OpenPost {
 
 interface PlatformSettings {
   applicationFee: number
+  adminFeeType: 'PERCENTAGE' | 'FIXED'
   adminPercentage: number
+  adminFeeFixed: number
   paymentMethod: string
   paymentAccountNumber: string
   paymentAccountName: string
@@ -112,7 +118,10 @@ interface MyAssignment {
 }
 
 function computeFees(value: number, settings: PlatformSettings): FeeBreakdown {
-  const adminFee = Math.round((value * settings.adminPercentage) / 100)
+  const adminFee =
+    settings.adminFeeType === 'FIXED'
+      ? Math.max(0, Math.round(settings.adminFeeFixed))
+      : Math.round((value * settings.adminPercentage) / 100)
   return {
     value,
     adminFee,
@@ -120,6 +129,12 @@ function computeFees(value: number, settings: PlatformSettings): FeeBreakdown {
     dueToAdmin: adminFee + settings.applicationFee,
     netForNurse: value - adminFee - settings.applicationFee,
   }
+}
+
+function adminFeeLabel(settings: PlatformSettings): string {
+  return settings.adminFeeType === 'FIXED'
+    ? `مبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
+    : `${settings.adminPercentage}٪ من قيمة التكليف`
 }
 
 export default function NurseAssignmentsPage() {
@@ -246,25 +261,32 @@ function AvailablePosts({
                     <Badge className="bg-teal-600">متاح للتقديم</Badge>
                   </div>
 
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    <Badge variant="outline" className="gap-1">
+                      <UserRound className="size-3" />
+                      الجنس المطلوب: {POST_GENDER_LABELS[post.gender] ?? 'أي جنس'}
+                    </Badge>
+                    {post.hours ? (
+                      <Badge variant="outline" className="gap-1">
+                        <Clock className="size-3" />
+                        {post.hours} ساعة
+                      </Badge>
+                    ) : null}
+                    <Badge variant="outline" className="gap-1">
+                      <Users className="size-3" />
+                      متقدمون: {post._count?.applications ?? 0}
+                    </Badge>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <InfoCell icon={Banknote} label="قيمة التكليف" value={formatCurrency(post.value)} strong />
                     <InfoCell
                       icon={Banknote}
                       label="حصة الإدارة"
-                      value={fees ? `${formatCurrency(fees.adminFee)} (${settings!.adminPercentage}٪)` : '—'}
+                      value={fees ? formatCurrency(fees.adminFee) : '—'}
                     />
                     <InfoCell icon={CalendarDays} label="تاريخ البدء" value={formatDate(post.startDate)} />
-                    <InfoCell
-                      icon={CalendarDays}
-                      label="تاريخ الانتهاء"
-                      value={post.endDate ? formatDate(post.endDate) : 'غير محدد'}
-                    />
                     <InfoCell icon={MapPin} label="الموقع" value={post.location ?? 'غير محدد'} />
-                    <InfoCell
-                      icon={Users}
-                      label="الكادر المطلوب"
-                      value={`${post.nursesNeeded} — متقدمون: ${post._count?.applications ?? 0}`}
-                    />
                   </div>
 
                   {post.description && (
@@ -278,7 +300,10 @@ function AvailablePosts({
                       <p className="mb-1.5 font-bold">تفاصيل الرسوم</p>
                       <div className="space-y-1">
                         <FeeRow label="قيمة التكليف" amount={formatCurrency(fees.value)} />
-                        <FeeRow label={`نسبة الإدارة (${settings.adminPercentage}٪)`} amount={formatCurrency(fees.adminFee)} />
+                        <FeeRow
+                          label={`حصة الإدارة (${adminFeeLabel(settings)})`}
+                          amount={formatCurrency(fees.adminFee)}
+                        />
                         <FeeRow label="رسوم التقديم" amount={formatCurrency(fees.applicationFee)} />
                         <div className="flex justify-between border-t pt-1 font-extrabold text-emerald-700">
                           <span>الصافي المستحق لك</span>

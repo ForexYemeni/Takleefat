@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { createPostSchema } from '@/lib/validations/post'
-import { getSettings, calcAdminFee } from '@/lib/settings'
+import { getSettings, calcAdminFee, adminFeeLabel } from '@/lib/settings'
 import { notify } from '@/lib/notifications'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, POST_GENDER_LABELS } from '@/lib/utils'
 import type { Prisma } from '@prisma/client'
 
 /**
  * GET /api/posts — قائمة التكليفات المُعلنة (حسب الدور)
  * - NURSE: التكليفات المفتوحة + حالة تقديمه الخاص + بيانات الرسوم
- * - RECEIVER: تكليفاته المُعلنة مع عدد التقديمات
+ * - RECEIVER: تكليفاته المُعلنة مع عدد التقديمات + الرقم التالي
  * - ADMIN: جميع التكليفات المُعلنة
  */
 export async function GET(req: NextRequest) {
@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
           assignments: { select: { id: true, nurse: { select: { id: true, name: true } } } },
         },
       })
-      return NextResponse.json({ posts })
+      const last = await db.post.aggregate({ _max: { number: true } })
+      return NextResponse.json({ posts, nextNumber: (last._max.number ?? 0) + 1 })
     }
 
     // ADMIN
@@ -70,7 +71,9 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/posts — إنشاء تكليف مُعلن جديد (المستلم الإداري)
- * يظهر التكليف فوراً للكادر التمريضي المعتمد للتقديم مع الرسوم والنسبة.
+ * - العنوان يُولَّد تلقائياً «التكليف رقم N» مع ترقيم تسلسلي احترافي
+ * - الجهة الصحية تُختار من المستشفيات المضافة من الإدارة والموقع يُعبأ تلقائياً منها
+ * - القسم من قوائم الإدارة + الجنس المطلوب + عدد الساعات — بدون تاريخ انتهاء
  */
 export async function POST(req: NextRequest) {
   try {
@@ -85,35 +88,45 @@ export async function POST(req: NextRequest) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
 
-    const { title, description, facility, department, location, startDate, endDate, nursesNeeded, value } =
+    const { title, description, hospitalId, department, startDate, nursesNeeded, hours, gender, value } =
       parsed.data
 
     const start = new Date(startDate)
     if (Number.isNaN(start.getTime())) return jsonError('تاريخ البدء غير صحيح', 422)
-    const end = endDate ? new Date(endDate) : null
-    if (end && Number.isNaN(end.getTime())) return jsonError('تاريخ الانتهاء غير صحيح', 422)
-    if (end && end < start) return jsonError('تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء', 422)
+
+    // الجهة الصحية من قوائم الإدارة — الموقع الفعلي يُشتق منها تلقائياً
+    const hospital = await db.hospital.findUnique({ where: { id: hospitalId } })
+    if (!hospital || !hospital.isActive) {
+      return jsonError('الجهة الصحية غير موجودة — اختر من القائمة المضافة من الإدارة', 422)
+    }
+
+    // ترقيم تسلسلي احترافي: التكليف رقم 1، 2، 3...
+    const last = await db.post.aggregate({ _max: { number: true } })
+    const number = (last._max.number ?? 0) + 1
+    const finalTitle = title?.trim() || `التكليف رقم ${number}`
 
     const post = await db.post.create({
       data: {
-        title,
+        number,
+        title: finalTitle,
         description: description || null,
-        facility,
+        facility: hospital.name,
         department: department || null,
-        location: location || null,
+        location: hospital.location || null,
         startDate: start,
-        endDate: end,
+        hours: hours ? Number(hours) : null,
+        gender,
         nursesNeeded,
         value,
         status: 'OPEN',
         receiverId: session.user.id,
       },
-      select: { id: true, title: true, status: true },
+      select: { id: true, title: true, number: true, status: true },
     })
 
     // إشعار جميع الكادر المعتمد بوجود تكليف جديد
     const settings = await getSettings()
-    const adminFee = calcAdminFee(value, settings.adminPercentage)
+    const genderNote = gender === 'ANY' ? '' : ` — ${POST_GENDER_LABELS[gender]}`
     const nurses = await db.user.findMany({
       where: { role: 'NURSE', status: 'APPROVED' },
       select: { id: true },
@@ -122,16 +135,18 @@ export async function POST(req: NextRequest) {
       nurses.map((nurse) =>
         notify(nurse.id, {
           title: 'تكليف جديد متاح للتقديم',
-          body: `${title} — ${facility}${department ? ` (${department})` : ''} — القيمة ${formatCurrency(value)} — سارِ بالتقديم قبل اكتمال العدد`,
+          body: `${finalTitle} — ${hospital.name}${department ? ` (${department})` : ''}${genderNote} — القيمة ${formatCurrency(value)} — سارِ بالتقديم قبل اكتمال العدد`,
           type: 'POST_CREATED',
           link: '/nurse/assignments',
         })
       )
     )
-    void adminFee
 
     return NextResponse.json(
-      { message: 'تم نشر التكليف بنجاح وأصبح متاحاً للتقديم', post },
+      {
+        message: `تم نشر التكليف بنجاح (${finalTitle}) — حصة الإدارة: ${adminFeeLabel(settings)}`,
+        post,
+      },
       { status: 201 }
     )
   } catch (error) {

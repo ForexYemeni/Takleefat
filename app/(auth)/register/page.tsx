@@ -20,6 +20,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { registerSchema, type RegisterInput, type RegisterFormValues } from '@/lib/validations/auth'
 import { getServerIssueMessage } from '@/lib/client-diagnostics'
 
@@ -39,6 +46,7 @@ export default function RegisterPage() {
       specialty: '',
       qualification: '',
       yearsOfExperience: '0',
+      gender: undefined,
     },
   })
 
@@ -172,16 +180,30 @@ export default function RegisterPage() {
         )}
 
         {role === 'NURSE' && (
-          <div className="space-y-2">
-            <Label htmlFor="qualification">المؤهل العلمي</Label>
-            <Input
-              id="qualification"
-              placeholder="مثال: بكالوريوس تمريض"
-              {...form.register('qualification')}
-            />
-            {err.qualification && (
-              <p className="text-xs text-destructive">{err.qualification.message}</p>
-            )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="qualification">المؤهل العلمي</Label>
+              <Input
+                id="qualification"
+                placeholder="مثال: بكالوريوس تمريض"
+                {...form.register('qualification')}
+              />
+              {err.qualification && (
+                <p className="text-xs text-destructive">{err.qualification.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>الجنس (اختياري)</Label>
+              <Select onValueChange={(v) => form.setValue('gender', v as 'MALE' | 'FEMALE')}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر الجنس" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MALE">ذكر</SelectItem>
+                  <SelectItem value="FEMALE">أنثى</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 

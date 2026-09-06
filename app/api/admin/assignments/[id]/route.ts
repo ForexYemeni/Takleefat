@@ -111,3 +111,44 @@ export async function PATCH(
     return handleApiError(error)
   }
 }
+
+/**
+ * DELETE /api/admin/assignments/[id] — حذف تكليف (للإدارة)
+ * يُستخدم لتنظيف البيانات التجريبية/الخاطئة مع إشعار المعنيين.
+ */
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireRole('ADMIN')
+    const { id } = await params
+
+    const assignment = await db.assignment.findUnique({ where: { id } })
+    if (!assignment) return jsonError('التكليف غير موجود', 404)
+
+    await db.assignment.delete({ where: { id } })
+
+    // إشعار المعنيين بالحذف
+    await Promise.all([
+      notify(assignment.nurseId, {
+        title: 'حذف تكليف',
+        body: `تم حذف التكليف (${assignment.title}) من قِبل إدارة المنصة`,
+        type: 'GENERIC',
+        link: '/nurse/assignments',
+      }),
+      notify(assignment.receiverId, {
+        title: 'حذف تكليف',
+        body: `تم حذف التكليف (${assignment.title}) من قِبل إدارة المنصة`,
+        type: 'GENERIC',
+        link: '/receiver/assignments',
+      }),
+    ])
+
+    return NextResponse.json({
+      message: `تم حذف التكليف (${assignment.title}) بنجاح — بواسطة ${session.user.name}`,
+    })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}

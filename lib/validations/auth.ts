@@ -35,6 +35,7 @@ export const registerSchema = z
     // حقول خاصة بالكادر التمريضي فقط — تُتحقق شرطياً في superRefine
     specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
     qualification: z.string().max(120, 'المؤهل طويل جداً').optional(),
+    gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس غير صحيح' }).optional(),
     yearsOfExperience: z.coerce
       .number({ error: 'سنوات الخبرة مطلوبة' })
       .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')

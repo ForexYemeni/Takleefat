@@ -67,6 +67,13 @@ enum ApplicationStatus {
   REJECTED
 }
 
+/// الجنس — للمستخدم ولشرط التكليف (أي جنس = لا قيد)
+enum Gender {
+  MALE
+  FEMALE
+  ANY
+}
+
 /// حالة الدفع للإدارة
 enum PaymentStatus {
   UNPAID
@@ -104,6 +111,7 @@ model User {
   specialty         String?
   qualification     String?
   yearsOfExperience Int?
+  gender            Gender?
   // ملاحظة الرفض في حال عدم اعتماد الحساب
   rejectNote        String?
   createdAt         DateTime   @default(now())
@@ -209,13 +217,18 @@ model Setting {
 /// التكليف المُعلن من المستلم الإداري — يقدّم عليه الكادر التمريضي
 model Post {
   id           String     @id @default(cuid())
+  /// الرقم التسلسلي الاحترافي — يُستخدم في العنوان التلقائي «التكليف رقم N»
+  number       Int        @default(0)
   title        String
   description  String?
   facility     String
   department   String?
   location     String?
   startDate    DateTime
-  endDate      DateTime?
+  /// عدد الساعات المطلوبة للوردية/التكليف
+  hours        Int?
+  /// الجنس المطلوب للتكليف
+  gender       Gender     @default(ANY)
   nursesNeeded Int        @default(1)
   /// قيمة التكليف (المقابل المالي الكامل) بالريال اليمني
   value        Int
@@ -231,6 +244,28 @@ model Post {
   @@index([status])
   @@index([receiverId])
   @@map("posts")
+}
+
+/// الجهات الصحية (المستشفيات) — تُدار من حساب الإدارة وتظهر كقوائم اختيار
+model Hospital {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  /// الموقع الفعلي للجهة — يُعبأ تلقائياً عند اختيار الجهة في التكليف
+  location  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("hospitals")
+}
+
+/// الأقسام الطبية — تُدار من حساب الإدارة (عناية، طوارئ، رقود، حضانة، قبالة، مختبر...)
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("departments")
 }
 
 /// تقديم الكادر التمريضي على تكليف مُعلن

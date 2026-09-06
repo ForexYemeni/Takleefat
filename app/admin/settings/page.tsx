@@ -17,13 +17,26 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPatch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/utils'
-import { settingsSchema, type SettingsInput, type SettingsFormValues } from '@/lib/validations/post'
+import {
+  settingsSchema,
+  type SettingsInput,
+  type SettingsFormValues,
+} from '@/lib/validations/post'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
+import { HospitalManager, DepartmentManager } from '@/components/admin/catalog-manager'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface AdminStats {
   receivedAssignments: number
@@ -57,7 +70,9 @@ export default function AdminSettingsPage() {
     resolver: zodResolver(settingsSchema),
     defaultValues: {
       applicationFee: 1000,
+      adminFeeType: 'PERCENTAGE',
       adminPercentage: 10,
+      adminFeeFixed: 0,
       paymentMethod: 'محفظة جيب',
       paymentAccountNumber: '',
       paymentAccountName: 'منصة تكليفات',
@@ -81,10 +96,17 @@ export default function AdminSettingsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  if (isLoading) return <DashboardSkeleton />
-
   const applicationFee = Number(form.watch('applicationFee')) || 0
   const adminPercentage = Number(form.watch('adminPercentage')) || 0
+  const adminFeeFixed = Number(form.watch('adminFeeFixed')) || 0
+  const adminFeeType = form.watch('adminFeeType')
+
+  if (isLoading) return <DashboardSkeleton />
+
+  const adminShareExample =
+    adminFeeType === 'FIXED'
+      ? adminFeeFixed
+      : Math.round((100000 * adminPercentage) / 100)
 
   return (
     <div className="space-y-4">
@@ -127,11 +149,14 @@ export default function AdminSettingsPage() {
         <Card>
           <CardContent className="flex items-start justify-between p-5">
             <div>
-              <p className="text-sm text-muted-foreground">نسبة الإدارة من التكليف</p>
+              <p className="text-sm text-muted-foreground">حصة الإدارة من التكليف</p>
               <p className="mt-1 text-3xl font-extrabold" dir="ltr">
-                {adminPercentage}٪
+                {adminFeeType === 'FIXED' ? formatCurrency(adminFeeFixed) : `${adminPercentage}٪`}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">مثال: تكليف 100,000 → {formatCurrency(Math.round(100000 * adminPercentage / 100))} للإدارة</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {adminFeeType === 'FIXED' ? 'مبلغ ثابت لكل تكليف' : 'نسبة من قيمة كل تكليف'} — مثال: تكليف
+                {' '}100,000 → {formatCurrency(adminShareExample)} للإدارة
+              </p>
             </div>
             <span className="rounded-xl bg-teal-50 p-2.5 text-teal-700">
               <Percent className="size-5" />
@@ -161,12 +186,37 @@ export default function AdminSettingsPage() {
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="s-percent">نسبة الإدارة من قيمة التكليف (٪)</Label>
-              <Input id="s-percent" type="number" min={0} max={100} {...form.register('adminPercentage')} />
-              {form.formState.errors.adminPercentage && (
-                <p className="text-xs text-destructive">{form.formState.errors.adminPercentage.message}</p>
-              )}
+              <Label htmlFor="s-fee-type">حصة الإدارة — نسبة أم مبلغ ثابت؟</Label>
+              <Select
+                value={adminFeeType}
+                onValueChange={(v) => form.setValue('adminFeeType', v as 'PERCENTAGE' | 'FIXED')}
+              >
+                <SelectTrigger id="s-fee-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PERCENTAGE">نسبة مئوية من قيمة التكليف</SelectItem>
+                  <SelectItem value="FIXED">مبلغ ثابت لكل تكليف</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {adminFeeType === 'PERCENTAGE' ? (
+              <div className="space-y-2">
+                <Label htmlFor="s-percent">نسبة الإدارة (٪ من قيمة التكليف)</Label>
+                <Input id="s-percent" type="number" min={0} max={100} {...form.register('adminPercentage')} />
+                {form.formState.errors.adminPercentage && (
+                  <p className="text-xs text-destructive">{form.formState.errors.adminPercentage.message}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="s-fixed">المبلغ الثابت للحصة الإدارية (ريال / لكل تكليف)</Label>
+                <Input id="s-fixed" type="number" min={1} {...form.register('adminFeeFixed')} />
+                {form.formState.errors.adminFeeFixed && (
+                  <p className="text-xs text-destructive">{form.formState.errors.adminFeeFixed.message}</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -243,6 +293,46 @@ export default function AdminSettingsPage() {
           </Button>
         </div>
       </form>
+
+      {/* قوائم الجهات الصحية والأقسام — تظهر للمستلم الإداري عند إنشاء التكليف */}
+      <Tabs defaultValue="hospitals" className="mt-2">
+        <TabsList className="h-auto flex-wrap justify-start gap-1">
+          <TabsTrigger value="hospitals" className="gap-1.5">
+            الجهات الصحية (المستشفيات + الموقع)
+          </TabsTrigger>
+          <TabsTrigger value="departments" className="gap-1.5">
+            الأقسام الطبية
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="hospitals">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">إدارة الجهات الصحية</CardTitle>
+              <CardDescription>
+                تُختار الجهة الصحية من هذه القائمة عند إنشاء التكليف — والموقع الفعلي يُعبأ تلقائياً
+                بحسب الجهة المختارة
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <HospitalManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="departments">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">إدارة الأقسام الطبية</CardTitle>
+              <CardDescription>
+                الأقسام التي يختار منها المستلم الإداري عند إنشاء التكليف — مثل: عناية، طوارئ،
+                رقود، حضانة، قبالة، مختبر
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DepartmentManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

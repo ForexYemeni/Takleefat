@@ -53,6 +53,7 @@ async function main() {
       specialty: 'تمريض عام',
       qualification: 'بكالوريوس تمريض',
       yearsOfExperience: 5,
+      gender: 'FEMALE',
     },
   })
 
@@ -236,19 +237,38 @@ async function main() {
 
     console.log('✅ تكليفات تجريبية: نشط + مُستلَم + مكتمل (مع سجل أحداث لكل تكليف)')
 
+    // ---------- 3-b) الجهات الصحية والأقسام (قوائم الإدارة) ----------
+    const hospitalsData = [
+      { name: 'مستشفى الملكية', location: 'صنعاء — شارع حدة' },
+      { name: 'مستشفى الثورة العام', location: 'صنعاء — شارع الزراعة' },
+      { name: 'مستشفى الولادة والأطفال', location: 'صنعاء — السبعين' },
+      { name: 'مستشفى الحباري', location: 'عدن — خور مكسر' },
+      { name: 'مركز الرازي', location: 'تعز — الحوبان' },
+    ]
+    for (const h of hospitalsData) {
+      await prisma.hospital.upsert({ where: { name: h.name }, update: {}, create: h })
+    }
+    const departmentsData = ['عناية', 'طوارئ', 'رقود', 'حضانة', 'قبالة', 'مختبر']
+    for (const name of departmentsData) {
+      await prisma.department.upsert({ where: { name }, update: {}, create: { name } })
+    }
+    console.log('✅ الجهات الصحية (5) والأقسام الطبية (6) جاهزة في قوائم الإدارة')
+
     // ---------- تكليف مُعلن مفتوح للتقديم (من المستلم الإداري) ----------
     const existingPosts = await prisma.post.count()
     if (existingPosts === 0) {
       const openPost = await prisma.post.create({
         data: {
-          title: 'إعلان تكليف — تمريض العناية المركزة',
+          number: 1,
+          title: 'التكليف رقم 1',
           description:
-            'مطلوب كادر تمريضي للعناية المركزة بمستشفى الأمل — وردية صباحية — متابعة الحالات الحرجة وتوثيقها. يُرجى التقديم مع إرفاق المستندات.',
-          facility: 'مستشفى الأمل',
-          department: 'العناية المركزة',
-          location: 'صنعاء',
+            'مطلوب كادر تمريضي لقسم العناية — وردية صباحية 8 ساعات — متابعة الحالات الحرجة وتوثيقها. يُرجى التقديم مع إرفاق المستندات.',
+          facility: 'مستشفى الملكية',
+          department: 'عناية',
+          location: 'صنعاء — شارع حدة',
           startDate: inDays(3),
-          endDate: inDays(33),
+          hours: 8,
+          gender: 'ANY',
           nursesNeeded: 2,
           value: 120000,
           status: 'OPEN',

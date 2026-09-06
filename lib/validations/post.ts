@@ -5,24 +5,27 @@ import { z } from 'zod'
  */
 
 export const createPostSchema = z.object({
-  title: z
-    .string({ error: 'عنوان التكليف مطلوب' })
-    .min(3, 'عنوان التكليف مطلوب')
-    .max(150, 'العنوان طويل جداً'),
+  // العنوان اختياري — يُولَّد تلقائياً «التكليف رقم N» إذا تُرك فارغاً
+  title: z.string().max(150, 'العنوان طويل جداً').optional().or(z.literal('')),
   description: z.string().max(2000, 'الوصف طويل جداً').optional().or(z.literal('')),
-  facility: z
-    .string({ error: 'الجهة الصحية مطلوبة' })
-    .min(2, 'الجهة الصحية مطلوبة')
-    .max(150, 'الجهة طويلة جداً'),
+  // الجهة الصحية تُختار من المستشفيات المضافة من حساب الإدارة
+  hospitalId: z.string({ error: 'الجهة الصحية مطلوبة' }).min(1, 'الجهة الصحية مطلوبة'),
   department: z.string().max(120).optional().or(z.literal('')),
   location: z.string().max(120).optional().or(z.literal('')),
   startDate: z.string({ error: 'تاريخ البدء مطلوب' }).min(1, 'تاريخ البدء مطلوب'),
-  endDate: z.string().optional().or(z.literal('')),
   nursesNeeded: z.coerce
     .number({ error: 'عدد الكادر المطلوب غير صحيح' })
     .int('عدد الكادر يجب أن يكون رقماً صحيحاً')
     .min(1, 'الحد الأدنى كادر واحد')
     .max(50, 'الحد الأقصى 50 كادر'),
+  hours: z.coerce
+    .number({ error: 'عدد الساعات غير صحيح' })
+    .int('عدد الساعات يجب أن يكون رقماً صحيحاً')
+    .min(1, 'عدد الساعات يجب أن يكون أكبر من صفر')
+    .max(999, 'عدد الساعات كبير جداً')
+    .optional()
+    .or(z.literal('')),
+  gender: z.enum(['MALE', 'FEMALE', 'ANY'], { error: 'الجنس المطلوب غير صحيح' }).default('ANY'),
   value: z.coerce
     .number({ error: 'قيمة التكليف مطلوبة' })
     .int('قيمة التكليف يجب أن تكون رقماً صحيحاً')
@@ -30,42 +33,111 @@ export const createPostSchema = z.object({
     .max(999_999_999, 'قيمة التكليف كبيرة جداً'),
 })
 
+/** تحديث التكليف المُعلن — الإدارة (أي تكليف) أو المالك (تكليفه وهو مفتوح) */
+export const updatePostSchema = z.object({
+  title: z.string().min(3, 'العنوان قصير جداً').max(150, 'العنوان طويل جداً').optional(),
+  description: z.string().max(2000, 'الوصف طويل جداً').optional().or(z.literal('')),
+  hospitalId: z.string().min(1).optional(),
+  department: z.string().max(120).optional().or(z.literal('')),
+  startDate: z.string().optional(),
+  hours: z.coerce
+    .number({ error: 'عدد الساعات غير صحيح' })
+    .int('عدد الساعات يجب أن يكون رقماً صحيحاً')
+    .min(1, 'عدد الساعات يجب أن يكون أكبر من صفر')
+    .max(999, 'عدد الساعات كبير جداً')
+    .optional()
+    .or(z.literal('')),
+  gender: z.enum(['MALE', 'FEMALE', 'ANY'], { error: 'الجنس المطلوب غير صحيح' }).optional(),
+  nursesNeeded: z.coerce
+    .number({ error: 'عدد الكادر غير صحيح' })
+    .int()
+    .min(1, 'الحد الأدنى كادر واحد')
+    .max(50, 'الحد الأقصى 50 كادر')
+    .optional(),
+  value: z.coerce
+    .number({ error: 'قيمة التكليف غير صحيحة' })
+    .int()
+    .min(1, 'قيمة التكليف يجب أن تكون أكبر من صفر')
+    .max(999_999_999, 'قيمة التكليف كبيرة جداً')
+    .optional(),
+  status: z.enum(['OPEN', 'CANCELLED'], { error: 'الحالة غير صحيحة' }).optional(),
+})
+
 export const reviewApplicationSchema = z.object({
   action: z.enum(['APPROVE', 'REJECT'], { error: 'الإجراء غير صحيح' }),
   note: z.string().max(500).optional().or(z.literal('')),
 })
 
-export const updatePostStatusSchema = z.object({
-  status: z.enum(['OPEN', 'CANCELLED'], { error: 'الحالة غير صحيحة' }),
+export const settingsSchema = z
+  .object({
+    applicationFee: z.coerce
+      .number({ error: 'رسوم التقديم غير صحيحة' })
+      .int('رسوم التقديم يجب أن تكون رقماً صحيحاً')
+      .min(0, 'رسوم التقديم لا يمكن أن تكون سالبة')
+      .max(99_999_999, 'القيمة كبيرة جداً'),
+    // حصة الإدارة: نسبة مئوية من قيمة التكليف أو مبلغ ثابت
+    adminFeeType: z.enum(['PERCENTAGE', 'FIXED'], {
+      error: 'نوع حصة الإدارة غير صحيح',
+    }),
+    adminPercentage: z.coerce
+      .number({ error: 'نسبة الإدارة غير صحيحة' })
+      .int('نسبة الإدارة يجب أن تكون رقماً صحيحاً')
+      .min(0, 'نسبة الإدارة لا يمكن أن تكون سالبة')
+      .max(100, 'نسبة الإدارة لا تتجاوز 100٪'),
+    adminFeeFixed: z.coerce
+      .number({ error: 'المبلغ الثابت غير صحيح' })
+      .int('المبلغ الثابت يجب أن يكون رقماً صحيحاً')
+      .min(0, 'المبلغ الثابت لا يمكن أن يكون سالباً')
+      .max(999_999_999, 'القيمة كبيرة جداً'),
+    paymentMethod: z
+      .string({ error: 'طريقة الدفع مطلوبة' })
+      .min(2, 'طريقة الدفع مطلوبة')
+      .max(60, 'طريقة الدفع طويلة جداً'),
+    paymentAccountNumber: z
+      .string({ error: 'رقم حساب الإدارة مطلوب' })
+      .min(3, 'رقم الحساب قصير جداً')
+      .max(60, 'رقم الحساب طويل جداً'),
+    paymentAccountName: z
+      .string({ error: 'اسم الحساب مطلوب' })
+      .min(2, 'اسم الحساب مطلوب')
+      .max(80, 'اسم الحساب طويل جداً'),
+    paymentNotes: z.string().max(500, 'الملاحظات طويلة جداً').optional().or(z.literal('')),
+  })
+  .refine(
+    (data) => data.adminFeeType === 'PERCENTAGE' || data.adminFeeFixed >= 1,
+    { message: 'أدخل مبلغاً ثابتاً للحصة الإدارية أكبر من صفر', path: ['adminFeeFixed'] }
+  )
+
+// ---------- الجهات الصحية والأقسام (تُدار من الإدارة) ----------
+
+export const hospitalSchema = z.object({
+  name: z
+    .string({ error: 'اسم الجهة الصحية مطلوب' })
+    .min(2, 'اسم الجهة مطلوب')
+    .max(150, 'الاسم طويل جداً'),
+  location: z.string().max(150, 'الموقع طويل جداً').optional().or(z.literal('')),
 })
 
-export const settingsSchema = z.object({
-  applicationFee: z.coerce
-    .number({ error: 'رسوم التقديم غير صحيحة' })
-    .int('رسوم التقديم يجب أن تكون رقماً صحيحاً')
-    .min(0, 'رسوم التقديم لا يمكن أن تكون سالبة')
-    .max(99_999_999, 'القيمة كبيرة جداً'),
-  adminPercentage: z.coerce
-    .number({ error: 'نسبة الإدارة غير صحيحة' })
-    .int('نسبة الإدارة يجب أن تكون رقماً صحيحاً')
-    .min(0, 'نسبة الإدارة لا يمكن أن تكون سالبة')
-    .max(100, 'نسبة الإدارة لا تتجاوز 100٪'),
-  paymentMethod: z
-    .string({ error: 'طريقة الدفع مطلوبة' })
-    .min(2, 'طريقة الدفع مطلوبة')
-    .max(60, 'طريقة الدفع طويلة جداً'),
-  paymentAccountNumber: z
-    .string({ error: 'رقم حساب الإدارة مطلوب' })
-    .min(3, 'رقم الحساب قصير جداً')
-    .max(60, 'رقم الحساب طويل جداً'),
-  paymentAccountName: z
-    .string({ error: 'اسم الحساب مطلوب' })
-    .min(2, 'اسم الحساب مطلوب')
-    .max(80, 'اسم الحساب طويل جداً'),
-  paymentNotes: z.string().max(500, 'الملاحظات طويلة جداً').optional().or(z.literal('')),
+export const hospitalUpdateSchema = hospitalSchema.partial().extend({
+  isActive: z.boolean().optional(),
+})
+
+export const departmentSchema = z.object({
+  name: z
+    .string({ error: 'اسم القسم مطلوب' })
+    .min(2, 'اسم القسم مطلوب')
+    .max(120, 'الاسم طويل جداً'),
+})
+
+export const departmentUpdateSchema = departmentSchema.partial().extend({
+  isActive: z.boolean().optional(),
 })
 
 export type CreatePostInput = z.infer<typeof createPostSchema>
 export type CreatePostFormValues = z.input<typeof createPostSchema>
+export type UpdatePostInput = z.infer<typeof updatePostSchema>
+export type UpdatePostFormValues = z.input<typeof updatePostSchema>
 export type SettingsInput = z.infer<typeof settingsSchema>
 export type SettingsFormValues = z.input<typeof settingsSchema>
+export type HospitalInput = z.infer<typeof hospitalSchema>
+export type DepartmentInput = z.infer<typeof departmentSchema>

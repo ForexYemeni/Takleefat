@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
-import { updatePostStatusSchema } from '@/lib/validations/post'
+import { updatePostSchema } from '@/lib/validations/post'
+import { notify } from '@/lib/notifications'
+import type { Gender } from '@prisma/client'
 
 /**
  * GET /api/posts/[id] — تفاصيل تكليف مُعلن
@@ -28,6 +30,7 @@ export async function GET(
                 id: true,
                 name: true,
                 phone: true,
+                gender: true,
                 specialty: true,
                 qualification: true,
                 yearsOfExperience: true,
@@ -67,8 +70,10 @@ export async function GET(
 }
 
 /**
- * PATCH /api/posts/[id] — إدارة حالة التكليف المُعلن (فتح/إلغاء)
- * المالك (المستلم الإداري) أو الإدارة — ولا يمكن الإلغاء بعد وجود كادر معتمد.
+ * PATCH /api/posts/[id] — تعديل/إدارة التكليف المُعلن
+ * - ADMIN: يمكنه تعديل أي تكليف (العنوان، القيمة، الجنس، الساعات، القسم...) — وإلغاؤه أو فتحه
+ * - RECEIVER المالك: تعديل تكليفه وهو مفتوح + إلغاؤه أو إعادة فتحه
+ * لا يمكن الإلغاء بعد وجود كادر معتمد، ولا تقليص العدد تحت عدد المعتمدين.
  */
 export async function PATCH(
   req: NextRequest,
@@ -78,35 +83,80 @@ export async function PATCH(
     const session = await requireRole('RECEIVER', 'ADMIN')
     const { id } = await params
 
-    const parsed = updatePostStatusSchema.safeParse(await req.json())
-    if (!parsed.success) {
-      return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
-    }
-
     const post = await db.post.findUnique({
       where: { id },
       include: { _count: { select: { applications: { where: { status: 'APPROVED' } } } } },
     })
     if (!post) return jsonError('التكليف غير موجود', 404)
 
-    if (session.user.role === 'RECEIVER' && post.receiverId !== session.user.id) {
+    const isOwner = session.user.role === 'RECEIVER' && post.receiverId === session.user.id
+    if (session.user.role === 'RECEIVER' && !isOwner) {
       throw new ApiError('يمكنك إدارة تكليفاتك المُعلنة فقط', 403)
     }
 
-    const { status } = parsed.data
+    const parsed = updatePostSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
+    }
 
-    if (status === 'CANCELLED' && post._count.applications > 0) {
+    const data = parsed.data
+    const approvedCount = post._count.applications
+
+    // حماية العدد المطلوب — لا يقل عن عدد المعتمدين
+    if (data.nursesNeeded != null && data.nursesNeeded < approvedCount) {
+      return jsonError(
+        `لا يمكن تقليص العدد المطلوب — يوجد ${approvedCount} كادر معتمد بالفعل`,
+        409
+      )
+    }
+
+    // الإلغاء ممنوع بعد اعتماد كادر
+    if (data.status === 'CANCELLED' && approvedCount > 0) {
       return jsonError('لا يمكن إلغاء التكليف — يوجد كادر معتمد عليه بالفعل', 409)
+    }
+
+    // المالك يعدل الحقول فقط وهو مفتوح (الحالة مسموحة دائماً للمالك)
+    if (isOwner && post.status !== 'OPEN' && !data.status) {
+      return jsonError('لا يمكن تعديل بيانات التكليف بعد إغلاقه — يمكنك إعادة فتحه أولاً', 409)
+    }
+
+    // الجهة الصحية عند التعديل — من قوائم الإدارة
+    let facility: string | undefined
+    let location: string | null | undefined
+    if (data.hospitalId) {
+      const hospital = await db.hospital.findUnique({ where: { id: data.hospitalId } })
+      if (!hospital || !hospital.isActive) {
+        return jsonError('الجهة الصحية غير موجودة — اختر من القائمة المضافة من الإدارة', 422)
+      }
+      facility = hospital.name
+      location = hospital.location
+    }
+
+    let start: Date | undefined
+    if (data.startDate) {
+      start = new Date(data.startDate)
+      if (Number.isNaN(start.getTime())) return jsonError('تاريخ البدء غير صحيح', 422)
     }
 
     const updated = await db.post.update({
       where: { id },
-      data: { status },
-      select: { id: true, status: true },
+      data: {
+        ...(data.title != null ? { title: data.title.trim() } : {}),
+        ...(data.description !== undefined ? { description: data.description || null } : {}),
+        ...(facility != null ? { facility, location } : {}),
+        ...(data.department !== undefined ? { department: data.department || null } : {}),
+        ...(start != null ? { startDate: start } : {}),
+        ...(data.hours !== undefined ? { hours: data.hours ? Number(data.hours) : null } : {}),
+        ...(data.gender != null ? { gender: data.gender as Gender } : {}),
+        ...(data.nursesNeeded != null ? { nursesNeeded: data.nursesNeeded } : {}),
+        ...(data.value != null ? { value: data.value } : {}),
+        ...(data.status != null ? { status: data.status } : {}),
+      },
+      select: { id: true, title: true, status: true, facility: true, location: true },
     })
 
     // إشعار المتقدمين عند الإلغاء
-    if (status === 'CANCELLED') {
+    if (data.status === 'CANCELLED') {
       const applicants = await db.application.findMany({
         where: { postId: id, status: 'PENDING' },
         select: { nurseId: true },
@@ -127,9 +177,70 @@ export async function PATCH(
     }
 
     return NextResponse.json({
-      message: status === 'CANCELLED' ? 'تم إلغاء التكليف المُعلن' : 'تم إعادة فتح التكليف للتقديم',
+      message: data.status === 'CANCELLED'
+        ? 'تم إلغاء التكليف المُعلن'
+        : data.status === 'OPEN'
+          ? 'تم إعادة فتح التكليف للتقديم'
+          : 'تم تحديث التكليف بنجاح',
       post: updated,
     })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+/**
+ * DELETE /api/posts/[id] — حذف تكليف مُعلن (الإدارة أو المالك)
+ * يُسمح فقط عندما لا يوجد كادر معتمد — تُرفض التقديمات المعلقة بإشعار.
+ */
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireRole('RECEIVER', 'ADMIN')
+    const { id } = await params
+
+    const post = await db.post.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { applications: { where: { status: 'APPROVED' } } } },
+        assignments: { select: { id: true } },
+      },
+    })
+    if (!post) return jsonError('التكليف غير موجود', 404)
+
+    const isOwner = session.user.role === 'RECEIVER' && post.receiverId === session.user.id
+    if (session.user.role === 'RECEIVER' && !isOwner) {
+      throw new ApiError('يمكنك حذف تكليفاتك المُعلنة فقط', 403)
+    }
+
+    if (post._count.applications > 0) {
+      return jsonError('لا يمكن حذف التكليف — يوجد كادر معتمد عليه', 409)
+    }
+    if (post.assignments.length > 0) {
+      return jsonError('لا يمكن حذف التكليف — مرتبط بتكليفات مؤكدة', 409)
+    }
+
+    // إشعار المتقدمين المعلقين قبل الحذف
+    const pending = await db.application.findMany({
+      where: { postId: id, status: 'PENDING' },
+      select: { id: true, nurseId: true },
+    })
+    await Promise.all(
+      pending.map((a) =>
+        notify(a.nurseId, {
+          title: 'إلغاء تكليف',
+          body: `تم حذف التكليف (${post.title}) الذي قدّمت عليه`,
+          type: 'GENERIC',
+          link: '/nurse/assignments',
+        })
+      )
+    )
+
+    await db.post.delete({ where: { id } })
+
+    return NextResponse.json({ message: `تم حذف التكليف (${post.title}) بنجاح` })
   } catch (error) {
     return handleApiError(error)
   }

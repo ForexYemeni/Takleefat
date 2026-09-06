@@ -76,7 +76,7 @@ export async function PATCH(
     }
 
     const settings = await getSettings()
-    const adminFee = calcAdminFee(application.post.value, settings.adminPercentage)
+    const adminFee = calcAdminFee(application.post.value, settings)
 
     const [updatedApplication, assignment] = await db.$transaction([
       db.application.update({
@@ -95,7 +95,6 @@ export async function PATCH(
           facility: application.post.facility,
           department: application.post.department,
           startDate: application.post.startDate,
-          endDate: application.post.endDate,
           status: 'RECEIVED',
           receivedAt: new Date(),
           nurseId: application.nurseId,
@@ -122,7 +121,7 @@ export async function PATCH(
     const dueAmount = adminFee + settings.applicationFee
     await notify(application.nurseId, {
       title: 'تهانينا! تم اعتماد تقديمك',
-      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName}`,
+      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (حصة الإدارة + رسوم التقديم) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName}`,
       type: 'APPLICATION_APPROVED',
       link: '/nurse/assignments',
     })

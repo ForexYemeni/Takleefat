@@ -10,6 +10,7 @@ import {
   IdCard,
   Phone as PhoneIcon,
   Stethoscope,
+  UserRound,
   XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { APPLICATION_STATUS_LABELS, DOCUMENT_TYPE_LABELS, formatDate } from '@/lib/utils'
+import {
+  APPLICATION_STATUS_LABELS,
+  DOCUMENT_TYPE_LABELS,
+  GENDER_LABELS,
+  formatDate,
+} from '@/lib/utils'
 
 export interface ApplicantDocument {
   id: string
@@ -40,6 +46,7 @@ export interface ApplicantData {
     id: string
     name: string
     phone: string
+    gender?: string | null
     specialty: string | null
     qualification: string | null
     yearsOfExperience: number | null
@@ -87,6 +94,11 @@ export function ApplicantCV({
       {/* البيانات الأساسية */}
       <div className="grid gap-2 sm:grid-cols-2">
         <CVRow icon={PhoneIcon} label="رقم الهاتف (للتواصل)" value={nurse.phone} ltr />
+        <CVRow
+          icon={UserRound}
+          label="الجنس"
+          value={nurse.gender && nurse.gender !== 'ANY' ? GENDER_LABELS[nurse.gender] ?? '—' : 'غير محدد'}
+        />
         <CVRow icon={Stethoscope} label="التخصص" value={nurse.specialty ?? '—'} />
         <CVRow icon={GraduationCap} label="المؤهل العلمي" value={nurse.qualification ?? '—'} />
         <CVRow

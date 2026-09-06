@@ -25,7 +25,6 @@ export async function GET() {
               department: true,
               location: true,
               startDate: true,
-              endDate: true,
               value: true,
               status: true,
               receiver: { select: { id: true, name: true, phone: true } },
@@ -38,7 +37,7 @@ export async function GET() {
 
     // حساب حصة الإدارة والصافي المستحق لكل تقديم
     const enriched = applications.map((app) => {
-      const adminFee = calcAdminFee(app.post.value, settings.adminPercentage)
+      const adminFee = calcAdminFee(app.post.value, settings)
       return {
         ...app,
         fees: {

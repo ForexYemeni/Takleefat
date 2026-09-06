@@ -30,12 +30,22 @@ export async function PATCH(req: NextRequest) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
 
-    const { applicationFee, adminPercentage, paymentMethod, paymentAccountNumber, paymentAccountName, paymentNotes } =
-      parsed.data
+    const {
+      applicationFee,
+      adminFeeType,
+      adminPercentage,
+      adminFeeFixed,
+      paymentMethod,
+      paymentAccountNumber,
+      paymentAccountName,
+      paymentNotes,
+    } = parsed.data
 
     await Promise.all([
       setSetting('applicationFee', String(applicationFee)),
+      setSetting('adminFeeType', adminFeeType),
       setSetting('adminPercentage', String(adminPercentage)),
+      setSetting('adminFeeFixed', String(adminFeeFixed)),
       setSetting('paymentMethod', paymentMethod),
       setSetting('paymentAccountNumber', paymentAccountNumber),
       setSetting('paymentAccountName', paymentAccountName),

@@ -34,6 +34,7 @@ export async function GET(
             id: true,
             name: true,
             phone: true,
+            gender: true,
             specialty: true,
             qualification: true,
             yearsOfExperience: true,

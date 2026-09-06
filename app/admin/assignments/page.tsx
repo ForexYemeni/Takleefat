@@ -2,12 +2,34 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, ClipboardList, CheckCircle2, History, Plus, XCircle } from 'lucide-react'
+import {
+  CalendarDays,
+  ClipboardList,
+  CheckCircle2,
+  History,
+  Pencil,
+  Plus,
+  Trash2,
+  UserRound,
+  XCircle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { apiFetcher, apiPost, apiPatch } from '@/lib/api-client'
-import { formatDateTime, formatDate, ASSIGNMENT_STATUS_LABELS } from '@/lib/utils'
+import { apiFetcher, apiPost, apiPatch, apiDelete } from '@/lib/api-client'
+import {
+  formatDateTime,
+  formatDate,
+  formatCurrency,
+  ASSIGNMENT_STATUS_LABELS,
+  POST_STATUS_LABELS,
+  POST_GENDER_LABELS,
+} from '@/lib/utils'
+import {
+  updatePostSchema,
+  type UpdatePostInput,
+  type UpdatePostFormValues,
+} from '@/lib/validations/post'
 import { createAssignmentSchema, type CreateAssignmentInput } from '@/lib/validations/assignment'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
@@ -56,6 +78,25 @@ export interface AdminAssignment {
   _count?: { logs: number }
 }
 
+export interface AdminPost {
+  id: string
+  number: number
+  title: string
+  description: string | null
+  facility: string
+  department: string | null
+  location: string | null
+  startDate: string
+  hours: number | null
+  gender: string
+  nursesNeeded: number
+  value: number
+  status: string
+  createdAt: string
+  receiver: { id: string; name: string }
+  _count: { applications: number }
+}
+
 interface AssignmentLogEntry {
   id: string
   action: string
@@ -74,6 +115,7 @@ const STATUS_TABS = [
 
 export default function AdminAssignmentsPage() {
   const queryClient = useQueryClient()
+  const [view, setView] = useState('posts')
   const [status, setStatus] = useState('ALL')
   const [createOpen, setCreateOpen] = useState(false)
   const [details, setDetails] = useState<AdminAssignment | null>(null)
@@ -81,6 +123,11 @@ export default function AdminAssignmentsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin-assignments'],
     queryFn: () => apiFetcher<{ assignments: AdminAssignment[] }>('/api/admin/assignments'),
+  })
+
+  const { data: postsData, isLoading: postsLoading } = useQuery({
+    queryKey: ['admin-posts'],
+    queryFn: () => apiFetcher<{ posts: AdminPost[] }>('/api/posts'),
   })
 
   const assignments = (data?.assignments ?? []).filter(
@@ -102,7 +149,19 @@ export default function AdminAssignmentsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  if (isLoading) return <DashboardSkeleton />
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: (id: string) => apiDelete<{ message: string }>(`/api/admin/assignments/${id}`),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+      setDetails(null)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (isLoading || postsLoading) return <DashboardSkeleton />
 
   return (
     <div className="space-y-4">
@@ -119,6 +178,23 @@ export default function AdminAssignmentsPage() {
         </Button>
       </div>
 
+      <Tabs value={view} onValueChange={setView}>
+        <TabsList className="h-auto flex-wrap justify-start gap-1">
+          <TabsTrigger value="posts" className="gap-1.5">
+            التكليفات المُعلنة
+            <span className="text-xs text-muted-foreground">{postsData?.posts.length ?? 0}</span>
+          </TabsTrigger>
+          <TabsTrigger value="assignments" className="gap-1.5">
+            التكليفات المؤكدة
+            <span className="text-xs text-muted-foreground">{data?.assignments.length ?? 0}</span>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {view === 'posts' && <AdminPostsTab />}
+
+      {view === 'assignments' && (
+      <>
       <Tabs value={status} onValueChange={setStatus}>
         <TabsList className="h-auto flex-wrap justify-start gap-1">
           {STATUS_TABS.map((tab) => (
@@ -182,6 +258,10 @@ export default function AdminAssignmentsPage() {
             </Table>
           </div>
         </div>
+      )}
+
+      </>
+
       )}
 
       <CreateAssignmentDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -277,6 +357,19 @@ export default function AdminAssignmentsPage() {
                     إعادة تنشيط التكليف
                   </Button>
                 )}
+                <Button
+                  variant="destructive"
+                  className="gap-2"
+                  disabled={deleteAssignmentMutation.isPending}
+                  onClick={() => {
+                    if (confirm(`حذف التكليف «${details.title}» نهائياً؟ سيُشعر المعنيون بالحذف.`)) {
+                      deleteAssignmentMutation.mutate(details.id)
+                    }
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                  حذف التكليف نهائياً
+                </Button>
               </div>
             </div>
           )}
@@ -306,7 +399,6 @@ function CreateAssignmentDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
-  const [endDate, setEndDate] = useState('')
 
   const form = useForm<CreateAssignmentInput>({
     resolver: zodResolver(createAssignmentSchema),
@@ -347,13 +439,12 @@ function CreateAssignmentDialog({
       queryClient.invalidateQueries({ queryKey: ['stats'] })
       onOpenChange(false)
       form.reset()
-      setEndDate('')
     },
     onError: (e: Error) => toast.error(e.message),
   })
 
   const onSubmit = (values: CreateAssignmentInput) => {
-    createMutation.mutate({ ...values, endDate })
+    createMutation.mutate({ ...values, endDate: '' })
   }
 
   return (
@@ -399,15 +490,6 @@ function CreateAssignmentDialog({
               {form.formState.errors.startDate && (
                 <p className="text-xs text-destructive">{form.formState.errors.startDate.message}</p>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="a-end">تاريخ الانتهاء (اختياري)</Label>
-              <Input
-                id="a-end"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
             </div>
           </div>
 
@@ -472,6 +554,273 @@ function CreateAssignmentDialog({
             <Button type="submit" disabled={createMutation.isPending} className="gap-2">
               <CalendarDays className="size-4" />
               {createMutation.isPending ? 'جارٍ الإنشاء...' : 'إنشاء التكليف'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------- تبويب التكليفات المُعلنة (الإدارة) ----------
+
+function AdminPostsTab() {
+  const queryClient = useQueryClient()
+  const [editPost, setEditPost] = useState<AdminPost | null>(null)
+
+  const { data } = useQuery({
+    queryKey: ['admin-posts'],
+    queryFn: () => apiFetcher<{ posts: AdminPost[] }>('/api/posts'),
+  })
+  const posts = data?.posts ?? []
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
+    queryClient.invalidateQueries({ queryKey: ['admin-assignments'] })
+    queryClient.invalidateQueries({ queryKey: ['my-posts'] })
+    queryClient.invalidateQueries({ queryKey: ['open-posts'] })
+    queryClient.invalidateQueries({ queryKey: ['stats'] })
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete<{ message: string }>(`/api/posts/${id}`),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      invalidate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (posts.length === 0) {
+    return (
+      <EmptyState
+        icon={ClipboardList}
+        title="لا توجد تكليفات مُعلنة"
+        description="التكليفات التي ينشئها المستلمون الإداريون للتقديم عليها تظهر هنا — ويمكنك تعديل عنوانها أو حذفها."
+      />
+    )
+  }
+
+  return (
+    <>
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-secondary/60 hover:bg-secondary/60">
+                <TableHead>التكليف</TableHead>
+                <TableHead className="hidden md:table-cell">الجهة / القسم</TableHead>
+                <TableHead className="hidden lg:table-cell">القيمة</TableHead>
+                <TableHead className="hidden lg:table-cell">الجنس / الساعات</TableHead>
+                <TableHead className="hidden md:table-cell">المُعلن</TableHead>
+                <TableHead>الحالة</TableHead>
+                <TableHead className="text-start">إجراءات</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {posts.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>
+                    <p className="font-bold">{p.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p._count?.applications ?? 0} تقديم — {p.nursesNeeded} كادر مطلوب
+                    </p>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <p>{p.facility}</p>
+                    <p className="text-xs text-muted-foreground">{p.department ?? '—'}</p>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell" dir="ltr">
+                    <span className="text-start">{formatCurrency(p.value)}</span>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <p>{POST_GENDER_LABELS[p.gender] ?? 'أي جنس'}</p>
+                    <p className="text-xs text-muted-foreground">{p.hours ? `${p.hours} ساعة` : '—'}</p>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">{p.receiver?.name ?? '—'}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={p.status} labels={POST_STATUS_LABELS} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1.5">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditPost(p)}>
+                        <Pencil className="size-3.5" />
+                        تعديل
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="حذف التكليف المُعلن"
+                        className="text-muted-foreground hover:text-destructive"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                          if (confirm(`حذف «${p.title}» نهائياً؟ تُرفض التقديمات المعلقة بإشعار.`)) {
+                            deleteMutation.mutate(p.id)
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <EditPostDialog post={editPost} onOpenChange={(open) => !open && setEditPost(null)} />
+    </>
+  )
+}
+
+// ---------- حوار تعديل التكليف المُعلن (الإدارة) ----------
+
+function EditPostDialog({
+  post,
+  onOpenChange,
+}: {
+  post: AdminPost | null
+  onOpenChange: (open: boolean) => void
+}) {
+  const queryClient = useQueryClient()
+
+  const form = useForm<UpdatePostFormValues, unknown, UpdatePostInput>({
+    resolver: zodResolver(updatePostSchema),
+    values: post
+      ? {
+          title: post.title,
+          description: post.description ?? '',
+          department: post.department ?? '',
+          startDate: post.startDate.slice(0, 10),
+          hours: post.hours != null ? String(post.hours) : '',
+          gender: post.gender as 'MALE' | 'FEMALE' | 'ANY',
+          nursesNeeded: String(post.nursesNeeded),
+          value: String(post.value),
+          status: post.status as 'OPEN' | 'CANCELLED',
+        }
+      : undefined,
+  })
+
+  const editMutation = useMutation({
+    mutationFn: (values: UpdatePostInput) =>
+      apiPatch<{ message: string }>(`/api/posts/${post!.id}`, values),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['my-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['open-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+      onOpenChange(false)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (!post) return null
+
+  return (
+    <Dialog open={!!post} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>تعديل التكليف المُعلن</DialogTitle>
+          <DialogDescription>
+            يمكنك تعديل العنوان والبيانات المالية ومتطلبات التكليف — {post.facility}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={form.handleSubmit((v) => editMutation.mutate(v))}
+          className="space-y-4"
+          noValidate
+        >
+          <div className="space-y-2">
+            <Label htmlFor="ep-title">عنوان التكليف</Label>
+            <Input id="ep-title" {...form.register('title')} />
+            {form.formState.errors.title && (
+              <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="ep-value">قيمة التكليف (ريال)</Label>
+              <Input id="ep-value" type="number" min={1} {...form.register('value')} />
+              {form.formState.errors.value && (
+                <p className="text-xs text-destructive">{form.formState.errors.value.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ep-needed">عدد الكادر المطلوب</Label>
+              <Input id="ep-needed" type="number" min={1} max={50} {...form.register('nursesNeeded')} />
+              {form.formState.errors.nursesNeeded && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.nursesNeeded.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="ep-hours">عدد الساعات</Label>
+              <Input id="ep-hours" type="number" min={1} max={999} {...form.register('hours')} />
+            </div>
+            <div className="space-y-2">
+              <Label>الجنس المطلوب</Label>
+              <Select
+                value={form.watch('gender')}
+                onValueChange={(v) => form.setValue('gender', v as UpdatePostInput['gender'])}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ANY">أي جنس</SelectItem>
+                  <SelectItem value="MALE">ذكر</SelectItem>
+                  <SelectItem value="FEMALE">أنثى</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ep-start">تاريخ البدء</Label>
+              <Input id="ep-start" type="date" {...form.register('startDate')} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="ep-department">القسم</Label>
+              <Input id="ep-department" {...form.register('department')} />
+            </div>
+            <div className="space-y-2">
+              <Label>الحالة</Label>
+              <Select
+                value={form.watch('status')}
+                onValueChange={(v) => form.setValue('status', v as 'OPEN' | 'CANCELLED')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OPEN">متاح للتقديم</SelectItem>
+                  <SelectItem value="CANCELLED">ملغي</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ep-desc">الوصف (اختياري)</Label>
+            <Textarea id="ep-desc" rows={3} {...form.register('description')} />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+            <Button type="submit" disabled={editMutation.isPending} className="gap-2">
+              <Pencil className="size-4" />
+              {editMutation.isPending ? 'جارٍ الحفظ...' : 'حفظ التعديلات'}
             </Button>
           </DialogFooter>
         </form>
