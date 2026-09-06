@@ -109,6 +109,27 @@ async function main() {
   }
   console.log('✅ إعدادات الرسوم وطرق الدفع (محفظة جيب — رسوم التقديم 1000 ريال — نسبة الإدارة 10٪)')
 
+  // ---------- 2-ب) مزامنة إنقاذ لكلمات مرور الحسابات المعروفة ----------
+  // إن انحرفت كلمة مرور أي من الحسابات الموثقة (أثناء تجارب قديمة أو نسخة قاعدة سابقة)
+  // يُعاد ضبطها إلى القيم الموثقة — الحسابات التي ينشئها المستخدم لا تُمَس إطلاقاً.
+  const rescueAccounts = [
+    { phone: ADMIN_PHONE, password: ADMIN_PASSWORD, label: 'مدير النظام' },
+    { phone: '711111111', password: 'Nurse@1234', label: 'الكادر التجريبي' },
+    { phone: '733333333', password: 'Receiver@1234', label: 'المستلم التجريبي' },
+  ]
+  for (const acc of rescueAccounts) {
+    const u = await prisma.user.findUnique({ where: { phone: acc.phone } })
+    if (!u) continue
+    const matches = bcrypt.compareSync(acc.password, u.password)
+    if (!matches) {
+      await prisma.user.update({
+        where: { phone: acc.phone },
+        data: { password: hash(acc.password) },
+      })
+      console.log(`🔧 مزامنة إنقاذ: كلمة مرور ${acc.label} (${acc.phone}) أُعيدت إلى القيمة الموثقة`)
+    }
+  }
+
   // ---------- 3) مستندات تجريبية للكادر ----------
   const demoFile = '/demo/sample-document.txt'
   const docsCount = await prisma.document.count({ where: { userId: nurse.id } })
