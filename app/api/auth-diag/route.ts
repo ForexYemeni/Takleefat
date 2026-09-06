@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { compare, hashSync } from 'bcryptjs'
+import { compare, compareSync, hashSync } from 'bcryptjs'
 
 /**
  * نقطة تشخيص مؤقتة لمشكلة تسجيل الدخول على الإنتاج — تكليفات | Takleefat
@@ -33,12 +33,22 @@ export async function GET() {
 
     const accountChecks = phones.map((p) => {
       const u = users.find((x) => x.phone === p)
+      const documented =
+        p === '773178684'
+          ? 'Admin@1234'
+          : p === '711111111'
+            ? 'Nurse@1234'
+            : 'Receiver@1234'
+      const matchesDocumented = u?.password
+        ? compareSync(documented, u.password)
+        : false
       return {
         phone: mask(p),
         exists: Boolean(u),
         role: u?.role ?? null,
         status: u?.status ?? null,
         hashFormatValid: Boolean(u?.password && u.password.startsWith('$2') && u.password.length >= 59),
+        matchesDocumentedPassword: matchesDocumented,
         updatedAt: u?.updatedAt ?? null,
       }
     })
