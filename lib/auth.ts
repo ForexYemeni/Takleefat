@@ -5,20 +5,19 @@ import { db } from '@/lib/db'
 import { loginSchema } from '@/lib/validations/auth'
 
 /**
- * يضمن وجود حساب المدير الافتراضي.
- * يُنشأ تلقائياً من متغيرات البيئة ADMIN_PHONE / ADMIN_PASSWORD
- * إذا لم يوجد أي مدير في قاعدة البيانات.
+ * يضمن جاهزية حساب المدير المحدد في متغيرات البيئة.
+ * - إن لم يوجد الحساب → يُنشأ
+ * - إن وُجد بدور أو حالة مختلفة → يُرقّى لمدير معتمد
+ * - كلمة المرور تُزامَن دائماً مع ADMIN_PASSWORD (حساب إنقاذ دائم)
  */
 export async function ensureAdmin() {
   const adminPhone = process.env.ADMIN_PHONE
   const adminPassword = process.env.ADMIN_PASSWORD
   if (!adminPhone || !adminPassword) return
 
-  const adminExists = await db.user.findFirst({ where: { role: 'ADMIN' } })
-  if (adminExists) return
-
   const bcrypt = await import('bcryptjs')
   const hashed = await bcrypt.hash(adminPassword, 12)
+
   await db.user.upsert({
     where: { phone: adminPhone },
     update: { role: 'ADMIN', status: 'APPROVED', password: hashed },
@@ -27,6 +26,66 @@ export async function ensureAdmin() {
       phone: adminPhone,
       password: hashed,
       role: 'ADMIN',
+      status: 'APPROVED',
+    },
+  })
+}
+
+/**
+ * بيانات تجريبية اختيارية على خادم الإنتاج.
+ * تُنشأ مرة واحدة فقط عند ضبط SEED_DEMO=true في متغيرات البيئة
+ * وعدم وجود أي حساب كادر تمريضي مسبقاً — لإظهار المنصة كاملة
+ * (ممرضة معتمدة + ممرضة بانتظار الاعتماد + مستلم إداري) دون أوامر يدوية.
+ */
+async function ensureDemoData() {
+  if (process.env.SEED_DEMO !== 'true') return
+
+  const existingNurse = await db.user.findFirst({ where: { role: 'NURSE' } })
+  if (existingNurse) return
+
+  const bcrypt = await import('bcryptjs')
+  const nursePass = await bcrypt.hash('Nurse@1234', 12)
+  const receiverPass = await bcrypt.hash('Receiver@1234', 12)
+
+  // upsert لكل حساب — آمن للتكرار ومتوافق مع جميع مزودات قواعد البيانات
+  await db.user.upsert({
+    where: { phone: '711111111' },
+    update: {},
+    create: {
+      name: 'سارة أحمد',
+      phone: '711111111',
+      password: nursePass,
+      role: 'NURSE',
+      status: 'APPROVED',
+      specialty: 'تمريض عام',
+      qualification: 'بكالوريوس تمريض',
+      yearsOfExperience: 5,
+    },
+  })
+
+  await db.user.upsert({
+    where: { phone: '722222222' },
+    update: {},
+    create: {
+      name: 'نور محمد',
+      phone: '722222222',
+      password: nursePass,
+      role: 'NURSE',
+      status: 'PENDING',
+      specialty: 'تمريض أطفال',
+      qualification: 'دبلوم تمريض',
+      yearsOfExperience: 2,
+    },
+  })
+
+  await db.user.upsert({
+    where: { phone: '733333333' },
+    update: {},
+    create: {
+      name: 'خالد عبدالله',
+      phone: '733333333',
+      password: receiverPass,
+      role: 'RECEIVER',
       status: 'APPROVED',
     },
   })
@@ -51,6 +110,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         await ensureAdmin()
+        await ensureDemoData()
 
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null

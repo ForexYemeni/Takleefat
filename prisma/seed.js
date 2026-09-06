@@ -8,10 +8,10 @@
  *   npx prisma db seed        (تعبئة البيانات الوهمية)
  *
  * الحسابات التجريبية (إن لم تُضبط ADMIN_PHONE / ADMIN_PASSWORD):
- *   مدير النظام      0500000000   Admin@1234
- *   ممرضة (معتمدة)   0501111111   Nurse@1234
- *   ممرضة (معلّقة)   0501333333   Nurse@1234
- *   مستلم إداري      0502222222   Receiver@1234
+ *   مدير النظام      773178684   Admin@1234
+ *   ممرضة (معتمدة)   711111111   Nurse@1234
+ *   ممرضة (معلّقة)   722222222   Nurse@1234
+ *   مستلم إداري      733333333   Receiver@1234
  * ============================================================ */
 
 const { PrismaClient } = require('@prisma/client')
@@ -19,8 +19,8 @@ const bcrypt = require('bcryptjs')
 
 const prisma = new PrismaClient()
 
-// أرقام تجريبية ثابتة — يمكن تعديلها من متغيرات البيئة
-const ADMIN_PHONE = process.env.ADMIN_PHONE || '0500000000'
+// أرقام يمنية (تبدأ بـ 7 و 9 أرقام) — يمكن تعديلها من متغيرات البيئة
+const ADMIN_PHONE = process.env.ADMIN_PHONE || '773178684'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@1234'
 
 async function main() {
@@ -42,11 +42,11 @@ async function main() {
   })
 
   const nurse = await prisma.user.upsert({
-    where: { phone: '0501111111' },
+    where: { phone: '711111111' },
     update: {},
     create: {
       name: 'سارة أحمد',
-      phone: '0501111111',
+      phone: '711111111',
       password: hash('Nurse@1234'),
       role: 'NURSE',
       status: 'APPROVED',
@@ -58,11 +58,11 @@ async function main() {
 
   // ممرضة معلّقة لتجربة مسار "اعتماد الحسابات" من لوحة المدير
   const pendingNurse = await prisma.user.upsert({
-    where: { phone: '0501333333' },
+    where: { phone: '722222222' },
     update: {},
     create: {
       name: 'نور محمد',
-      phone: '0501333333',
+      phone: '722222222',
       password: hash('Nurse@1234'),
       role: 'NURSE',
       status: 'PENDING',
@@ -73,11 +73,11 @@ async function main() {
   })
 
   const receiver = await prisma.user.upsert({
-    where: { phone: '0502222222' },
+    where: { phone: '733333333' },
     update: {},
     create: {
       name: 'خالد عبدالله',
-      phone: '0502222222',
+      phone: '733333333',
       password: hash('Receiver@1234'),
       role: 'RECEIVER',
       status: 'APPROVED',

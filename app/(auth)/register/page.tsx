@@ -88,7 +88,7 @@ export default function RegisterPage() {
               type="tel"
               inputMode="tel"
               dir="ltr"
-              placeholder="05xxxxxxxx"
+              placeholder="7xxxxxxxx"
               className="ps-10 text-start"
               {...form.register('phone')}
             />

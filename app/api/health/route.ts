@@ -17,7 +17,8 @@ export async function GET() {
   let databaseError: string | undefined
 
   try {
-    await db.$queryRaw`SELECT 1`
+    // فحص الاتصال + وجود الجداول معاً (وليس مجرد SELECT 1)
+    await db.user.count()
     database = 'ok'
   } catch (error) {
     databaseError = error instanceof Error ? error.message.split('\n')[0] : 'Unknown error'
@@ -36,6 +37,7 @@ export async function GET() {
       NEXTAUTH_URL: env('NEXTAUTH_URL'),
       ADMIN_PHONE: env('ADMIN_PHONE'),
       ADMIN_PASSWORD: env('ADMIN_PASSWORD'),
+      SEED_DEMO: env('SEED_DEMO'),
       STORAGE_ACCESS_KEY: env('STORAGE_ACCESS_KEY'),
       STORAGE_SECRET_KEY: env('STORAGE_SECRET_KEY'),
       STORAGE_BUCKET: env('STORAGE_BUCKET'),

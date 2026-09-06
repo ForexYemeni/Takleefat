@@ -46,7 +46,34 @@ function LoginForm() {
     }).catch(() => null)
 
     if (!result) {
-      setError('تعذر الاتصال بالخادم — تحقق من اتصالك بالإنترنت ثم أعد المحاولة')
+      // عميل next-auth ينهار عند استجابة 500 من الخادم
+      // لذلك نشخّص السبب الحقيقي عبر /api/health بدلاً من رسالة الاتصال المضللة
+      try {
+        const health = await fetch('/api/health', { cache: 'no-store' })
+        const h = await health.json()
+        if (h?.database !== 'ok') {
+          setError(
+            'تعذر الاتصال بقاعدة البيانات — تأكد من ضبط DATABASE_URL في Vercel ومن تنفيذ: npx prisma db push'
+          )
+        } else {
+          const missing = Object.entries(h.env ?? {})
+            .filter(([, v]) => v === 'MISSING')
+            .map(([k]) => k)
+          if (missing.includes('AUTH_SECRET') && missing.includes('NEXTAUTH_SECRET')) {
+            setError(
+              'المفتاح السري AUTH_SECRET غير مضبوط — أضفه في متغيرات البيئة على Vercel (openssl rand -base64 32) ثم أعد النشر'
+            )
+          } else if (missing.includes('ADMIN_PHONE') || missing.includes('ADMIN_PASSWORD')) {
+            setError(
+              'متغيرات حساب المدير (ADMIN_PHONE / ADMIN_PASSWORD) غير مضبوطة — أضفها في Vercel ثم أعد النشر'
+            )
+          } else {
+            setError('خطأ في إعدادات الخادم — افتح المسار /api/health لعرض التشخيص الكامل')
+          }
+        }
+      } catch {
+        setError('تعذر الاتصال بالخادم — تحقق من اتصالك بالإنترنت ثم أعد المحاولة')
+      }
       return
     }
 
@@ -56,7 +83,7 @@ function LoginForm() {
       setError(
         result.error === 'CredentialsSignin'
           ? 'رقم الهاتف أو كلمة المرور غير صحيحة، أو أن الحساب بانتظار الاعتماد أو موقوف'
-          : 'خطأ في إعدادات الخادم — افتح المسار /api/health للتحقق من متغيرات البيئة وقاعدة البيانات'
+          : 'خطأ في إعدادات الخادم — افتح المسار /api/health لعرض التشخيص الكامل'
       )
       return
     }
@@ -107,7 +134,7 @@ function LoginForm() {
               type="tel"
               inputMode="tel"
               dir="ltr"
-              placeholder="05xxxxxxxx"
+              placeholder="7xxxxxxxx"
               className="ps-10 text-start"
               {...form.register('phone')}
             />
