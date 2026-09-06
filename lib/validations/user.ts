@@ -26,6 +26,8 @@ export const createReceiverSchema = z.object({
     .max(80, 'الاسم طويل جداً'),
   phone: adminPhoneSchema,
   password: adminPasswordSchema,
+  // الجهة الصحية (المستشفى) — اختيارية عند الإنشاء من الإدارة لأن الإدارة قد تعبئها لاحقاً
+  hospitalName: z.string().max(120, 'اسم الجهة الصحية طويل جداً').optional(),
 })
 
 export const createNurseSchema = z.object({

@@ -116,8 +116,9 @@ export default function NurseOverviewPage() {
           <Hourglass className="size-4" />
           <AlertTitle className="font-bold">حسابك قيد المراجعة</AlertTitle>
           <AlertDescription className="leading-relaxed">
-            يتم حالياً مراجعة بياناتك من قبل إدارة منصة تكليفات. يمكنك رفع مستنداتك الآن
-            لتسريع الاعتماد — سيصلك إشعار فور اعتماد الحساب.
+            يمكنك تسجيل الدخول ومتابعة حسابك فوراً — لكن لن يكون التقديم على التكليفات متاحاً
+            إلا بعد رفع مستنداتك (الهوية وصورة المزاولة) واعتماد حسابك من الإدارة. ارفع
+            مستنداتك الآن لتسريع الاعتماد — سيصلك إشعار فور اعتماد الحساب.
           </AlertDescription>
         </Alert>
       )}

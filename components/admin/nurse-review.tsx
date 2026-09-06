@@ -228,7 +228,7 @@ export function NurseReview() {
                     </TableCell>
                     <TableCell>
                       <UserActionsMenu
-                        user={user}
+                        user={{ ...user, documentsCount: user._count.documents }}
                         onChanged={() => {
                           queryClient.invalidateQueries({ queryKey: ['admin-users'] })
                           queryClient.invalidateQueries({ queryKey: ['stats'] })

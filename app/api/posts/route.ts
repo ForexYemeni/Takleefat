@@ -24,21 +24,25 @@ export async function GET(req: NextRequest) {
     }
 
     if (session.user.role === 'NURSE') {
-      const posts = await db.post.findMany({
-        where: { ...statusWhere, status: status ? statusWhere.status : 'OPEN' },
-        orderBy: { createdAt: 'desc' },
-        include: {
-          receiver: { select: { id: true, name: true } },
-          _count: { select: { applications: true } },
-          applications: {
-            where: { nurseId: session.user.id },
-            select: { id: true, status: true, reviewNote: true, createdAt: true },
+      const [posts, documentsCount] = await Promise.all([
+        db.post.findMany({
+          where: { ...statusWhere, status: status ? statusWhere.status : 'OPEN' },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            receiver: { select: { id: true, name: true } },
+            _count: { select: { applications: true } },
+            applications: {
+              where: { nurseId: session.user.id },
+              select: { id: true, status: true, reviewNote: true, createdAt: true },
+            },
           },
-        },
-      })
+        }),
+        // عدد مستندات الكادر — يُستخدم لقيد التقديم حتى رفع المستندات
+        db.document.count({ where: { userId: session.user.id } }),
+      ])
 
       const settings = await getSettings()
-      return NextResponse.json({ posts, settings })
+      return NextResponse.json({ posts, settings, documentsCount })
     }
 
     if (session.user.role === 'RECEIVER') {

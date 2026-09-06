@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
         specialty: true,
         qualification: true,
         yearsOfExperience: true,
+        hospitalName: true,
         rejectNote: true,
         createdAt: true,
         _count: { select: { documents: true, assignments: true } },
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
-    const { name, phone, password } = parsed.data
+    const { name, phone, password, hospitalName } = parsed.data
 
     const existing = await db.user.findUnique({ where: { phone } })
     if (existing) {
@@ -126,6 +127,7 @@ export async function POST(req: NextRequest) {
         password: hashed,
         role: 'RECEIVER',
         status: 'APPROVED', // حسابات يُنشئها المدير تكون معتمدة تلقائياً
+        ...(hospitalName ? { hospitalName: hospitalName.trim() } : {}),
       },
       select: { id: true, name: true, phone: true, role: true, status: true },
     })

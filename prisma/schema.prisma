@@ -121,6 +121,8 @@ model User {
   gender            Gender?
   // ملاحظة الرفض في حال عدم اعتماد الحساب
   rejectNote        String?
+  // الجهة الصحية (المستشفى) — يُدخلها المستلم الإداري عند التسجيل
+  hospitalName      String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 

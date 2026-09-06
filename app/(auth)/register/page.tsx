@@ -14,6 +14,7 @@ import {
   Lock,
   Stethoscope,
   ClipboardCheck,
+  Hospital,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -47,6 +48,7 @@ export default function RegisterPage() {
       qualification: '',
       yearsOfExperience: '0',
       gender: undefined,
+      hospitalName: '',
     },
   })
 
@@ -204,6 +206,26 @@ export default function RegisterPage() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        )}
+
+        {role === 'RECEIVER' && (
+          <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <Label htmlFor="hospitalName" className="flex items-center gap-2">
+              <Hospital className="size-4 text-primary" />
+              اسم الجهة الصحية (المستشفى)
+            </Label>
+            <Input
+              id="hospitalName"
+              placeholder="مثال: مستشفى الملكية"
+              {...form.register('hospitalName')}
+            />
+            {err.hospitalName && (
+              <p className="text-xs text-destructive">{err.hospitalName.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              الجهة الصحية التي تمثلها — ستظهر للإدارة عند مراجعة حسابك وتُربط بتكليفاتك.
+            </p>
           </div>
         )}
 

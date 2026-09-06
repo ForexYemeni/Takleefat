@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Hospital } from 'lucide-react'
 
 interface ReceiverUser {
   id: string
@@ -40,6 +40,7 @@ interface ReceiverUser {
   phone: string
   role: string
   status: string
+  hospitalName: string | null
   createdAt: string
   _count: { documents: number; assignments: number }
 }
@@ -57,7 +58,7 @@ export default function AdminReceiversPage() {
 
   const form = useForm<CreateReceiverInput>({
     resolver: zodResolver(createReceiverSchema),
-    defaultValues: { name: '', phone: '', password: '' },
+    defaultValues: { name: '', phone: '', password: '', hospitalName: '' },
   })
 
   const createMutation = useMutation({
@@ -125,6 +126,7 @@ export default function AdminReceiversPage() {
                 <TableRow className="bg-secondary/60 hover:bg-secondary/60">
                   <TableHead>الاسم</TableHead>
                   <TableHead className="hidden md:table-cell">الهاتف</TableHead>
+                  <TableHead className="hidden lg:table-cell">الجهة الصحية</TableHead>
                   <TableHead>الحالة</TableHead>
                   <TableHead className="hidden md:table-cell">تكليفات</TableHead>
                   <TableHead className="hidden md:table-cell">تاريخ الإنشاء</TableHead>
@@ -138,6 +140,16 @@ export default function AdminReceiversPage() {
                     <TableCell className="hidden md:table-cell" dir="ltr">
                       <span className="text-start">{user.phone}</span>
                     </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {user.hospitalName ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Hospital className="size-3" />
+                          {user.hospitalName}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={user.status} labels={USER_STATUS_LABELS} />
                     </TableCell>
@@ -149,7 +161,7 @@ export default function AdminReceiversPage() {
                     </TableCell>
                     <TableCell>
                       <UserActionsMenu
-                        user={user}
+                        user={{ ...user, documentsCount: user._count.documents }}
                         onChanged={() => {
                           queryClient.invalidateQueries({ queryKey: ['admin-users'] })
                           queryClient.invalidateQueries({ queryKey: ['stats'] })
@@ -196,6 +208,22 @@ export default function AdminReceiversPage() {
               </div>
               {form.formState.errors.phone && (
                 <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="receiver-hospital" className="flex items-center gap-2">
+                <Hospital className="size-4 text-primary" />
+                اسم الجهة الصحية (المستشفى) — اختياري
+              </Label>
+              <Input
+                id="receiver-hospital"
+                placeholder="مثال: مستشفى الملكية"
+                {...form.register('hospitalName')}
+              />
+              {form.formState.errors.hospitalName && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.hospitalName.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">

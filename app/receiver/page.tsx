@@ -1,12 +1,14 @@
 'use client'
 
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
-import { BadgeCheck, CheckCircle2, Inbox, ClipboardList } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, Inbox, ClipboardList, ShieldAlert } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 interface ReceiverStats {
   myAssignments: number
@@ -15,12 +17,15 @@ interface ReceiverStats {
 }
 
 export default function ReceiverOverviewPage() {
+  const { data: session } = useSession()
   const { data, isLoading } = useQuery({
     queryKey: ['stats'],
     queryFn: () => apiFetcher<ReceiverStats>('/api/stats'),
   })
 
   if (isLoading) return <DashboardSkeleton />
+
+  const status = session?.user?.status
 
   const cards = [
     {
@@ -51,6 +56,36 @@ export default function ReceiverOverviewPage() {
           ملخص التكليفات الواردة إليك في منصة تكليفات | Takleefat
         </p>
       </div>
+
+      {/* حالة الحساب */}
+      {status === 'PENDING' && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
+          <ShieldAlert className="size-4" />
+          <AlertTitle className="font-bold">حسابك بانتظار اعتماد الإدارة</AlertTitle>
+          <AlertDescription className="leading-relaxed">
+            يمكنك تسجيل الدخول ومتابعة حسابك فوراً — لكن إنشاء التكليفات غير متاح إلا بعد
+            اعتماد حسابك من إدارة المنصة. سيصلك إشعار فور الاعتماد.
+          </AlertDescription>
+        </Alert>
+      )}
+      {status === 'SUSPENDED' && (
+        <Alert variant="destructive" className="border-red-200 bg-red-50">
+          <ShieldAlert className="size-4" />
+          <AlertTitle className="font-bold">تم إيقاف حسابك مؤقتاً</AlertTitle>
+          <AlertDescription>
+            لا يمكنك إنشاء تكليفات حالياً — يرجى التواصل مع إدارة المنصة.
+          </AlertDescription>
+        </Alert>
+      )}
+      {status === 'APPROVED' && (
+        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
+          <BadgeCheck className="size-4" />
+          <AlertTitle className="font-bold">حسابك معتمد</AlertTitle>
+          <AlertDescription>
+            يمكنك إنشاء التكليفات ومتابعة التكليفات الواردة إليك وتوثيق استلامها إلكترونياً.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         {cards.map((card) => (

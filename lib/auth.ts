@@ -31,66 +31,6 @@ export async function ensureAdmin() {
   })
 }
 
-/**
- * بيانات تجريبية اختيارية على خادم الإنتاج.
- * تُنشأ مرة واحدة فقط عند ضبط SEED_DEMO=true في متغيرات البيئة
- * وعدم وجود أي حساب كادر تمريضي مسبقاً — لإظهار المنصة كاملة
- * (ممرضة معتمدة + ممرضة بانتظار الاعتماد + مستلم إداري) دون أوامر يدوية.
- */
-async function ensureDemoData() {
-  if (process.env.SEED_DEMO !== 'true') return
-
-  const existingNurse = await db.user.findFirst({ where: { role: 'NURSE' } })
-  if (existingNurse) return
-
-  const bcrypt = await import('bcryptjs')
-  const nursePass = await bcrypt.hash('Nurse@1234', 12)
-  const receiverPass = await bcrypt.hash('Receiver@1234', 12)
-
-  // upsert لكل حساب — آمن للتكرار ومتوافق مع جميع مزودات قواعد البيانات
-  await db.user.upsert({
-    where: { phone: '711111111' },
-    update: {},
-    create: {
-      name: 'سارة أحمد',
-      phone: '711111111',
-      password: nursePass,
-      role: 'NURSE',
-      status: 'APPROVED',
-      specialty: 'تمريض عام',
-      qualification: 'بكالوريوس تمريض',
-      yearsOfExperience: 5,
-    },
-  })
-
-  await db.user.upsert({
-    where: { phone: '722222222' },
-    update: {},
-    create: {
-      name: 'نور محمد',
-      phone: '722222222',
-      password: nursePass,
-      role: 'NURSE',
-      status: 'PENDING',
-      specialty: 'تمريض أطفال',
-      qualification: 'دبلوم تمريض',
-      yearsOfExperience: 2,
-    },
-  })
-
-  await db.user.upsert({
-    where: { phone: '733333333' },
-    update: {},
-    create: {
-      name: 'خالد عبدالله',
-      phone: '733333333',
-      password: receiverPass,
-      role: 'RECEIVER',
-      status: 'APPROVED',
-    },
-  })
-}
-
 export const authOptions: NextAuthOptions = {
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   session: {
@@ -110,7 +50,6 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         await ensureAdmin()
-        await ensureDemoData()
 
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
@@ -123,9 +62,11 @@ export const authOptions: NextAuthOptions = {
         const valid = await compare(password, user.password)
         if (!valid) return null
 
-        // الحسابات غير المعتمدة لا يمكنها الدخول:
-        // PENDING (بانتظار موافقة المدير) / REJECTED (مرفوض) / SUSPENDED (موقوف)
-        if (user.status !== 'APPROVED') return null
+        // سياسة الدخول:
+        // - الكادر والمستلم الإداري يدخلان فور التسجيل حتى لو كان الحساب PENDING
+        //   (الكادر يرفع مستنداته والمستلم يتابع حالة اعتماده — دون صلاحيات كاملة)
+        // - REJECTED (مرفوض) و SUSPENDED (موقوف) لا يمكنهما الدخول إطلاقاً
+        if (user.status === 'REJECTED' || user.status === 'SUSPENDED') return null
 
         return {
           id: user.id,

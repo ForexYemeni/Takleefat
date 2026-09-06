@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeCheck,
@@ -11,6 +12,7 @@ import {
   MapPin,
   PackageCheck,
   Plus,
+  ShieldAlert,
   Star,
   UserRound,
   Users,
@@ -61,6 +63,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 // ---------- الأنواع ----------
 
@@ -128,9 +131,14 @@ interface Department {
 
 export default function ReceiverAssignmentsPage() {
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const [tab, setTab] = useState('posts')
   const [createOpen, setCreateOpen] = useState(false)
   const [applicationsPost, setApplicationsPost] = useState<ReceiverPost | null>(null)
+
+  // لا إنشاء تكليفات إلا بعد اعتماد الحساب من الإدارة
+  const accountStatus = session?.user?.status
+  const notApproved = accountStatus !== 'APPROVED'
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['my-posts'],
@@ -164,11 +172,27 @@ export default function ReceiverAssignmentsPage() {
             أعلن عن تكليفاتك، راجع سير الكادر المتقدم، واعتمد الأنسب — أو تأكّد من التكليفات المؤكدة
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">
+        <Button
+          onClick={() => setCreateOpen(true)}
+          disabled={notApproved}
+          title={notApproved ? 'لا يمكن إنشاء تكليف حتى اعتماد حسابك من الإدارة' : undefined}
+          className="shrink-0 gap-2"
+        >
           <Plus className="size-4" />
           إنشاء تكليف جديد
         </Button>
       </div>
+
+      {notApproved && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
+          <ShieldAlert className="size-4" />
+          <AlertTitle className="font-bold">حسابك بانتظار اعتماد الإدارة</AlertTitle>
+          <AlertDescription className="leading-relaxed">
+            يمكنك تسجيل الدخول ومتابعة التكليفات الواردة إليك — لكن إنشاء تكليفات جديدة غير
+            متاح إلا بعد اعتماد حسابك من إدارة المنصة. سيصلك إشعار فور الاعتماد.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="h-auto flex-wrap justify-start gap-1">

@@ -46,6 +46,9 @@ interface ActionUser {
   id: string
   name: string
   status: string
+  role?: string
+  /** عدد المستندات المرفوعة — يُستخدم لمنع اعتماد الكادر قبل رفع مستنداته */
+  documentsCount?: number
 }
 
 export function UserActionsMenu({
@@ -120,6 +123,9 @@ export function UserActionsMenu({
 
   const [pending, setPending] = useState(false)
 
+  // سياسة الاعتماد: كادر تمريضي بلا مستندات مرفوعة لا يمكن اعتماده إطلاقاً
+  const documentsMissing = user.role === 'NURSE' && (user.documentsCount ?? 0) === 0
+
   return (
     <>
       <DropdownMenu>
@@ -133,11 +139,21 @@ export function UserActionsMenu({
           {children && <DropdownMenuSeparator />}
           {user.status !== 'APPROVED' && (
             <DropdownMenuItem
+              disabled={documentsMissing}
               onClick={() => setConfirmAction({ kind: 'APPROVED' })}
               className="gap-2 text-emerald-700 focus:text-emerald-700"
             >
               <BadgeCheck className="size-4" />
-              {user.status === 'SUSPENDED' ? 'إعادة تنشيط الحساب' : 'اعتماد الحساب'}
+              <span className="flex flex-col">
+                <span>
+                  {user.status === 'SUSPENDED' ? 'إعادة تنشيط الحساب' : 'اعتماد الحساب'}
+                </span>
+                {documentsMissing && (
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    غير متاح — لا توجد مستندات مرفوعة
+                  </span>
+                )}
+              </span>
             </DropdownMenuItem>
           )}
           {user.status !== 'REJECTED' && user.status !== 'APPROVED' && (
@@ -161,7 +177,7 @@ export function UserActionsMenu({
               إيقاف الحساب مؤقتاً
             </DropdownMenuItem>
           )}
-          {user.status === 'SUSPENDED' && (
+          {user.status === 'SUSPENDED' && !documentsMissing && (
             <DropdownMenuItem
               onClick={() => setConfirmAction({ kind: 'APPROVED' })}
               className="gap-2 text-emerald-700 focus:text-emerald-700"
@@ -280,7 +296,9 @@ export function UserActionsMenu({
         description={
           user.status === 'SUSPENDED'
             ? `سيتمكن ${user.name} من تسجيل الدخول واستخدام المنصة مجدداً بعد إعادة التنشيط.`
-            : `بعد الاعتماد يستطيع ${user.name} تسجيل الدخول وتقديم/إنشاء التكليفات فوراً.`
+            : user.role === 'NURSE'
+              ? `بعد الاعتماد يستطيع ${user.name} تسجيل الدخول والتقديم على التكليفات فوراً — تم التحقق من وجود مستنداته المرفوعة.`
+              : `بعد الاعتماد يستطيع ${user.name} تسجيل الدخول وإنشاء التكليفات فوراً.`
         }
         confirmLabel="نعم، اعتمد الحساب"
         processing={pending}

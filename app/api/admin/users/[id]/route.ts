@@ -62,6 +62,17 @@ export async function PATCH(
       return jsonError('يجب إدخال سبب الرفض', 422)
     }
 
+    // سياسة الاعتماد: لا يُعتمد أي كادر تمريضي قبل رفع مستنداته — بلا مستندات لا توجد موافقة
+    if (status === 'APPROVED' && target.role === 'NURSE') {
+      const documentsCount = await db.document.count({ where: { userId: id } })
+      if (documentsCount === 0) {
+        return jsonError(
+          'لا يمكن اعتماد الكادر التمريضي قبل رفع مستنداته (الهوية وصورة المزاولة) — اطلب منه رفع المستندات أولاً',
+          422
+        )
+      }
+    }
+
     const updated = await db.user.update({
       where: { id },
       data: {
@@ -145,7 +156,7 @@ export async function DELETE(
         await tx.assignment.deleteMany({ where: { id: { in: assignmentIds } } })
       }
 
-      // تقديمات راجعها الحساب — نُفرغ المراجع قبل حذف تقديمات غيره
+      // مراجعات أجراها الحساب — نُفرغ المراجع قبل حذف تقديمات غيره
       await tx.application.updateMany({
         where: { reviewedById: id },
         data: { reviewedById: null },
@@ -154,6 +165,9 @@ export async function DELETE(
         where: { reviewedById: id },
         data: { reviewedById: null },
       })
+
+      // سجلات الأحداث التي أنشأها الحساب على أي تكليف — تُحذف كي لا تعيق حذف الحساب
+      await tx.assignmentLog.deleteMany({ where: { userId: id } })
 
       // بيانات الحساب نفسها (تُحذف بقية الارتباطات بالتتابع/التعاقب)
       await tx.notification.deleteMany({ where: { userId: id } })
@@ -171,7 +185,7 @@ export async function DELETE(
     })
 
     return NextResponse.json({
-      message: `تم حذف الحساب (${target.name}) نهائياً مع ${result.deletedAssignments} تكليف و${result.deletedPosts} تكليف مُعلن و${result.deletedDocuments} مستند`,
+      message: `تم حذف الحساب (${target.name}) حذفاً نهائياً للأبد مع ${result.deletedAssignments} تكليف و${result.deletedPosts} تكليف مُعلن و${result.deletedDocuments} مستند — لا عودة ولا استرجاع`,
       details: result,
     })
   } catch (error) {

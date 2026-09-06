@@ -20,6 +20,15 @@ export async function POST(
       throw new ApiError('حسابك قيد المراجعة — يمكنك التقديم بعد اعتماد حسابك من الإدارة', 403)
     }
 
+    // لا تقديم إطلاقاً قبل رفع المستندات (الهوية/المزاولة/الخبرة) — شرط أساسي لاعتماد الحساب والتقديم
+    const documentsCount = await db.document.count({ where: { userId: session.user.id } })
+    if (documentsCount === 0) {
+      throw new ApiError(
+        'لا يمكنك التقديم على التكليفات قبل رفع مستنداتك (الهوية وصورة المزاولة) — ارفعها من صفحة «مستنداتي» ثم أعد المحاولة',
+        403
+      )
+    }
+
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     const coverNote = typeof body?.coverNote === 'string' ? body.coverNote.slice(0, 1000) : null

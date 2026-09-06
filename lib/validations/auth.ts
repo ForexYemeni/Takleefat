@@ -35,6 +35,8 @@ export const registerSchema = z
     // حقول خاصة بالكادر التمريضي فقط — تُتحقق شرطياً في superRefine
     specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
     qualification: z.string().max(120, 'المؤهل طويل جداً').optional(),
+    // الجهة الصحية (المستشفى) — خاصة بالمستلم الإداري
+    hospitalName: z.string().max(120, 'اسم الجهة الصحية طويل جداً').optional(),
     gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس غير صحيح' }).optional(),
     yearsOfExperience: z.coerce
       .number({ error: 'سنوات الخبرة مطلوبة' })
@@ -52,7 +54,7 @@ export const registerSchema = z
       })
     }
 
-    // بيانات الكادر التمريضي إلزامية، أما المستلم الإداري فلا يحتاجها
+    // بيانات الكادر التمريضي إلزامية، أما المستلم الإداري فيُلزم بإدخال الجهة الصحية
     if (data.role === 'NURSE') {
       if (!data.specialty || data.specialty.trim().length < 2) {
         ctx.addIssue({ code: 'custom', message: 'التخصص مطلوب', path: ['specialty'] })
@@ -69,6 +71,16 @@ export const registerSchema = z
           code: 'custom',
           message: 'سنوات الخبرة مطلوبة',
           path: ['yearsOfExperience'],
+        })
+      }
+    }
+
+    if (data.role === 'RECEIVER') {
+      if (!data.hospitalName || data.hospitalName.trim().length < 2) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'اسم الجهة الصحية (المستشفى) مطلوب',
+          path: ['hospitalName'],
         })
       }
     }

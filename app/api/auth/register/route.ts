@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       qualification,
       yearsOfExperience,
       gender,
+      hospitalName,
     } = parsed.data
 
     const existing = await db.user.findUnique({ where: { phone } })
@@ -48,6 +49,8 @@ export async function POST(req: NextRequest) {
         ...(role === 'NURSE'
           ? { specialty, qualification, yearsOfExperience, gender: gender ?? null }
           : {}),
+        // الجهة الصحية (المستشفى) — للمستلم الإداري
+        ...(role === 'RECEIVER' && hospitalName ? { hospitalName: hospitalName.trim() } : {}),
       },
       select: { id: true, name: true, phone: true, role: true },
     })
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
           body:
             role === 'NURSE'
               ? `${name} — تخصص ${specialty} — بانتظار اعتماد الحساب`
-              : `${name} — طلب حساب مستلم إداري — بانتظار الاعتماد`,
+              : `${name} — طلب حساب مستلم إداري${hospitalName ? ` — الجهة الصحية: ${hospitalName.trim()}` : ''} — بانتظار الاعتماد`,
           type: 'GENERIC',
           link: role === 'NURSE' ? '/admin/nurses' : '/admin/receivers',
         })
@@ -70,7 +73,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        message: 'تم إنشاء الحساب بنجاح. سيتم مراجعة الحساب واعتماده من إدارة المنصة.',
+        message:
+          role === 'NURSE'
+            ? 'تم إنشاء حسابك بنجاح! يمكنك تسجيل الدخول فوراً — لكن التقديم على التكليفات لا يتاح إلا بعد رفع مستنداتك واعتماد حسابك من الإدارة.'
+            : 'تم إنشاء حسابك بنجاح! يمكنك تسجيل الدخول فوراً — وسيتم تمكينك من إنشاء التكليفات بعد اعتماد حسابك من الإدارة.',
         user,
       },
       { status: 201 }

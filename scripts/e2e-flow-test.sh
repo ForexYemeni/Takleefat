@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Takleefat E2E — التدفقات الكاملة + ميزات الجولة الثالثة
+# Takleefat E2E — التدفقات الكاملة + ميزات الجولات الثالثة والرابعة والخامسة
 # ============================================================
 BASE="http://localhost:3111"
 PASS=0; FAIL=0; FAILED_TESTS=()
@@ -41,20 +41,56 @@ open('$DIR/test.png','wb').write(b'\x89PNG\r\n\x1a\n'+ihdr+idat+iend)
 open('$DIR/test.pdf','wb').write(b'%PDF-1.4 fake pdf content')
 "
 
-echo "=========== 1) المصادقة ==========="
+echo "=========== 1) المصادقة + لا حسابات وهمية + دخول فوري PENDING ==========="
 H=$(code $BASE/api/health); check "فحص الصحة /api/health" "200" "$H"
 
 login "$DIR/admin.jar" "773178684" "Admin@1234"
 ADMIN_OK=$(curl -s -b "$DIR/admin.jar" $BASE/api/stats -o /dev/null -w "%{http_code}")
 check "تسجيل دخول الإدارة 773178684" "200" "$ADMIN_OK"
 
+# لا حسابات وهمية: البذرة نظيفة — لا كادر ولا مستلمين مزيّفين (حذف نهائي لا عودة)
+FAKE_N=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE" | jget "['users'].__len__()")
+check "لا أي كادر تمريضي وهمي بعد التجهيز" "0" "$FAKE_N"
+FAKE_R=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | jget "['users'].__len__()")
+check "لا أي مستلم إداري وهمي بعد التجهيز" "0" "$FAKE_R"
+
+# حسابات حقيقية عبر التسجيل العام — المستلم مع الجهة الصحية
+REG_N=$(curl -s -o "$DIR/reg_n.json" -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"سارة أحمد","phone":"711111111","password":"Nurse@1234","confirmPassword":"Nurse@1234","specialty":"تمريض عام","qualification":"بكالوريوس تمريض","yearsOfExperience":5}')
+check "تسجيل حساب كادر جديد → 201" "201" "$REG_N"
+
+REG_R=$(curl -s -o "$DIR/reg_r.json" -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"RECEIVER","name":"خالد عبدالله","phone":"733333333","password":"Receiver@1234","confirmPassword":"Receiver@1234","hospitalName":"مستشفى الاختبار التخصصي"}')
+check "تسجيل مستلم إداري مع الجهة الصحية → 201" "201" "$REG_R"
+
+REG_NOHOSP=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"RECEIVER","name":"بلا جهة","phone":"744444461","password":"NoHosp@1234","confirmPassword":"NoHosp@1234"}')
+check "رفض تسجيل مستلم بلا جهة صحية → 422" "422" "$REG_NOHOSP"
+
+# سياسة الدخول الجديدة: حساب PENDING يدخل فوراً بعد التسجيل
 login "$DIR/nurse.jar" "711111111" "Nurse@1234"
 NURSE_OK=$(code -b "$DIR/nurse.jar" $BASE/api/stats)
-check "تسجيل دخول الكادر المعتمد 711111111" "200" "$NURSE_OK"
+check "الكادر الجديد يدخل فور التسجيل قبل الاعتماد (PENDING)" "200" "$NURSE_OK"
+NSTAT=$(curl -s -b "$DIR/nurse.jar" $BASE/api/auth/session | jget "['user']['status']")
+check "حالة الكادر الجديد PENDING (قيد المراجعة)" "PENDING" "$NSTAT"
 
 login "$DIR/receiver.jar" "733333333" "Receiver@1234"
 RCV_OK=$(code -b "$DIR/receiver.jar" $BASE/api/stats)
-check "تسجيل دخول المستلم الإداري 733333333" "200" "$RCV_OK"
+check "المستلم الجديد يدخل فور التسجيل قبل الاعتماد (PENDING)" "200" "$RCV_OK"
+
+# المستلم PENDING لا ينشئ تكليفاً (قيد الاعتماد) — الخادم والواجهة
+TODAY=$(date -u +%Y-%m-%d)
+HOSP=$(curl -s -b "$DIR/receiver.jar" $BASE/api/hospitals | python3 -c "import json,sys;h=json.load(sys.stdin)['hospitals'];print(h[0]['id'] if h else '')")
+[ -n "$HOSP" ] || { echo "لا توجد مستشفيات في البذرة!"; exit 1; }
+RCV_BLOCK=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"value\":100}")
+check "منع المستلم غير المعتمد من إنشاء تكليف → 403" "403" "$RCV_BLOCK"
+
+# بلا مستندات لا موافقة: رفض اعتماد الكادر قبل رفع المستندات
+NURSE_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE" | jget "['users'][0]['id']")
+RCV_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | jget "['users'][0]['id']")
+APPR_NODOC=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$NURSE_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}')
+check "رفض اعتماد كادر بلا مستندات → 422" "422" "$APPR_NODOC"
 
 echo "=========== 2) رفع المستندات (صور فقط + ضغط) ==========="
 UP=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
@@ -68,6 +104,16 @@ check "رفض نوع مستند غير صحيح → 422" "422" "$UP3"
 
 DOCS=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/documents | jget "['documents'][0]['status']")
 check "المستند المرفوع بانتظار المراجعة" "PENDING" "$DOCS"
+
+echo "=========== 2-ج) الاعتماد بعد رفع المستندات ==========="
+APPR_RCV=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' | jget "['user']['status']")
+check "اعتماد المستلم الإداري (لا يشترط مستندات)" "APPROVED" "$APPR_RCV"
+
+APPR_DOC=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$NURSE_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' | jget "['user']['status']")
+check "اعتماد الكادر بعد رفع المستندات" "APPROVED" "$APPR_DOC"
+
+NSTAT2=$(curl -s -b "$DIR/nurse.jar" $BASE/api/auth/session | jget "['user']['status']")
+check "حالة الكادر أصبحت APPROVED بعد الاعتماد" "APPROVED" "$NSTAT2"
 
 echo "=========== 3) المستلم الإداري ينشئ تكليفاً ==========="
 TODAY=$(date -u +%Y-%m-%d)
@@ -141,13 +187,17 @@ RCV_SET=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/settings -H "Content-Ty
   -d '{"feeMode":"ADMIN","applicationFee":1000,"adminFeeType":"PERCENTAGE","adminPercentage":15,"adminFeeFixed":0,"paymentMethod":"محفظة جيب","paymentAccountNumber":"777123456","paymentAccountName":"منصة تكليفات"}')
 check "منع المستلم من تعديل الإعدادات → 403" "403" "$RCV_SET"
 
-echo "=========== 10) اعتماد الحسابات المعلقة ==========="
-PENDING_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | jget "['users'][0]['id']")
-APPR=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$PENDING_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' | jget "['user']['status']")
-check "الإدارة اعتمدت الحساب المعلق" "APPROVED" "$APPR"
+echo "=========== 10) سياسة الاعتماد الصارمة + الجهة الصحية للإدارة ==========="
+REG2=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر بلا مستندات","phone":"744444460","password":"NoDocs@1234","confirmPassword":"NoDocs@1234","specialty":"تمريض عام","qualification":"دبلوم تمريض","yearsOfExperience":1}')
+check "تسجيل كادر ثانٍ (بلا مستندات) → 201" "201" "$REG2"
 
-APPLY2=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$POST_ID/apply -H "Content-Type: application/json" -d '{}')
-check "الكادر المُعتمد حديثاً يظهر تقديمه → 409 (مغلق) أو 201" "409" "$APPLY2"
+STRICT_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | jget "['users'][0]['id']")
+STRICT=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$STRICT_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}')
+check "السياسة الصارمة: لا اعتماد لأي كادر بلا مستندات → 422" "422" "$STRICT"
+
+R_HOSP=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | jget "['users'][0]['hospitalName']")
+check "الجهة الصحية المسجلة تظهر في لوحة الإدارة" "مستشفى الاختبار التخصصي" "$R_HOSP"
 
 echo "=========== 11) الجهات الصحية بالإحداثيات + الأقسام ==========="
 NEW_HOSP=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
@@ -221,6 +271,13 @@ TMP_ID=$(echo "$TMP_CREATE" | jget "['user']['id']")
 login "$DIR/tmp.jar" "$TMP_PHONE" "Temp@12345"
 TMP_OK=$(code -b "$DIR/tmp.jar" $BASE/api/stats)
 check "الحساب المؤقت يدخل فوراً" "200" "$TMP_OK"
+
+# بوابة المستندات: كادر معتمد بلا مستندات يُمنع من التقديم
+TMP_DOCGATE=$(code -b "$DIR/tmp.jar" -X POST $BASE/api/posts/$P2_ID/apply -H "Content-Type: application/json" -d '{}')
+check "كادر معتمد بلا مستندات يُمنع من التقديم → 403" "403" "$TMP_DOCGATE"
+
+UP_TMP=$(code -b "$DIR/tmp.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=OTHER")
+check "رفع مستند للكادر المؤقت (شرط التقديم لاحقاً) → 201" "201" "$UP_TMP"
 
 WRONG_CUR=$(code -b "$DIR/tmp.jar" -X PATCH $BASE/api/me/password -H "Content-Type: application/json" \
   -d '{"currentPassword":"Wrong@1234","newPassword":"NewPass@123"}')

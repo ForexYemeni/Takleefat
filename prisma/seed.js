@@ -1,17 +1,24 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /* ============================================================
- * تكليفات | Takleefat — قاعدة بيانات وهمية (Seed)
+ * تكليفات | Takleefat — تجهيز قاعدة البيانات (Seed)
  * ------------------------------------------------------------
- * ينشئ حسابات تجريبية جاهزة + تكليفات ومستندات وإشعارات تجريبية
+ * المبدأ الرسمي: لا حسابات وهمية إطلاقاً.
+ * المنصة تُنشر نظيفة بلا أي كادر تمريضي أو مستلم إداري مزيّف —
+ * الحسابات الحقيقية تأتي من التسجيل أو من لوحة الإدارة فقط.
+ *
+ * ما يفعله هذا الملف:
+ *   1) حساب المدير (إنقاذ دائم من ADMIN_PHONE / ADMIN_PASSWORD)
+ *   2) مزامنة إنقاذ لكلمة مرور المدير فقط
+ *   3) حذف نهائي دائم لأي حسابات تجريبية قديمة معروفة (تنظيف بلا عودة)
+ *   4) إعدادات الرسوم وطرق الدفع
+ *   5) قوائم الجهات الصحية والأقسام (تُبذر دائماً — upsert آمن)
+ *
  * الاستخدام:
  *   npx prisma db push        (إنشاء الجداول أولاً)
- *   npx prisma db seed        (تعبئة البيانات الوهمية)
+ *   npx prisma db seed        (التجهيز)
  *
- * الحسابات التجريبية (إن لم تُضبط ADMIN_PHONE / ADMIN_PASSWORD):
- *   مدير النظام      773178684   Admin@1234
- *   ممرضة (معتمدة)   711111111   Nurse@1234
- *   ممرضة (معلّقة)   722222222   Nurse@1234
- *   مستلم إداري      733333333   Receiver@1234
+ * حساب المدير (إن لم تُضبط ADMIN_PHONE / ADMIN_PASSWORD):
+ *   مدير النظام   773178684   Admin@1234
  * ============================================================ */
 
 const { PrismaClient } = require('@prisma/client')
@@ -23,12 +30,58 @@ const prisma = new PrismaClient()
 const ADMIN_PHONE = process.env.ADMIN_PHONE || '773178684'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@1234'
 
+// حسابات تجريبية قديمة كانت تُبذر في إصدارات سابقة — تُحذف نهائياً للأبد
+// عند كل تشغيل (حذف كامل بمعاملة واحدة، ولا تُعاد إنشاؤها مهما حدث)
+const LEGACY_DEMO_PHONES = ['711111111', '722222222', '733333333']
+
+async function purgeLegacyDemoUsers() {
+  for (const phone of LEGACY_DEMO_PHONES) {
+    const user = await prisma.user.findUnique({ where: { phone } })
+    if (!user) continue
+    // حماية: لا نلمس حسابات المديرين مهما كانت
+    if (user.role === 'ADMIN') continue
+
+    await prisma.$transaction(async (tx) => {
+      // التكليفات التي طرفها الحساب + سجلات أحداثها
+      const relatedAssignments = await tx.assignment.findMany({
+        where: { OR: [{ nurseId: user.id }, { receiverId: user.id }, { createdById: user.id }] },
+        select: { id: true },
+      })
+      const assignmentIds = relatedAssignments.map((a) => a.id)
+      if (assignmentIds.length > 0) {
+        await tx.assignmentLog.deleteMany({ where: { assignmentId: { in: assignmentIds } } })
+        await tx.assignment.deleteMany({ where: { id: { in: assignmentIds } } })
+      }
+
+      // مراجعات أجراها الحساب — تُفرَّغ المراجع قبل الحذف
+      await tx.application.updateMany({
+        where: { reviewedById: user.id },
+        data: { reviewedById: null },
+      })
+      await tx.document.updateMany({
+        where: { reviewedById: user.id },
+        data: { reviewedById: null },
+      })
+
+      // كل بيانات الحساب (التقييمات والأرباح والسحوبات والإشعارات تُحذف بالتعاقب)
+      await tx.assignmentLog.deleteMany({ where: { userId: user.id } })
+      await tx.notification.deleteMany({ where: { userId: user.id } })
+      await tx.application.deleteMany({ where: { nurseId: user.id } })
+      await tx.document.deleteMany({ where: { userId: user.id } })
+      await tx.post.deleteMany({ where: { receiverId: user.id } })
+      await tx.user.delete({ where: { id: user.id } })
+    })
+
+    console.log(`🧹 حذف نهائي دائم: الحساب التجريبي القديم (${phone}) بكل بياناته — لن يعود`)
+  }
+}
+
 async function main() {
-  console.log('\n🌱 تكليفات | Takleefat — تعبئة البيانات الوهمية...\n')
+  console.log('\n🌱 تكليفات | Takleefat — تجهيز قاعدة البيانات...\n')
 
   const hash = (pwd) => bcrypt.hashSync(pwd, 12)
 
-  // ---------- 1) حسابات المستخدمين ----------
+  // ---------- 1) حساب المدير (إنقاذ دائم) ----------
   const admin = await prisma.user.upsert({
     where: { phone: ADMIN_PHONE },
     update: { role: 'ADMIN', status: 'APPROVED' },
@@ -40,58 +93,22 @@ async function main() {
       status: 'APPROVED',
     },
   })
+  console.log(`✅ مدير النظام جاهز → ${admin.phone}`)
 
-  const nurse = await prisma.user.upsert({
-    where: { phone: '711111111' },
-    update: {},
-    create: {
-      name: 'سارة أحمد',
-      phone: '711111111',
-      password: hash('Nurse@1234'),
-      role: 'NURSE',
-      status: 'APPROVED',
-      specialty: 'تمريض عام',
-      qualification: 'بكالوريوس تمريض',
-      yearsOfExperience: 5,
-      gender: 'FEMALE',
-    },
-  })
+  // ---------- 2) مزامنة إنقاذ لكلمة مرور المدير فقط ----------
+  const adminAcc = await prisma.user.findUnique({ where: { phone: ADMIN_PHONE } })
+  if (adminAcc && !bcrypt.compareSync(ADMIN_PASSWORD, adminAcc.password)) {
+    await prisma.user.update({
+      where: { phone: ADMIN_PHONE },
+      data: { password: hash(ADMIN_PASSWORD) },
+    })
+    console.log('🔧 مزامنة إنقاذ: كلمة مرور المدير أُعيدت إلى القيمة الموثقة')
+  }
 
-  // ممرضة معلّقة لتجربة مسار "اعتماد الحسابات" من لوحة المدير
-  const pendingNurse = await prisma.user.upsert({
-    where: { phone: '722222222' },
-    update: {},
-    create: {
-      name: 'نور محمد',
-      phone: '722222222',
-      password: hash('Nurse@1234'),
-      role: 'NURSE',
-      status: 'PENDING',
-      specialty: 'تمريض أطفال',
-      qualification: 'دبلوم تمريض',
-      yearsOfExperience: 2,
-    },
-  })
+  // ---------- 3) حذف نهائي دائم لأي حسابات وهمية قديمة ----------
+  await purgeLegacyDemoUsers()
 
-  const receiver = await prisma.user.upsert({
-    where: { phone: '733333333' },
-    update: {},
-    create: {
-      name: 'خالد عبدالله',
-      phone: '733333333',
-      password: hash('Receiver@1234'),
-      role: 'RECEIVER',
-      status: 'APPROVED',
-    },
-  })
-
-  console.log('✅ الحسابات:')
-  console.log(`   مدير       → ${admin.phone} / ${ADMIN_PASSWORD}`)
-  console.log(`   ممرضة      → ${nurse.phone} / Nurse@1234 (معتمدة)`)
-  console.log(`   ممرضة      → ${pendingNurse.phone} / Nurse@1234 (معلّقة — جرّب اعتمادها)`)
-  console.log(`   مستلم إداري → ${receiver.phone} / Receiver@1234`)
-
-  // ---------- 2) إعدادات المنصة (الرسوم وطرق الدفع) ----------
+  // ---------- 4) إعدادات المنصة (الرسوم وطرق الدفع) ----------
   const settingsData = [
     { key: 'applicationFee', value: process.env.SETTINGS_APPLICATION_FEE || '1000' },
     { key: 'adminPercentage', value: process.env.SETTINGS_ADMIN_PERCENTAGE || '10' },
@@ -109,185 +126,8 @@ async function main() {
   }
   console.log('✅ إعدادات الرسوم وطرق الدفع (محفظة جيب — رسوم التقديم 1000 ريال — نسبة الإدارة 10٪)')
 
-  // ---------- 2-ب) مزامنة إنقاذ لكلمات مرور الحسابات المعروفة ----------
-  // إن انحرفت كلمة مرور أي من الحسابات الموثقة (أثناء تجارب قديمة أو نسخة قاعدة سابقة)
-  // يُعاد ضبطها إلى القيم الموثقة — الحسابات التي ينشئها المستخدم لا تُمَس إطلاقاً.
-  const rescueAccounts = [
-    { phone: ADMIN_PHONE, password: ADMIN_PASSWORD, label: 'مدير النظام' },
-    { phone: '711111111', password: 'Nurse@1234', label: 'الكادر التجريبي' },
-    { phone: '733333333', password: 'Receiver@1234', label: 'المستلم التجريبي' },
-  ]
-  for (const acc of rescueAccounts) {
-    const u = await prisma.user.findUnique({ where: { phone: acc.phone } })
-    if (!u) continue
-    const matches = bcrypt.compareSync(acc.password, u.password)
-    if (!matches) {
-      await prisma.user.update({
-        where: { phone: acc.phone },
-        data: { password: hash(acc.password) },
-      })
-      console.log(`🔧 مزامنة إنقاذ: كلمة مرور ${acc.label} (${acc.phone}) أُعيدت إلى القيمة الموثقة`)
-    }
-  }
-
-  // ---------- 3) مستندات تجريبية للكادر ----------
-  const demoFile = '/demo/sample-document.txt'
-  const docsCount = await prisma.document.count({ where: { userId: nurse.id } })
-  if (docsCount === 0) {
-    await prisma.document.createMany({
-      data: [
-        {
-          userId: nurse.id,
-          type: 'PRACTICE_LICENSE',
-          title: 'صورة المزاولة',
-          fileUrl: demoFile,
-          fileName: 'practice-license.txt',
-          fileSize: 120,
-          mimeType: 'text/plain',
-          status: 'APPROVED',
-          reviewedById: admin.id,
-          reviewedAt: new Date(),
-        },
-        {
-          userId: nurse.id,
-          type: 'ID_CARD',
-          title: 'الهوية الشخصية',
-          fileUrl: demoFile,
-          fileName: 'id-card.txt',
-          fileSize: 120,
-          mimeType: 'text/plain',
-          status: 'PENDING',
-        },
-      ],
-    })
-    console.log('✅ مستندات تجريبية للكادر (معتمد + بانتظار المراجعة)')
-  }
-
-  // ---------- 3) تكليفات تجريبية ----------
-  const today = new Date()
-  const inDays = (n) => new Date(today.getTime() + n * 24 * 60 * 60 * 1000)
-  const existingAssignments = await prisma.assignment.count()
-  if (existingAssignments === 0) {
-
-    // تكليف نشط
-    const active = await prisma.assignment.create({
-      data: {
-        title: 'تكليف تمريضي — قسم الطوارئ',
-        description:
-          'تغطية وردية صباحية بقسم الطوارئ مع متابعة الحالات الحرجة وتوثيق العلامات الحيوية.',
-        facility: 'مستشفى المركزي',
-        department: 'الطوارئ',
-        startDate: today,
-        endDate: inDays(14),
-        status: 'ACTIVE',
-        paymentStatus: 'PAID',
-        nurseId: nurse.id,
-        receiverId: receiver.id,
-        createdById: admin.id,
-        logs: {
-          create: [
-            { userId: admin.id, action: 'إنشاء التكليف', note: 'تم إنشاء التكليف وإسناده للكادر' },
-          ],
-        },
-      },
-    })
-    await prisma.notification.create({
-      data: {
-        userId: nurse.id,
-        title: 'تكليف جديد',
-        body: 'تم إسناد تكليف (قسم الطوارئ) إليك — برجاء مراجعة التفاصيل',
-        type: 'ASSIGNMENT_CREATED',
-        link: '/nurse/assignments',
-      },
-    })
-
-    // تكليف تم استلامه
-    const received = await prisma.assignment.create({
-      data: {
-        title: 'تكليف رعاية مرضى المركّز',
-        description: 'متابعة مرضى العناية المركزة وتحديث التقارير الطبية بشكل يومي.',
-        facility: 'مستشفى الأمل',
-        department: 'العناية المركزة',
-        startDate: inDays(-3),
-        endDate: inDays(21),
-        status: 'RECEIVED',
-        paymentStatus: 'PAID',
-        nurseId: nurse.id,
-        receiverId: receiver.id,
-        createdById: admin.id,
-        receivedAt: inDays(-2),
-        logs: {
-          create: [
-            { userId: admin.id, action: 'إنشاء التكليف', note: 'تم إنشاء التكليف وإسناده للكادر' },
-            { userId: receiver.id, action: 'تأكيد الاستلام', note: 'تم استلام الكادر وتوثيق ذلك إلكترونياً' },
-          ],
-        },
-      },
-    })
-    await prisma.notification.create({
-      data: {
-        userId: admin.id,
-        title: 'تأكيد استلام',
-        body: 'تم استلام تكليف (رعاية مرضى المركّز) إلكترونياً من المستلم الإداري',
-        type: 'ASSIGNMENT_RECEIVED',
-        link: '/admin/assignments',
-      },
-    })
-
-    // تكليف مكتمل
-    const completed = await prisma.assignment.create({
-      data: {
-        title: 'تكليف معمل ومتابعة الحالات',
-        description: 'العمل بمختبر المستشفى ومتابعة نتائج التحاليل وتسجيلها.',
-        facility: 'مستشفى الرعاية التخصصي',
-        department: 'المختبر',
-        startDate: inDays(-30),
-        endDate: inDays(-2),
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        nurseId: nurse.id,
-        receiverId: receiver.id,
-        createdById: admin.id,
-        receivedAt: inDays(-29),
-        logs: {
-          create: [
-            { userId: admin.id, action: 'إنشاء التكليف', note: 'تم إنشاء التكليف وإسناده للكادر' },
-            { userId: receiver.id, action: 'تأكيد الاستلام', note: 'تم استلام الكادر' },
-            { userId: admin.id, action: 'إنهاء التكليف', note: 'اكتملت فترة التكليف بنجاح' },
-          ],
-        },
-      },
-    })
-
-    console.log('✅ تكليفات تجريبية: نشط + مُستلَم + مكتمل (مع سجل أحداث لكل تكليف)')
-
-    // ---------- 4) إشعارات للمستلم الإداري ----------
-    await prisma.notification.createMany({
-      data: [
-        {
-          userId: receiver.id,
-          title: 'تكليف جديد بانتظار الاستلام',
-          body: 'تم إنشاء تكليف (قسم الطوارئ) — بانتظار توثيق الاستلام منك',
-          type: 'ASSIGNMENT_CREATED',
-          link: '/receiver/assignments',
-        },
-        {
-          userId: receiver.id,
-          title: 'مرحباً بك في تكليفات',
-          body: 'تم اعتماد حسابك — يمكنك الآن توثيق استلام التكليفات إلكترونياً',
-          type: 'ACCOUNT_APPROVED',
-          link: '/receiver',
-        },
-      ],
-    })
-    console.log('✅ إشعارات تجريبية للأطراف الثلاثة')
-  } else {
-    console.log('ℹ️  يوجد تكليفات مسبقة — تم تجاهل إضافة تكليفات تجريبية جديدة')
-  }
-
-  // ---------- 3-b) الجهات الصحية والأقسام (قوائم الإدارة) — تُبذر دائماً ----------
-  // (لا تربطها بوجود التكليفات — قوائم اختيار أساسية يجب أن تكون جاهزة دوماً،
-  //  upsert آمن للتكرار لا يمس البيانات المضافة من الإدارة)
+  // ---------- 5) الجهات الصحية والأقسام (قوائم الإدارة) — تُبذر دائماً ----------
+  // (upsert آمن للتكرار لا يمس البيانات المضافة من الإدارة)
   const hospitalsData = [
     { name: 'مستشفى الملكية', location: 'صنعاء — شارع حدة' },
     { name: 'مستشفى الثورة العام', location: 'صنعاء — شارع الزراعة' },
@@ -304,54 +144,16 @@ async function main() {
   }
   console.log('✅ الجهات الصحية (5) والأقسام الطبية (6) جاهزة في قوائم الإدارة')
 
-  // ---------- تكليف مُعلن مفتوح للتقديم (فقط إذا لا توجد تكليفات معلنة) ----------
-  const existingPosts = await prisma.post.count()
-  if (existingPosts === 0) {
-      const openPost = await prisma.post.create({
-        data: {
-          number: 1,
-          title: 'التكليف رقم 1',
-          description:
-            'مطلوب كادر تمريضي لقسم العناية — وردية صباحية 8 ساعات — متابعة الحالات الحرجة وتوثيقها. يُرجى التقديم مع إرفاق المستندات.',
-          facility: 'مستشفى الملكية',
-          department: 'عناية',
-          location: 'صنعاء — شارع حدة',
-          startDate: inDays(3),
-          hours: 8,
-          gender: 'ANY',
-          nursesNeeded: 2,
-          value: 120000,
-          status: 'OPEN',
-          receiverId: receiver.id,
-        },
-      })
-      // تقديم معلّق من الكادر المعتمد ليظهر للاستلم الإداري للمراجعة
-      await prisma.application.create({
-        data: {
-          postId: openPost.id,
-          nurseId: nurse.id,
-          coverNote: 'لدي خبرة 5 سنوات في العناية المركزة وشهادة مزاولة سارية — جاهزة للبدء فوراً.',
-          status: 'PENDING',
-        },
-      })
-      await prisma.notification.create({
-        data: {
-          userId: receiver.id,
-          title: 'تقديم جديد على تكليفك',
-          body: `${nurse.name} قدّم على التكليف (${openPost.title}) — راجع السيرة الذاتية واعتمد أو ارفض`,
-          type: 'APPLICATION_SUBMITTED',
-          link: '/receiver/assignments',
-        },
-      })
-      console.log('✅ تكليف مُعلن مفتوح للتقديم + تقديم بانتظار المراجعة')
-    }
-
-  console.log('\n🎉 تمت تعبئة قاعدة البيانات الوهمية بنجاح — يمكنك الآن تسجيل الدخول بجميع الحسابات\n')
+  const nursesCount = await prisma.user.count({ where: { role: 'NURSE' } })
+  const receiversCount = await prisma.user.count({ where: { role: 'RECEIVER' } })
+  console.log(`\n🎉 التجهيز اكتمل — المنصة نظيفة بلا أي حسابات وهمية`)
+  console.log(`   الكادر التمريضي الحالي: ${nursesCount} | المستلمون الإداريون: ${receiversCount}`)
+  console.log(`   الحسابات الحقيقية تُنشأ من التسجيل أو من لوحة الإدارة\n`)
 }
 
 main()
   .catch((e) => {
-    console.error('\n❌ فشل تعبئة البيانات:', e)
+    console.error('\n❌ فشل تجهيز قاعدة البيانات:', e)
     process.exit(1)
   })
   .finally(async () => {

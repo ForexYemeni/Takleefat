@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileWarning,
   ImagePlus,
   MapPin,
   Search,
@@ -18,6 +19,7 @@ import {
   UserRound,
   Users,
 } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { apiFetcher, apiPost } from '@/lib/api-client'
 import { compressImage } from '@/lib/compress-image'
@@ -165,7 +167,10 @@ export default function NurseAssignmentsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['open-posts'],
-    queryFn: () => apiFetcher<{ posts: OpenPost[]; settings: PlatformSettings }>('/api/posts'),
+    queryFn: () =>
+      apiFetcher<{ posts: OpenPost[]; settings: PlatformSettings; documentsCount: number }>(
+        '/api/posts'
+      ),
   })
 
   const { data: appsData, isLoading: appsLoading } = useQuery({
@@ -194,6 +199,9 @@ export default function NurseAssignmentsPage() {
     (a) => a.paymentStatus === 'UNPAID' && a.status !== 'CANCELLED'
   )
 
+  // لا تقديم قبل رفع المستندات — شرط أساسي لتقديم أي طلب تكليف
+  const needsDocuments = (data?.documentsCount ?? 0) === 0
+
   return (
     <div className="space-y-4">
       <div>
@@ -220,7 +228,14 @@ export default function NurseAssignmentsPage() {
         </TabsList>
       </Tabs>
 
-      {tab === 'available' && <AvailablePosts posts={posts} settings={settings} blocked={hasUnpaidFees} />}
+      {tab === 'available' && (
+        <AvailablePosts
+          posts={posts}
+          settings={settings}
+          blocked={hasUnpaidFees}
+          needsDocuments={needsDocuments}
+        />
+      )}
 
       {tab === 'applications' && (
         <MyApplications applications={applications} settings={settings} />
@@ -239,10 +254,12 @@ function AvailablePosts({
   posts,
   settings,
   blocked,
+  needsDocuments,
 }: {
   posts: OpenPost[]
   settings?: PlatformSettings
   blocked: boolean
+  needsDocuments: boolean
 }) {
   const [search, setSearch] = useState('')
   const [applyPost, setApplyPost] = useState<OpenPost | null>(null)
@@ -258,6 +275,29 @@ function AvailablePosts({
 
   return (
     <div className="space-y-4">
+      {needsDocuments && (
+        <div className="flex flex-col gap-3 rounded-2xl border-2 border-orange-300 bg-orange-50 p-4 sm:flex-row sm:items-center dark:border-orange-800 dark:bg-orange-950/30">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900">
+            <FileWarning className="size-5 text-orange-600 dark:text-orange-300" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-extrabold text-orange-800 dark:text-orange-200">
+              رفع المستندات مطلوب قبل التقديم
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-orange-700 dark:text-orange-300">
+              لا يمكنك التقديم على أي تكليف قبل رفع مستنداتك (الهوية الشخصية وصورة المزاولة).
+              ارفعها الآن من صفحة «مستنداتي» — وسيتم اعتماد حسابك من الإدارة بعد مراجعتها.
+            </p>
+          </div>
+          <Button asChild className="shrink-0 gap-2 bg-orange-600 hover:bg-orange-700">
+            <Link href="/nurse/documents">
+              <FileWarning className="size-4" />
+              رفع المستندات الآن
+            </Link>
+          </Button>
+        </div>
+      )}
+
       {blocked && (
         <div className="flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900">
@@ -378,11 +418,15 @@ function AvailablePosts({
                   ) : (
                     <Button
                       className="w-full gap-2"
-                      disabled={blocked}
+                      disabled={blocked || needsDocuments}
                       onClick={() => setApplyPost(post)}
                     >
                       <Send className="size-4" />
-                      {blocked ? 'التقديم موقوف — أكمل دفع الرسوم أولاً' : 'التقديم على التكليف'}
+                      {needsDocuments
+                        ? 'ارفع مستنداتك أولاً للتقديم'
+                        : blocked
+                          ? 'التقديم موقوف — أكمل دفع الرسوم أولاً'
+                          : 'التقديم على التكليف'}
                     </Button>
                   )}
                 </CardContent>
