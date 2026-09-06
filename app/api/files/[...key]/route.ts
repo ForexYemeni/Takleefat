@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { getLocalFilePath } from '@/lib/storage'
+import path from 'path'
 
 const MIME_MAP: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -15,9 +15,11 @@ const MIME_MAP: Record<string, string> = {
 
 /**
  * GET /api/files/[...key]
- * تقديم الملفات المحلية (بيئة التطوير فقط) مع التحقق من الصلاحيات:
- * - المدير: يمكنه الوصول لجميع الملفات
- * - الكادر التمريضي: ملفاته الخاصة فقط
+ * تقديم الملفات المخزنة:
+ * 1) /api/files/blob/{id} — صور المستندات المخزنة في قاعدة البيانات
+ *    الصلاحيات: الإدارة، أو صاحب المستند، أو المستلم الإداري الذي اعتمد
+ *    تقديماً لهذا الكادر (لمراجعة السيرة الذاتية).
+ * 2) ملفات محلية (بيئة التطوير فقط).
  */
 export async function GET(
   _req: NextRequest,
@@ -31,7 +33,52 @@ export async function GET(
   const { key: keyParts } = await params
   const key = keyParts.join('/')
 
-  // التحقق من ملكية الملف (المستند مسجل في قاعدة البيانات باسم المجلد = userId)
+  // ---------- ملفات قاعدة البيانات ----------
+  if (keyParts[0] === 'blob' && keyParts[1]) {
+    const blobId = keyParts[1]
+    const blob = await db.fileBlob.findUnique({ where: { id: blobId } })
+    if (!blob) return new NextResponse('الملف غير موجود', { status: 404 })
+
+    const document = await db.document.findFirst({
+      where: { fileUrl: { contains: blobId } },
+      select: { userId: true },
+    })
+    const ownerId = document?.userId
+
+    if (session.user.role !== 'ADMIN' && ownerId !== session.user.id) {
+      // المستلم الإداري يمكنه عرض مستندات كادر قدّم على تكليفاته (أو اعتُبد تقديمه)
+      let allowed = false
+      if (session.user.role === 'RECEIVER' && ownerId) {
+        const related = await db.application.findFirst({
+          where: {
+            nurseId: ownerId,
+            post: { receiverId: session.user.id },
+            status: { in: ['PENDING', 'APPROVED'] },
+          },
+          select: { id: true },
+        })
+        allowed = Boolean(related)
+      }
+      if (!allowed) {
+        return new NextResponse('ليست لديك صلاحية للوصول إلى هذا الملف', { status: 403 })
+      }
+    }
+
+    const bytes = new Uint8Array(blob.data)
+    return new NextResponse(bytes, {
+      headers: {
+        'Content-Type': blob.mimeType,
+        'Content-Length': String(bytes.length),
+        'Cache-Control': 'private, max-age=86400',
+      },
+    })
+  }
+
+  // ---------- ملفات محلية (تطوير فقط) ----------
+  if (key.includes('..') || key.startsWith('/')) {
+    return new NextResponse('مسار غير صحيح', { status: 400 })
+  }
+
   if (session.user.role !== 'ADMIN') {
     const owns = await db.document.findFirst({
       where: { fileUrl: { contains: key }, OR: [{ userId: session.user.id }, { userId: keyParts[1] }] },
@@ -42,11 +89,7 @@ export async function GET(
     }
   }
 
-  const filePath = getLocalFilePath(key)
-  if (!filePath) {
-    return new NextResponse('مسار غير صحيح', { status: 400 })
-  }
-
+  const filePath = path.join(process.cwd(), 'db', 'uploads', key)
   try {
     const buffer = await readFile(filePath)
     const ext = key.split('.').pop()?.toLowerCase() ?? ''

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { updateAssignmentStatusSchema } from '@/lib/validations/assignment'
@@ -11,9 +12,13 @@ const ACTION_MESSAGES: Record<string, string> = {
   ACTIVE: 'تم تنشيط التكليف',
 }
 
+const paymentStatusSchema = z.object({
+  paymentStatus: z.enum(['UNPAID', 'PAID'], { error: 'حالة الدفع غير صحيحة' }),
+})
+
 /**
  * PATCH /api/admin/assignments/[id]
- * تحديث حالة التكليف (إنجاز / إلغاء / تنشيط)
+ * تحديث حالة التكليف (إنجاز / إلغاء / تنشيط) أو حالة الدفع (مدفوع/غير مدفوع)
  */
 export async function PATCH(
   req: NextRequest,
@@ -23,7 +28,38 @@ export async function PATCH(
     const session = await requireRole('ADMIN')
     const { id } = await params
 
-    const parsed = updateAssignmentStatusSchema.safeParse(await req.json())
+    const raw = await req.json()
+
+    // تحديث حالة الدفع للإدارة
+    const paymentParsed = paymentStatusSchema.safeParse(raw)
+    if (paymentParsed.success) {
+      const assignment = await db.assignment.findUnique({ where: { id } })
+      if (!assignment) return jsonError('التكليف غير موجود', 404)
+
+      await db.assignment.update({
+        where: { id },
+        data: { paymentStatus: paymentParsed.data.paymentStatus },
+      })
+      await db.assignmentLog.create({
+        data: {
+          assignmentId: id,
+          userId: session.user.id,
+          action:
+            paymentParsed.data.paymentStatus === 'PAID'
+              ? 'تأكيد دفع الرسوم للإدارة'
+              : 'إلغاء تأكيد الدفع',
+        },
+      })
+
+      return NextResponse.json({
+        message:
+          paymentParsed.data.paymentStatus === 'PAID'
+            ? 'تم تأكيد دفع الرسوم للإدارة'
+            : 'تم إلغاء تأكيد الدفع',
+      })
+    }
+
+    const parsed = updateAssignmentStatusSchema.safeParse(raw)
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }

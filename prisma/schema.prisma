@@ -52,6 +52,27 @@ enum AssignmentStatus {
   CANCELLED
 }
 
+/// حالة التكليف المُعلن (المنشور للتقديم)
+enum PostStatus {
+  OPEN
+  ASSIGNED
+  COMPLETED
+  CANCELLED
+}
+
+/// حالة التقديم على التكليف
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// حالة الدفع للإدارة
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
 /// أنواع الإشعارات
 enum NotificationType {
   ACCOUNT_APPROVED
@@ -62,6 +83,10 @@ enum NotificationType {
   ASSIGNMENT_RECEIVED
   ASSIGNMENT_COMPLETED
   ASSIGNMENT_CANCELLED
+  POST_CREATED
+  APPLICATION_SUBMITTED
+  APPLICATION_APPROVED
+  APPLICATION_REJECTED
   GENERIC
 }
 
@@ -91,6 +116,9 @@ model User {
   notifications       Notification[]
   assignmentLogs      AssignmentLog[]
   documentsReviewed   Document[]     @relation("DocumentReviewer")
+  posts               Post[]
+  applications        Application[]
+  applicationsReviewed Application[] @relation("ApplicationReviewer")
 
   @@index([role, status])
   @@map("users")
@@ -135,18 +163,97 @@ model Assignment {
   receiverId  String
   createdById String
   receivedAt  DateTime?
+  /// القيمة المالية للتكليف (بالريال اليمني) — تُعبأ تلقائياً من التكليف المُعلن
+  value         Int?
+  /// حصة الإدارة المحسوبة من قيمة التكليف
+  adminFee      Int?
+  /// حالة دفع الرسوم للإدارة
+  paymentStatus PaymentStatus  @default(UNPAID)
+  /// التكليف المُعلن الذي نتج عنه هذا التكليف (إن وجد)
+  postId        String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   nurse     User            @relation("NurseAssignments", fields: [nurseId], references: [id])
   receiver  User            @relation("ReceiverAssignments", fields: [receiverId], references: [id])
   createdBy User            @relation("AssignmentCreator", fields: [createdById], references: [id])
+  post      Post?           @relation(fields: [postId], references: [id])
   logs      AssignmentLog[]
 
   @@index([nurseId])
   @@index([receiverId])
   @@index([status])
   @@map("assignments")
+}
+
+/// محتوى الملفات المخزّنة داخل قاعدة البيانات (صور المستندات المضغوطة)
+model FileBlob {
+  id        String   @id @default(cuid())
+  data      Bytes
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@map("file_blobs")
+}
+
+/// إعدادات المنصة (الرسوم وطرق الدفع) — مفتاح/قيمة
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+/// التكليف المُعلن من المستلم الإداري — يقدّم عليه الكادر التمريضي
+model Post {
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  facility     String
+  department   String?
+  location     String?
+  startDate    DateTime
+  endDate      DateTime?
+  nursesNeeded Int        @default(1)
+  /// قيمة التكليف (المقابل المالي الكامل) بالريال اليمني
+  value        Int
+  status       PostStatus @default(OPEN)
+  receiverId   String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  receiver     User          @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+  applications Application[]
+  assignments  Assignment[]
+
+  @@index([status])
+  @@index([receiverId])
+  @@map("posts")
+}
+
+/// تقديم الكادر التمريضي على تكليف مُعلن
+model Application {
+  id           String            @id @default(cuid())
+  postId       String
+  nurseId      String
+  status       ApplicationStatus @default(PENDING)
+  coverNote    String?
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  nurse     User       @relation(fields: [nurseId], references: [id], onDelete: Cascade)
+  reviewedBy User?     @relation("ApplicationReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([postId, nurseId])
+  @@index([nurseId])
+  @@index([postId])
+  @@map("applications")
 }
 
 /// سجل أحداث التكليف

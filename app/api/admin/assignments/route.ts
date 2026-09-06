@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
       include: {
         nurse: { select: { id: true, name: true, specialty: true } },
         receiver: { select: { id: true, name: true } },
+        post: { select: { id: true, title: true } },
         _count: { select: { logs: true } },
       },
     })

@@ -2,9 +2,10 @@
 
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, FileText, FileUp, Trash2, UploadCloud } from 'lucide-react'
+import { CheckCircle2, FileText, FileUp, ImagePlus, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiDelete } from '@/lib/api-client'
+import { compressImage } from '@/lib/compress-image'
 import { formatDateTime, formatFileSize, DOCUMENT_STATUS_LABELS, DOCUMENT_TYPE_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
@@ -47,14 +48,35 @@ export default function NurseDocumentsPage() {
     queryFn: () => apiFetcher<{ documents: MyDocument[] }>('/api/me/documents'),
   })
 
+  const [lastCompression, setLastCompression] = useState<string | null>(null)
+
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
+      // ضغط الصورة من جهة العميل — جودة عالية بحجم صغير (≈ 100-400 كيلوبايت)
+      const { file: compressed, originalSize, compressedSize } = await compressImage(file)
+      setLastCompression(
+        originalSize !== compressedSize
+          ? `تم ضغط الصورة تلقائياً: ${formatFileSize(originalSize)} ← ${formatFileSize(compressedSize)} مع الحفاظ على الجودة`
+          : null
+      )
+
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', compressed)
       formData.append('type', docType)
       const response = await fetch('/api/upload', { method: 'POST', body: formData })
+
+      // معالجة آمنة: قد تكون الاستجابة JSON أو خطأ HTML من الخادم
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        if (response.status === 413) {
+          throw new Error('حجم الصورة كبير جداً للخادم — جرّب صورة أصغر')
+        }
+        throw new Error(
+          `تعذر رفع الصورة (رمز ${response.status}) — تأكد من اتصالك وأعد المحاولة`
+        )
+      }
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'فشل رفع الملف')
+      if (!response.ok) throw new Error(result.error ?? 'فشل رفع الصورة')
       return result as { message: string }
     },
     onSuccess: (res) => {
@@ -90,16 +112,16 @@ export default function NurseDocumentsPage() {
       <div>
         <h1 className="text-2xl font-extrabold">مستنداتي</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          رفع المستندات الرسمية: البطاقة الشخصية، صورة المزاولة، وشهادات الخبرة
+          رفع المستندات الرسمية كصور: البطاقة الشخصية، صورة المزاولة، وشهادات الخبرة
         </p>
       </div>
 
       {/* منطقة الرفع */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">رفع مستند جديد</CardTitle>
+          <CardTitle className="text-lg">رفع مستند جديد (صورة فقط)</CardTitle>
           <CardDescription>
-            الصور (JPG / PNG / WEBP) أو PDF — بحد أقصى 5 ميجابايت. يُخزَّن الملف في تخزين سحابي آمن.
+            الصور فقط (JPG / PNG / WEBP) — تُضغط الصورة تلقائياً في جهازك قبل الرفع وتصل للإدارة بجودة عالية واضحة للمراجعة.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -122,7 +144,7 @@ export default function NurseDocumentsPage() {
           <div
             role="button"
             tabIndex={0}
-            aria-label="رفع ملف"
+            aria-label="رفع صورة"
             onClick={() => fileInputRef.current?.click()}
             onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
             onDragOver={(e) => {
@@ -144,16 +166,16 @@ export default function NurseDocumentsPage() {
             </span>
             <div>
               <p className="font-bold">
-                {uploadMutation.isPending ? 'جارٍ رفع الملف...' : 'اضغط لاختيار ملف أو اسحبه هنا'}
+                {uploadMutation.isPending ? 'جارٍ ضغط الصورة ورفعها...' : 'اضغط لاختيار صورة أو اسحبها هنا'}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                سيُرسل المستند إلى إدارة المنصة للمراجعة والاعتماد
+                صورة البطاقة أو المزاولة — حتى 8 ميجابايت (تُضغط تلقائياً)
               </p>
             </div>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".jpg,.jpeg,.png,.webp,.pdf"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
               className="hidden"
               onChange={(e) => handleFile(e.target.files?.[0])}
               disabled={uploadMutation.isPending}
@@ -161,6 +183,13 @@ export default function NurseDocumentsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {lastCompression && (
+        <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+          <ImagePlus className="size-3.5" />
+          {lastCompression}
+        </p>
+      )}
 
       {/* قائمة المستندات */}
       {documents.length === 0 ? (

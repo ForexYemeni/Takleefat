@@ -90,7 +90,25 @@ async function main() {
   console.log(`   ممرضة      → ${pendingNurse.phone} / Nurse@1234 (معلّقة — جرّب اعتمادها)`)
   console.log(`   مستلم إداري → ${receiver.phone} / Receiver@1234`)
 
-  // ---------- 2) مستندات تجريبية للكادر ----------
+  // ---------- 2) إعدادات المنصة (الرسوم وطرق الدفع) ----------
+  const settingsData = [
+    { key: 'applicationFee', value: process.env.SETTINGS_APPLICATION_FEE || '1000' },
+    { key: 'adminPercentage', value: process.env.SETTINGS_ADMIN_PERCENTAGE || '10' },
+    { key: 'paymentMethod', value: 'محفظة جيب' },
+    { key: 'paymentAccountNumber', value: process.env.SETTINGS_PAYMENT_ACCOUNT || '755000000' },
+    { key: 'paymentAccountName', value: 'منصة تكليفات | Takleefat' },
+    { key: 'paymentNotes', value: 'يُرجى إرسال صورة إثبات التحويل عبر واتساب للإدارة بعد الدفع.' },
+  ]
+  for (const s of settingsData) {
+    await prisma.setting.upsert({
+      where: { key: s.key },
+      update: {},
+      create: s,
+    })
+  }
+  console.log('✅ إعدادات الرسوم وطرق الدفع (محفظة جيب — رسوم التقديم 1000 ريال — نسبة الإدارة 10٪)')
+
+  // ---------- 3) مستندات تجريبية للكادر ----------
   const demoFile = '/demo/sample-document.txt'
   const docsCount = await prisma.document.count({ where: { userId: nurse.id } })
   if (docsCount === 0) {
@@ -217,6 +235,46 @@ async function main() {
     })
 
     console.log('✅ تكليفات تجريبية: نشط + مُستلَم + مكتمل (مع سجل أحداث لكل تكليف)')
+
+    // ---------- تكليف مُعلن مفتوح للتقديم (من المستلم الإداري) ----------
+    const existingPosts = await prisma.post.count()
+    if (existingPosts === 0) {
+      const openPost = await prisma.post.create({
+        data: {
+          title: 'إعلان تكليف — تمريض العناية المركزة',
+          description:
+            'مطلوب كادر تمريضي للعناية المركزة بمستشفى الأمل — وردية صباحية — متابعة الحالات الحرجة وتوثيقها. يُرجى التقديم مع إرفاق المستندات.',
+          facility: 'مستشفى الأمل',
+          department: 'العناية المركزة',
+          location: 'صنعاء',
+          startDate: inDays(3),
+          endDate: inDays(33),
+          nursesNeeded: 2,
+          value: 120000,
+          status: 'OPEN',
+          receiverId: receiver.id,
+        },
+      })
+      // تقديم معلّق من الكادر المعتمد ليظهر للاستلم الإداري للمراجعة
+      await prisma.application.create({
+        data: {
+          postId: openPost.id,
+          nurseId: nurse.id,
+          coverNote: 'لدي خبرة 5 سنوات في العناية المركزة وشهادة مزاولة سارية — جاهزة للبدء فوراً.',
+          status: 'PENDING',
+        },
+      })
+      await prisma.notification.create({
+        data: {
+          userId: receiver.id,
+          title: 'تقديم جديد على تكليفك',
+          body: `${nurse.name} قدّم على التكليف (${openPost.title}) — راجع السيرة الذاتية واعتمد أو ارفض`,
+          type: 'APPLICATION_SUBMITTED',
+          link: '/receiver/assignments',
+        },
+      })
+      console.log('✅ تكليف مُعلن مفتوح للتقديم + تقديم بانتظار المراجعة')
+    }
 
     // ---------- 4) إشعارات للمستلم الإداري ----------
     await prisma.notification.createMany({

@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
+import { settingsSchema } from '@/lib/validations/post'
+import { getSettings, setSetting } from '@/lib/settings'
+
+/**
+ * GET /api/settings — إعدادات المنصة (الرسوم وطرق الدفع)
+ * متاحة لجميع المستخدمين المسجلين لتظهر الرسوم وطرق الدفع للأطراف المعنية.
+ */
+export async function GET() {
+  try {
+    await requireRole('ADMIN', 'NURSE', 'RECEIVER')
+    const settings = await getSettings()
+    return NextResponse.json({ settings })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+/**
+ * PATCH /api/settings — تحديث الرسوم وطرق الدفع (الإدارة فقط)
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    await requireRole('ADMIN')
+
+    const parsed = settingsSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
+    }
+
+    const { applicationFee, adminPercentage, paymentMethod, paymentAccountNumber, paymentAccountName, paymentNotes } =
+      parsed.data
+
+    await Promise.all([
+      setSetting('applicationFee', String(applicationFee)),
+      setSetting('adminPercentage', String(adminPercentage)),
+      setSetting('paymentMethod', paymentMethod),
+      setSetting('paymentAccountNumber', paymentAccountNumber),
+      setSetting('paymentAccountName', paymentAccountName),
+      setSetting('paymentNotes', paymentNotes || ''),
+    ])
+
+    const settings = await getSettings()
+    return NextResponse.json({ message: 'تم حفظ الإعدادات بنجاح', settings })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}

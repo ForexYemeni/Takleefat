@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  Settings2,
   Sun,
   UserCog,
   UserRound,
@@ -53,13 +54,14 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; items: NavItem[] }>
       { href: '/admin/receivers', label: 'المستلمون الإداريون', icon: UserCog },
       { href: '/admin/assignments', label: 'التكليفات', icon: ClipboardList },
       { href: '/admin/documents', label: 'مراجعة المستندات', icon: FileCheck2 },
+      { href: '/admin/settings', label: 'الرسوم وطرق الدفع', icon: Settings2 },
     ],
   },
   NURSE: {
     roleLabel: 'الكادر التمريضي',
     items: [
       { href: '/nurse', label: 'نظرة عامة', icon: LayoutDashboard },
-      { href: '/nurse/assignments', label: 'تكليفاتي', icon: ClipboardList },
+      { href: '/nurse/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
       { href: '/nurse/documents', label: 'مستنداتي', icon: FileCheck2 },
       { href: '/nurse/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
@@ -68,7 +70,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; items: NavItem[] }>
     roleLabel: 'المستلم الإداري',
     items: [
       { href: '/receiver', label: 'نظرة عامة', icon: LayoutDashboard },
-      { href: '/receiver/assignments', label: 'التكليفات الواردة', icon: Inbox },
+      { href: '/receiver/assignments', label: 'التكليفات والتقديمات', icon: Inbox },
     ],
   },
 }
