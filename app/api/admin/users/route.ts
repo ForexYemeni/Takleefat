@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { createReceiverSchema } from '@/lib/validations/user'
+import { createReceiverSchema, createNurseSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 
 /**
@@ -55,17 +55,62 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/admin/users — إنشاء حساب مستلم إداري جديد
+ * POST /api/admin/users — إنشاء حساب جديد (مستلم إداري أو كادر تمريضي)
+ * body: { role: 'RECEIVER' | 'NURSE', ...الحقول }
+ * الحساب يُنشأ معتمداً تلقائياً لأن المدير هو من ينشئه.
  */
 export async function POST(req: NextRequest) {
   try {
     await requireRole('ADMIN')
 
-    const parsed = createReceiverSchema.safeParse(await req.json())
+    const body = await req.json()
+    const role: 'NURSE' | 'RECEIVER' = body?.role === 'NURSE' ? 'NURSE' : 'RECEIVER'
+
+    // التحقق حسب نوع الحساب ثم الإنشاء (فصل الفروع لتضييق الأنواع بشكل صحيح)
+    if (role === 'NURSE') {
+      const parsed = createNurseSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
+      }
+      const { name, phone, password, specialty, qualification, yearsOfExperience } = parsed.data
+
+      const existing = await db.user.findUnique({ where: { phone } })
+      if (existing) {
+        return jsonError('رقم الهاتف مسجل مسبقاً في المنصة', 409)
+      }
+
+      const hashed = await hash(password, 12)
+      const user = await db.user.create({
+        data: {
+          name,
+          phone,
+          password: hashed,
+          role: 'NURSE',
+          status: 'APPROVED',
+          specialty,
+          qualification,
+          yearsOfExperience,
+        },
+        select: { id: true, name: true, phone: true, role: true, status: true },
+      })
+
+      await notify(user.id, {
+        title: 'مرحباً بك في تكليفات',
+        body: 'تم إنشاء حسابك ككادر تمريضي. يمكنك الآن استعراض التكليفات المسندة إليك ورفع مستنداتك.',
+        type: 'GENERIC',
+        link: '/nurse',
+      })
+
+      return NextResponse.json(
+        { message: 'تم إنشاء حساب الكادر التمريضي بنجاح', user },
+        { status: 201 }
+      )
+    }
+
+    const parsed = createReceiverSchema.safeParse(body)
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
-
     const { name, phone, password } = parsed.data
 
     const existing = await db.user.findUnique({ where: { phone } })
@@ -80,7 +125,7 @@ export async function POST(req: NextRequest) {
         phone,
         password: hashed,
         role: 'RECEIVER',
-        status: 'APPROVED', // حسابات المستلمين يُنشئها المدير فتكون معتمدة تلقائياً
+        status: 'APPROVED', // حسابات يُنشئها المدير تكون معتمدة تلقائياً
       },
       select: { id: true, name: true, phone: true, role: true, status: true },
     })

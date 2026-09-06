@@ -178,7 +178,7 @@ export default function AdminReceiversPage() {
                   id="receiver-phone"
                   type="tel"
                   dir="ltr"
-                  placeholder="05xxxxxxxx"
+                  placeholder="7xxxxxxxx"
                   className="ps-10 text-start"
                   {...form.register('phone')}
                 />

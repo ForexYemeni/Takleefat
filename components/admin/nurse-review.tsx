@@ -6,15 +6,26 @@ import {
   BadgeCheck,
   Ban,
   Eye,
+  EyeOff,
   FileText,
+  Lock,
   MoreHorizontal,
+  PhoneIcon,
   Search,
+  UserPlus,
   UserX,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiFetcher, apiPatch } from '@/lib/api-client'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '@/lib/utils'
+import {
+  createNurseSchema,
+  type CreateNurseInput,
+  type CreateNurseFormValues,
+} from '@/lib/validations/user'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { DocumentViewer } from '@/components/shared/document-viewer'
@@ -91,6 +102,33 @@ export function NurseReview() {
   const [detailsUser, setDetailsUser] = useState<AdminUser | null>(null)
   const [rejectUser, setRejectUser] = useState<AdminUser | null>(null)
   const [rejectNote, setRejectNote] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  const createForm = useForm<CreateNurseFormValues, unknown, CreateNurseInput>({
+    resolver: zodResolver(createNurseSchema),
+    defaultValues: {
+      name: '',
+      phone: '',
+      password: '',
+      specialty: '',
+      qualification: '',
+      yearsOfExperience: '0',
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (values: CreateNurseInput) =>
+      apiPost<{ message: string }>('/api/admin/users', { ...values, role: 'NURSE' }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
+      setCreateOpen(false)
+      createForm.reset()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', 'NURSE'],
@@ -139,14 +177,20 @@ export function NurseReview() {
             مراجعة واعتماد حسابات الكوادر التمريضية في منصة تكليفات
           </p>
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="بحث بالاسم أو الهاتف..."
-            className="ps-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="بحث بالاسم أو الهاتف..."
+              className="ps-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">
+            <UserPlus className="size-4" />
+            إضافة كادر
+          </Button>
         </div>
       </div>
 
@@ -311,6 +355,129 @@ export function NurseReview() {
               تأكيد الرفض
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* حوار إضافة كادر تمريضي جديد */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>إضافة كادر تمريضي جديد</DialogTitle>
+            <DialogDescription>
+              يُنشأ الحساب معتمداً تلقائياً ويمكن للكادر تسجيل الدخول فوراً في منصة تكليفات.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="nurse-name">الاسم الكامل</Label>
+              <Input id="nurse-name" placeholder="مثال: سارة أحمد" {...createForm.register('name')} />
+              {createForm.formState.errors.name && (
+                <p className="text-xs text-destructive">
+                  {createForm.formState.errors.name.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nurse-phone">رقم الهاتف</Label>
+              <div className="relative">
+                <PhoneIcon className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="nurse-phone"
+                  type="tel"
+                  dir="ltr"
+                  placeholder="7xxxxxxxx"
+                  className="ps-10 text-start"
+                  {...createForm.register('phone')}
+                />
+              </div>
+              {createForm.formState.errors.phone && (
+                <p className="text-xs text-destructive">
+                  {createForm.formState.errors.phone.message}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="nurse-specialty">التخصص</Label>
+                <Input
+                  id="nurse-specialty"
+                  placeholder="مثال: تمريض طوارئ"
+                  {...createForm.register('specialty')}
+                />
+                {createForm.formState.errors.specialty && (
+                  <p className="text-xs text-destructive">
+                    {createForm.formState.errors.specialty.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nurse-experience">سنوات الخبرة</Label>
+                <Input
+                  id="nurse-experience"
+                  type="number"
+                  min={0}
+                  max={50}
+                  {...createForm.register('yearsOfExperience')}
+                />
+                {createForm.formState.errors.yearsOfExperience && (
+                  <p className="text-xs text-destructive">
+                    {createForm.formState.errors.yearsOfExperience.message}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nurse-qualification">المؤهل العلمي</Label>
+              <Input
+                id="nurse-qualification"
+                placeholder="مثال: بكالوريوس تمريض"
+                {...createForm.register('qualification')}
+              />
+              {createForm.formState.errors.qualification && (
+                <p className="text-xs text-destructive">
+                  {createForm.formState.errors.qualification.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nurse-password">كلمة المرور</Label>
+              <div className="relative">
+                <Lock className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="nurse-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="ps-10 pe-10"
+                  {...createForm.register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {createForm.formState.errors.password && (
+                <p className="text-xs text-destructive">
+                  {createForm.formState.errors.password.message}
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                إلغاء
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending} className="gap-2">
+                <UserPlus className="size-4" />
+                {createMutation.isPending ? 'جارٍ الإنشاء...' : 'إنشاء الحساب'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

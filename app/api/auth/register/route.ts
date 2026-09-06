@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
       return jsonError(firstError, 422)
     }
 
-    const { name, phone, password, specialty, qualification, yearsOfExperience } = parsed.data
+    const { role = 'NURSE', name, phone, password, specialty, qualification, yearsOfExperience } =
+      parsed.data
 
     const existing = await db.user.findUnique({ where: { phone } })
     if (existing) {
@@ -34,13 +35,13 @@ export async function POST(req: NextRequest) {
         name,
         phone,
         password: hashedPassword,
-        role: 'NURSE',
+        role,
         status: 'PENDING',
-        specialty,
-        qualification,
-        yearsOfExperience,
+        ...(role === 'NURSE'
+          ? { specialty, qualification, yearsOfExperience }
+          : {}),
       },
-      select: { id: true, name: true, phone: true },
+      select: { id: true, name: true, phone: true, role: true },
     })
 
     // إشعار جميع مديري النظام بوجود طلب تسجيل جديد
@@ -49,9 +50,12 @@ export async function POST(req: NextRequest) {
       admins.map((admin) =>
         notify(admin.id, {
           title: 'طلب تسجيل جديد',
-          body: `${name} — تخصص ${specialty} — بانتظار اعتماد الحساب`,
+          body:
+            role === 'NURSE'
+              ? `${name} — تخصص ${specialty} — بانتظار اعتماد الحساب`
+              : `${name} — طلب حساب مستلم إداري — بانتظار الاعتماد`,
           type: 'GENERIC',
-          link: '/admin/nurses',
+          link: role === 'NURSE' ? '/admin/nurses' : '/admin/receivers',
         })
       )
     )

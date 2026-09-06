@@ -5,7 +5,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Eye, EyeOff, Loader2, UserPlus, PhoneIcon, Lock } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  Loader2,
+  UserPlus,
+  PhoneIcon,
+  Lock,
+  Stethoscope,
+  ClipboardCheck,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +31,7 @@ export default function RegisterPage() {
   const form = useForm<RegisterFormValues, unknown, RegisterInput>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      role: 'NURSE',
       name: '',
       phone: '',
       password: '',
@@ -31,6 +41,9 @@ export default function RegisterPage() {
       yearsOfExperience: '0',
     },
   })
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const role = form.watch('role')
 
   const onSubmit = async (values: RegisterInput) => {
     setError(null)
@@ -71,7 +84,8 @@ export default function RegisterPage() {
       <div className="space-y-2 text-center lg:text-start">
         <h1 className="text-2xl font-extrabold">إنشاء حساب جديد</h1>
         <p className="text-sm text-muted-foreground">
-          سجّل في منصة تكليفات | Takleefat — سيتم اعتماد حسابك بعد مراجعة بياناتك من الإدارة
+          سجّل في منصة تكليفات | Takleefat — اختر نوع الحساب ثم أكمل البيانات، وسيتم اعتماد حسابك
+          بعد مراجعته من الإدارة
         </p>
       </div>
 
@@ -80,6 +94,35 @@ export default function RegisterPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* اختيار نوع الحساب */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => form.setValue('role', 'NURSE')}
+          className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+            role === 'NURSE'
+              ? 'border-primary bg-primary/5 text-primary'
+              : 'border-border text-muted-foreground hover:border-primary/40'
+          }`}
+        >
+          <Stethoscope className="size-6" />
+          <span className="text-sm font-bold">كادر تمريضي</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => form.setValue('role', 'RECEIVER')}
+          className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+            role === 'RECEIVER'
+              ? 'border-primary bg-primary/5 text-primary'
+              : 'border-border text-muted-foreground hover:border-primary/40'
+          }`}
+        >
+          <ClipboardCheck className="size-6" />
+          <span className="text-sm font-bold">مستلم إداري</span>
+        </button>
+      </div>
+      <input type="hidden" {...form.register('role')} />
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div className="space-y-2">
@@ -105,32 +148,42 @@ export default function RegisterPage() {
           {err.phone && <p className="text-xs text-destructive">{err.phone.message}</p>}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="specialty">التخصص</Label>
-            <Input id="specialty" placeholder="مثال: تمريض طوارئ" {...form.register('specialty')} />
-            {err.specialty && <p className="text-xs text-destructive">{err.specialty.message}</p>}
+        {role === 'NURSE' && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="specialty">التخصص</Label>
+              <Input id="specialty" placeholder="مثال: تمريض طوارئ" {...form.register('specialty')} />
+              {err.specialty && <p className="text-xs text-destructive">{err.specialty.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="yearsOfExperience">سنوات الخبرة</Label>
+              <Input
+                id="yearsOfExperience"
+                type="number"
+                min={0}
+                max={50}
+                {...form.register('yearsOfExperience')}
+              />
+              {err.yearsOfExperience && (
+                <p className="text-xs text-destructive">{err.yearsOfExperience.message}</p>
+              )}
+            </div>
           </div>
+        )}
+
+        {role === 'NURSE' && (
           <div className="space-y-2">
-            <Label htmlFor="yearsOfExperience">سنوات الخبرة</Label>
+            <Label htmlFor="qualification">المؤهل العلمي</Label>
             <Input
-              id="yearsOfExperience"
-              type="number"
-              min={0}
-              max={50}
-              {...form.register('yearsOfExperience')}
+              id="qualification"
+              placeholder="مثال: بكالوريوس تمريض"
+              {...form.register('qualification')}
             />
-            {err.yearsOfExperience && (
-              <p className="text-xs text-destructive">{err.yearsOfExperience.message}</p>
+            {err.qualification && (
+              <p className="text-xs text-destructive">{err.qualification.message}</p>
             )}
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="qualification">المؤهل العلمي</Label>
-          <Input id="qualification" placeholder="مثال: بكالوريوس تمريض" {...form.register('qualification')} />
-          {err.qualification && <p className="text-xs text-destructive">{err.qualification.message}</p>}
-        </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -186,7 +239,7 @@ export default function RegisterPage() {
 
       <p className="text-center text-xs leading-relaxed text-muted-foreground">
         بإنشاء حسابك في تكليفات فإنك توافق على أن تتم مراجعة بياناتك ومستنداتك من قبل إدارة المنصة
-        قبل تفعيل الحساب.
+        قبل تفعيل الحساب — سواء كان حساب كادر تمريضي أو مستلم إداري.
       </p>
 
       <p className="text-center text-sm text-muted-foreground">
