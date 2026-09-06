@@ -143,10 +143,10 @@ async function main() {
   }
 
   // ---------- 3) تكليفات تجريبية ----------
+  const today = new Date()
+  const inDays = (n) => new Date(today.getTime() + n * 24 * 60 * 60 * 1000)
   const existingAssignments = await prisma.assignment.count()
   if (existingAssignments === 0) {
-    const today = new Date()
-    const inDays = (n) => new Date(today.getTime() + n * 24 * 60 * 60 * 1000)
 
     // تكليف نشط
     const active = await prisma.assignment.create({
@@ -237,26 +237,52 @@ async function main() {
 
     console.log('✅ تكليفات تجريبية: نشط + مُستلَم + مكتمل (مع سجل أحداث لكل تكليف)')
 
-    // ---------- 3-b) الجهات الصحية والأقسام (قوائم الإدارة) ----------
-    const hospitalsData = [
-      { name: 'مستشفى الملكية', location: 'صنعاء — شارع حدة' },
-      { name: 'مستشفى الثورة العام', location: 'صنعاء — شارع الزراعة' },
-      { name: 'مستشفى الولادة والأطفال', location: 'صنعاء — السبعين' },
-      { name: 'مستشفى الحباري', location: 'عدن — خور مكسر' },
-      { name: 'مركز الرازي', location: 'تعز — الحوبان' },
-    ]
-    for (const h of hospitalsData) {
-      await prisma.hospital.upsert({ where: { name: h.name }, update: {}, create: h })
-    }
-    const departmentsData = ['عناية', 'طوارئ', 'رقود', 'حضانة', 'قبالة', 'مختبر']
-    for (const name of departmentsData) {
-      await prisma.department.upsert({ where: { name }, update: {}, create: { name } })
-    }
-    console.log('✅ الجهات الصحية (5) والأقسام الطبية (6) جاهزة في قوائم الإدارة')
+    // ---------- 4) إشعارات للمستلم الإداري ----------
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: receiver.id,
+          title: 'تكليف جديد بانتظار الاستلام',
+          body: 'تم إنشاء تكليف (قسم الطوارئ) — بانتظار توثيق الاستلام منك',
+          type: 'ASSIGNMENT_CREATED',
+          link: '/receiver/assignments',
+        },
+        {
+          userId: receiver.id,
+          title: 'مرحباً بك في تكليفات',
+          body: 'تم اعتماد حسابك — يمكنك الآن توثيق استلام التكليفات إلكترونياً',
+          type: 'ACCOUNT_APPROVED',
+          link: '/receiver',
+        },
+      ],
+    })
+    console.log('✅ إشعارات تجريبية للأطراف الثلاثة')
+  } else {
+    console.log('ℹ️  يوجد تكليفات مسبقة — تم تجاهل إضافة تكليفات تجريبية جديدة')
+  }
 
-    // ---------- تكليف مُعلن مفتوح للتقديم (من المستلم الإداري) ----------
-    const existingPosts = await prisma.post.count()
-    if (existingPosts === 0) {
+  // ---------- 3-b) الجهات الصحية والأقسام (قوائم الإدارة) — تُبذر دائماً ----------
+  // (لا تربطها بوجود التكليفات — قوائم اختيار أساسية يجب أن تكون جاهزة دوماً،
+  //  upsert آمن للتكرار لا يمس البيانات المضافة من الإدارة)
+  const hospitalsData = [
+    { name: 'مستشفى الملكية', location: 'صنعاء — شارع حدة' },
+    { name: 'مستشفى الثورة العام', location: 'صنعاء — شارع الزراعة' },
+    { name: 'مستشفى الولادة والأطفال', location: 'صنعاء — السبعين' },
+    { name: 'مستشفى الحباري', location: 'عدن — خور مكسر' },
+    { name: 'مركز الرازي', location: 'تعز — الحوبان' },
+  ]
+  for (const h of hospitalsData) {
+    await prisma.hospital.upsert({ where: { name: h.name }, update: {}, create: h })
+  }
+  const departmentsData = ['عناية', 'طوارئ', 'رقود', 'حضانة', 'قبالة', 'مختبر']
+  for (const name of departmentsData) {
+    await prisma.department.upsert({ where: { name }, update: {}, create: { name } })
+  }
+  console.log('✅ الجهات الصحية (5) والأقسام الطبية (6) جاهزة في قوائم الإدارة')
+
+  // ---------- تكليف مُعلن مفتوح للتقديم (فقط إذا لا توجد تكليفات معلنة) ----------
+  const existingPosts = await prisma.post.count()
+  if (existingPosts === 0) {
       const openPost = await prisma.post.create({
         data: {
           number: 1,
@@ -295,30 +321,6 @@ async function main() {
       })
       console.log('✅ تكليف مُعلن مفتوح للتقديم + تقديم بانتظار المراجعة')
     }
-
-    // ---------- 4) إشعارات للمستلم الإداري ----------
-    await prisma.notification.createMany({
-      data: [
-        {
-          userId: receiver.id,
-          title: 'تكليف جديد بانتظار الاستلام',
-          body: 'تم إنشاء تكليف (قسم الطوارئ) — بانتظار توثيق الاستلام منك',
-          type: 'ASSIGNMENT_CREATED',
-          link: '/receiver/assignments',
-        },
-        {
-          userId: receiver.id,
-          title: 'مرحباً بك في تكليفات',
-          body: 'تم اعتماد حسابك — يمكنك الآن توثيق استلام التكليفات إلكترونياً',
-          type: 'ACCOUNT_APPROVED',
-          link: '/receiver',
-        },
-      ],
-    })
-    console.log('✅ إشعارات تجريبية للأطراف الثلاثة')
-  } else {
-    console.log('ℹ️  يوجد تكليفات مسبقة — تم تجاهل إضافة تكليفات تجريبية جديدة')
-  }
 
   console.log('\n🎉 تمت تعبئة قاعدة البيانات الوهمية بنجاح — يمكنك الآن تسجيل الدخول بجميع الحسابات\n')
 }
