@@ -122,8 +122,8 @@ npm run dev
 | `DATABASE_URL` | رابط اتصال PostgreSQL | ✅ |
 | `AUTH_SECRET` / `NEXTAUTH_SECRET` | مفتاح تشفير الجلسات — أنشئه بـ `openssl rand -base64 32` | ✅ |
 | `NEXTAUTH_URL` | رابط الموقع في الإنتاج | ✅ (إنتاج) |
-| `ADMIN_PHONE` | رقم هاتف مدير النظام الافتراضي | ✅ |
-| `ADMIN_PASSWORD` | كلمة مرور المدير الافتراضية | ✅ |
+| `ADMIN_PHONE` | رقم هاتف مدير النظام الافتراضي | ➖ (اختياري — إن تُرك فارغاً يُنشأ المدير `773178684` تلقائياً عبر الـ Seed) |
+| `ADMIN_PASSWORD` | كلمة مرور المدير الافتراضية | ➖ (اختياري — الافتراضي `Admin@1234`) |
 | `STORAGE_ENDPOINT` | رابط خدمة التخزين المتوافقة مع S3 | ✅ (إنتاج) |
 | `STORAGE_REGION` | المنطقة (`auto` لـ Cloudflare R2) | ➖ |
 | `STORAGE_BUCKET` | اسم الحاوية (Bucket) | ✅ (إنتاج) |
@@ -162,7 +162,18 @@ npx prisma migrate deploy
 npx prisma studio
 ```
 
-> عند النشر على Vercel يعمل أمر `prisma generate` تلقائياً بعد التثبيت (عبر `postinstall` في `package.json`). أما تطبيق المخطط فيُنفَّذ يدوياً مرة واحدة بـ `npx prisma migrate deploy`.
+> عند النشر على Vercel يُنفَّذ أمرا `prisma db push` و`prisma db seed` **تلقائياً أثناء البناء** (مضمنة في سكربت build) — فلا حاجة لأي أوامر يدوية. وإذا لم يكن `DATABASE_URL` مضبوطاً بعد، تُتخطى هذه الخطوات بصمت دون إفشال البناء.
+
+### إصلاح سريع: خطأ «The environment variable DATABASE_URL resolved to an empty string»
+
+هذا الخطأ يعني أن **لم يتم ربط قاعدة بيانات بالمشروع على Vercel بعد** — لا يمكن للمنصة العمل بدونه. الإصلاح في 4 خطوات من لوحة Vercel:
+
+1. افتح مشروعك على Vercel ← تبويب **Storage** ← **Create Database** ← **Postgres (Neon)** ← **Connect** إلى مشروعك — سيُضبط `DATABASE_URL` تلقائياً.
+2. تأكد من وجود `NEXTAUTH_SECRET` (أو `AUTH_SECRET`) في **Settings ← Environment Variables** — أنشئه بـ `openssl rand -base64 32` إن لم يكن موجوداً.
+3. من تبويب **Deployments** اضغط **Redeploy** — أثناء البناء تُنشأ الجداول والحسابات التجريبية تلقائياً (بما فيها حساب المدير `773178684`).
+4. افتح `https://<موقعك>/api/health` حتى ترى `database: ok` ثم سجّل الدخول.
+
+> بديل متقدم: أنشئ قاعدة يدوياً في [Neon](https://neon.tech) أو [Supabase](https://supabase.com)، ثم ضع رابط الاتصال في `DATABASE_URL` من **Settings ← Environment Variables** وأعد النشر.
 
 
 ## قاعدة البيانات الوهمية والحسابات التجريبية
@@ -177,7 +188,7 @@ npx prisma db push
 npx prisma db seed
 ```
 
-> للتعبئة على قاعدة بيانات الإنتاج مباشرة: ضع رابط الإنتاج في `DATABASE_URL` ثم نفّذ الأمرين أعلاه محلياً.
+> للتعبئة على قاعدة بيانات الإنتاج مباشرة: ضع رابط الإنتاج في `DATABASE_URL` ثم نفّذ الأمرين أعلاه محلياً — أو ببساطة **أعد النشر على Vercel** بعد ربط القاعدة وسيتم كل شيء تلقائياً أثناء البناء.
 
 ### الحسابات التجريبية
 
@@ -211,7 +222,7 @@ https://<موقعك>.vercel.app/api/health
 2. أي متغيرات بيئة ناقصة (`MISSING`)
 3. تلميحات حل المشاكل الشائعة
 
-> الشروط الثلاثة لتسجيل الدخول: (1) مفتاح `AUTH_SECRET` مضبوط (2) قاعدة بيانات متصلة وجداول منشأة بـ `prisma db push` (3) حسابات موجودة بـ `prisma db seed`.
+> الشروط الثلاثة لتسجيل الدخول: (1) مفتاح `NEXTAUTH_SECRET` مضبوط (2) قاعدة بيانات مرتبطة بالمشروع (3) إعادة نشر بعد ربط القاعدة — الجداول والحسابات التجريبية تُنشأ تلقائياً أثناء البناء.
 
 
 ## طريقة رفع المشروع إلى GitHub

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { registerSchema, type RegisterInput, type RegisterFormValues } from '@/lib/validations/auth'
+import { getServerIssueMessage } from '@/lib/client-diagnostics'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -41,14 +42,22 @@ export default function RegisterPage() {
         body: JSON.stringify(values),
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.error ?? 'تعذر إنشاء الحساب، حاول مرة أخرى')
+      // أخطاء الخادم (500): نستعلم /api/health ونسمّي السبب الحقيقي
+      // (قاعدة بيانات غير مضبوطة / مفتاح جلسات ناقص) بدلاً من رسالة عامة
+      if (response.status >= 500) {
+        setError(await getServerIssueMessage())
         return
       }
 
-      toast.success(data.message ?? 'تم إنشاء الحساب بنجاح')
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        // أخطاء التحقق (422) أو تكرار رقم الهاتف (409) — رسائل عربية من الخادم
+        setError(data?.error ?? 'تعذر إنشاء الحساب، حاول مرة أخرى')
+        return
+      }
+
+      toast.success(data?.message ?? 'تم إنشاء الحساب بنجاح')
       router.push('/login')
     } catch {
       setError('حدث خطأ في الاتصال بالخدمة، حاول مرة أخرى')
