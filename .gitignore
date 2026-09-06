@@ -61,3 +61,6 @@ Caddyfile
 vercel-errors.log
 worklog.md
 download/
+tool-results/
+scripts/e2e-tmp/
+db/
