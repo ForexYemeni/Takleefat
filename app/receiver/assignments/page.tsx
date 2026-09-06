@@ -23,7 +23,11 @@ import {
   ASSIGNMENT_STATUS_LABELS,
   POST_STATUS_LABELS,
 } from '@/lib/utils'
-import { createPostSchema, type CreatePostInput } from '@/lib/validations/post'
+import {
+  createPostSchema,
+  type CreatePostInput,
+  type CreatePostFormValues,
+} from '@/lib/validations/post'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { PaymentCard } from '@/components/shared/payment-card'
@@ -514,7 +518,7 @@ function CreatePostDialog({
   const queryClient = useQueryClient()
   const [endDate, setEndDate] = useState('')
 
-  const form = useForm<CreatePostInput>({
+  const form = useForm<CreatePostFormValues, unknown, CreatePostInput>({
     resolver: zodResolver(createPostSchema),
     defaultValues: {
       title: '',

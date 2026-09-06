@@ -17,7 +17,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPatch } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/utils'
-import { settingsSchema, type SettingsInput } from '@/lib/validations/post'
+import { settingsSchema, type SettingsInput, type SettingsFormValues } from '@/lib/validations/post'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,7 +53,7 @@ export default function AdminSettingsPage() {
     queryFn: () => apiFetcher<AdminStats>('/api/stats'),
   })
 
-  const form = useForm<SettingsInput>({
+  const form = useForm<SettingsFormValues, unknown, SettingsInput>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
       applicationFee: 1000,

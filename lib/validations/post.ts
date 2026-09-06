@@ -66,4 +66,6 @@ export const settingsSchema = z.object({
 })
 
 export type CreatePostInput = z.infer<typeof createPostSchema>
+export type CreatePostFormValues = z.input<typeof createPostSchema>
 export type SettingsInput = z.infer<typeof settingsSchema>
+export type SettingsFormValues = z.input<typeof settingsSchema>

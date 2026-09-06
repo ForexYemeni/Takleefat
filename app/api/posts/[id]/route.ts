@@ -95,7 +95,7 @@ export async function PATCH(
 
     const { status } = parsed.data
 
-    if (status === 'CANCELLED' && post._count.applications.approved > 0) {
+    if (status === 'CANCELLED' && post._count.applications > 0) {
       return jsonError('لا يمكن إلغاء التكليف — يوجد كادر معتمد عليه بالفعل', 409)
     }
 
