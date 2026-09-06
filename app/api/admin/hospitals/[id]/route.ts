@@ -23,7 +23,7 @@ export async function PATCH(
     const existing = await db.hospital.findUnique({ where: { id } })
     if (!existing) return jsonError('الجهة الصحية غير موجودة', 404)
 
-    const { name, location, isActive } = parsed.data
+    const { name, location, isActive, lat, lng } = parsed.data
 
     if (name && name.trim() !== existing.name) {
       const dup = await db.hospital.findUnique({ where: { name: name.trim() } })
@@ -35,6 +35,8 @@ export async function PATCH(
       data: {
         ...(name != null ? { name: name.trim() } : {}),
         ...(location !== undefined ? { location: location.trim() || null } : {}),
+        ...(lat !== undefined ? { lat } : {}),
+        ...(lng !== undefined ? { lng } : {}),
         ...(isActive != null ? { isActive } : {}),
       },
     })

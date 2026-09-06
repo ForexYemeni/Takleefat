@@ -152,10 +152,13 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && token.id) {
         // جلب أحدث حالة للمستخدم من قاعدة البيانات (اعتماد الحساب / تغيير الدور)
-        const fresh = await db.user.findUnique({
-          where: { id: token.id as string },
-          select: { id: true, name: true, phone: true, role: true, status: true },
-        })
+        // خطأ اتصال عابر → null آمن، أما الحساب المحذوف → fresh=null فعلاً
+        const fresh = await db.user
+          .findUnique({
+            where: { id: token.id as string },
+            select: { id: true, name: true, phone: true, role: true, status: true },
+          })
+          .catch(() => null)
 
         if (fresh) {
           session.user.id = fresh.id
@@ -164,11 +167,10 @@ export const authOptions: NextAuthOptions = {
           session.user.role = fresh.role
           session.user.status = fresh.status
         } else {
-          session.user.id = (token.id as string) ?? ''
+          // الحساب حُذف من القاعدة — جلسة غير صالحة (تُرفض 401 في كل المسارات)
+          session.user.id = ''
           session.user.name = (token.name as string) ?? ''
-          session.user.phone = (token.phone as string) ?? ''
-          session.user.role = (token.role as 'ADMIN' | 'NURSE' | 'RECEIVER') ?? 'NURSE'
-          session.user.status = (token.status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED') ?? 'PENDING'
+          session.user.role = undefined as unknown as 'ADMIN' | 'NURSE' | 'RECEIVER'
         }
       }
       return session

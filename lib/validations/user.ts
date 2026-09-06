@@ -60,3 +60,33 @@ export const reviewUserSchema = z.object({
 export type CreateReceiverInput = z.infer<typeof createReceiverSchema>
 export type CreateNurseInput = z.infer<typeof createNurseSchema>
 export type CreateNurseFormValues = z.input<typeof createNurseSchema>
+
+// ---------- إدارة الحساب من الإدارة (تغيير كلمة المرور / حذف نهائي) ----------
+
+export const resetPasswordSchema = z.object({
+  password: adminPasswordSchema,
+})
+
+// ---------- الملف الشخصي الذاتي (جميع الأدوار) ----------
+
+export const updateProfileSchema = z.object({
+  name: z
+    .string({ error: 'الاسم مطلوب' })
+    .min(3, 'الاسم يجب أن يكون 3 أحرف على الأقل')
+    .max(80, 'الاسم طويل جداً'),
+})
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string({ error: 'كلمة المرور الحالية مطلوبة' }).min(1, 'أدخل كلمة المرور الحالية'),
+  newPassword: adminPasswordSchema,
+})
+
+export const changePhoneSchema = z.object({
+  currentPassword: z.string({ error: 'كلمة المرور الحالية مطلوبة' }).min(1, 'أدخل كلمة المرور الحالية'),
+  newPhone: adminPhoneSchema,
+})
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
+export type ChangePhoneInput = z.infer<typeof changePhoneSchema>

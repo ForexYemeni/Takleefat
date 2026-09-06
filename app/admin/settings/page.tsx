@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPatch } from '@/lib/api-client'
-import { formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 import {
   settingsSchema,
   type SettingsInput,
@@ -25,6 +25,7 @@ import {
 import { DashboardSkeleton } from '@/components/shared/empty-state'
 import { HospitalManager, DepartmentManager } from '@/components/admin/catalog-manager'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -69,6 +70,7 @@ export default function AdminSettingsPage() {
   const form = useForm<SettingsFormValues, unknown, SettingsInput>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
+      feeMode: 'ADMIN',
       applicationFee: 1000,
       adminFeeType: 'PERCENTAGE',
       adminPercentage: 10,
@@ -96,6 +98,7 @@ export default function AdminSettingsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const feeMode = form.watch('feeMode')
   const applicationFee = Number(form.watch('applicationFee')) || 0
   const adminPercentage = Number(form.watch('adminPercentage')) || 0
   const adminFeeFixed = Number(form.watch('adminFeeFixed')) || 0
@@ -166,55 +169,116 @@ export default function AdminSettingsPage() {
       </div>
 
       <form onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} className="space-y-4">
-        {/* الرسوم */}
+        {/* الرسوم — نوع واحد فقط: حصة إدارة أو رسوم تقديم */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Banknote className="size-4 text-primary" />
-              رسوم المنصة
+              رسوم المنصة — تُحصّل واحدة فقط
             </CardTitle>
             <CardDescription>
-              تُعرض هذه الرسوم للكادر التمريضي عند التقديم على التكليفات وبعد الاعتماد
+              اختر نمط الرسوم: حصة إدارة مقتطعة من قيمة التكليف، أو رسوم تقديم يدفعها الكادر — لا
+              تُحصّل الاثنان معاً. تُعرض للكادر والجهات عند التقديم وبعد الاعتماد
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="s-fee">رسوم التقديم (ريال يمني)</Label>
-              <Input id="s-fee" type="number" min={0} {...form.register('applicationFee')} />
-              {form.formState.errors.applicationFee && (
-                <p className="text-xs text-destructive">{form.formState.errors.applicationFee.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="s-fee-type">حصة الإدارة — نسبة أم مبلغ ثابت؟</Label>
-              <Select
-                value={adminFeeType}
-                onValueChange={(v) => form.setValue('adminFeeType', v as 'PERCENTAGE' | 'FIXED')}
-              >
-                <SelectTrigger id="s-fee-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PERCENTAGE">نسبة مئوية من قيمة التكليف</SelectItem>
-                  <SelectItem value="FIXED">مبلغ ثابت لكل تكليف</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {adminFeeType === 'PERCENTAGE' ? (
-              <div className="space-y-2">
-                <Label htmlFor="s-percent">نسبة الإدارة (٪ من قيمة التكليف)</Label>
-                <Input id="s-percent" type="number" min={0} max={100} {...form.register('adminPercentage')} />
-                {form.formState.errors.adminPercentage && (
-                  <p className="text-xs text-destructive">{form.formState.errors.adminPercentage.message}</p>
+          <CardContent className="space-y-4">
+            {/* مبدّل النمط */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => form.setValue('feeMode', 'ADMIN', { shouldDirty: true })}
+                className={cn(
+                  'rounded-2xl border-2 p-4 text-start transition-all',
+                  feeMode === 'ADMIN'
+                    ? 'border-primary bg-primary/5 shadow-sm'
+                    : 'border-border hover:border-primary/40'
                 )}
+              >
+                <div className="flex items-center gap-2">
+                  <Percent className={cn('size-4', feeMode === 'ADMIN' ? 'text-primary' : 'text-muted-foreground')} />
+                  <p className={cn('text-sm font-extrabold', feeMode === 'ADMIN' && 'text-primary')}>
+                    حصة إدارة من قيمة التكليف
+                  </p>
+                  {feeMode === 'ADMIN' && <Badge className="ms-auto">النمط النشط</Badge>}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  نسبة مئوية أو مبلغ ثابت يُقتطع من قيمة كل تكليف مؤكد — بلا رسوم تقديم على الكادر
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => form.setValue('feeMode', 'APPLICATION', { shouldDirty: true })}
+                className={cn(
+                  'rounded-2xl border-2 p-4 text-start transition-all',
+                  feeMode === 'APPLICATION'
+                    ? 'border-primary bg-primary/5 shadow-sm'
+                    : 'border-border hover:border-primary/40'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <BadgeDollarSign className={cn('size-4', feeMode === 'APPLICATION' ? 'text-primary' : 'text-muted-foreground')} />
+                  <p className={cn('text-sm font-extrabold', feeMode === 'APPLICATION' && 'text-primary')}>
+                    رسوم تقديم من الكادر
+                  </p>
+                  {feeMode === 'APPLICATION' && <Badge className="ms-auto">النمط النشط</Badge>}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  مبلغ ثابت يدفعه الكادر بعد اعتماد تقديمه — بلا اقتطاع من قيمة التكليف
+                </p>
+              </button>
+            </div>
+
+            {feeMode === 'ADMIN' ? (
+              <div className="grid gap-4 rounded-2xl bg-muted/40 p-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="s-fee-type">حصة الإدارة — نسبة أم مبلغ ثابت؟</Label>
+                  <Select
+                    value={adminFeeType}
+                    onValueChange={(v) => form.setValue('adminFeeType', v as 'PERCENTAGE' | 'FIXED')}
+                  >
+                    <SelectTrigger id="s-fee-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PERCENTAGE">نسبة مئوية من قيمة التكليف</SelectItem>
+                      <SelectItem value="FIXED">مبلغ ثابت لكل تكليف</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {adminFeeType === 'PERCENTAGE' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="s-percent">نسبة الإدارة (٪ من قيمة التكليف)</Label>
+                    <Input id="s-percent" type="number" min={0} max={100} {...form.register('adminPercentage')} />
+                    {form.formState.errors.adminPercentage && (
+                      <p className="text-xs text-destructive">{form.formState.errors.adminPercentage.message}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="s-fixed">المبلغ الثابت للحصة الإدارية (ريال / لكل تكليف)</Label>
+                    <Input id="s-fixed" type="number" min={1} {...form.register('adminFeeFixed')} />
+                    {form.formState.errors.adminFeeFixed && (
+                      <p className="text-xs text-destructive">{form.formState.errors.adminFeeFixed.message}</p>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  مثال: تكليف بقيمة 100,000 ريال → حصة الإدارة{' '}
+                  <span className="font-bold text-foreground">{formatCurrency(adminShareExample)}</span>
+                </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="s-fixed">المبلغ الثابت للحصة الإدارية (ريال / لكل تكليف)</Label>
-                <Input id="s-fixed" type="number" min={1} {...form.register('adminFeeFixed')} />
-                {form.formState.errors.adminFeeFixed && (
-                  <p className="text-xs text-destructive">{form.formState.errors.adminFeeFixed.message}</p>
-                )}
+              <div className="grid gap-4 rounded-2xl bg-muted/40 p-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="s-fee">رسوم التقديم (ريال يمني — لكل تقديم معتمد)</Label>
+                  <Input id="s-fee" type="number" min={1} {...form.register('applicationFee')} />
+                  {form.formState.errors.applicationFee && (
+                    <p className="text-xs text-destructive">{form.formState.errors.applicationFee.message}</p>
+                  )}
+                </div>
+                <p className="self-center text-xs text-muted-foreground">
+                  تُحصّل من الكادر بعد اعتماد تقديمه — وتبقى قيمة التكليف كاملة للكادر بدون أي اقتطاع
+                </p>
               </div>
             )}
           </CardContent>

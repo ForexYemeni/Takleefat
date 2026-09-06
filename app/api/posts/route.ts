@@ -77,7 +77,8 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER')
+    // الإدارة والمستلم الإداري كلاهما يمكنهما إنشاء تكليف مُعلن
+    const session = await requireRole('RECEIVER', 'ADMIN')
 
     if (session.user.status !== 'APPROVED') {
       throw new ApiError('حسابك قيد المراجعة — لا يمكنك إنشاء تكليف حتى اعتماده من الإدارة', 403)

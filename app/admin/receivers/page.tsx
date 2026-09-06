@@ -10,6 +10,7 @@ import { apiFetcher, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS } from '@/lib/utils'
 import { createReceiverSchema, type CreateReceiverInput } from '@/lib/validations/user'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { UserActionsMenu } from '@/components/admin/user-actions'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -127,6 +128,7 @@ export default function AdminReceiversPage() {
                   <TableHead>الحالة</TableHead>
                   <TableHead className="hidden md:table-cell">تكليفات</TableHead>
                   <TableHead className="hidden md:table-cell">تاريخ الإنشاء</TableHead>
+                  <TableHead className="text-start">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -144,6 +146,15 @@ export default function AdminReceiversPage() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {formatDate(user.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <UserActionsMenu
+                        user={user}
+                        onChanged={() => {
+                          queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+                          queryClient.invalidateQueries({ queryKey: ['stats'] })
+                        }}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

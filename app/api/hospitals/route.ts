@@ -12,7 +12,7 @@ export async function GET() {
     const hospitals = await db.hospital.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, location: true },
+      select: { id: true, name: true, location: true, lat: true, lng: true },
     })
     return NextResponse.json({ hospitals })
   } catch (error) {

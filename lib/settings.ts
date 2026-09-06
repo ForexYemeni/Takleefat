@@ -2,21 +2,29 @@ import { db } from '@/lib/db'
 
 /**
  * إعدادات المنصة — تكليفات | Takleefat
- * رسوم التقديم، حصة الإدارة (نسبة مئوية أو مبلغ ثابت)، وطرق الدفع (مثل محفظة جيب).
+ *
+ * نمط الرسوم (feeMode) — يُحصَّل نوع واحد فقط:
+ *   - APPLICATION: رسوم تقديم ثابتة يدفعها الكادر (تُحصَّل عند الاعتماد) — بلا حصة إدارة
+ *   - ADMIN: حصة إدارة من قيمة التكليف (نسبة مئوية أو مبلغ ثابت) — بلا رسوم تقديم
  * تُخزن في جدول settings كمفتاح/قيمة مع قيم افتراضية آمنة.
  */
+
+/** نمط تحصيل الرسوم: رسوم تقديم من الكادر أو حصة إدارة من قيمة التكليف */
+export type FeeMode = 'APPLICATION' | 'ADMIN'
 
 /** طريقة احتساب حصة الإدارة من التكليف */
 export type AdminFeeType = 'PERCENTAGE' | 'FIXED'
 
 export interface PlatformSettings {
-  /** رسوم التقديم الثابتة على التكليف (ريال يمني) — يدفعها الكادر عند الاعتماد */
+  /** نمط الرسوم — يُحصَّل نوع واحد فقط (رسوم تقديم أو حصة إدارة) */
+  feeMode: FeeMode
+  /** رسوم التقديم الثابتة (ريال يمني) — تُستخدم فقط عندما feeMode = APPLICATION */
   applicationFee: number
   /** نوع حصة الإدارة: نسبة مئوية من قيمة التكليف أو مبلغ ثابت */
   adminFeeType: AdminFeeType
-  /** نسبة الإدارة (٪) — تُستخدم عندما يكون adminFeeType = PERCENTAGE */
+  /** نسبة الإدارة (٪) — تُستخدم عندما يكون feeMode = ADMIN و adminFeeType = PERCENTAGE */
   adminPercentage: number
-  /** مبلغ ثابت للإدارة (ريال يمني) — يُستخدم عندما يكون adminFeeType = FIXED */
+  /** مبلغ ثابت للإدارة (ريال يمني) — يُستخدم عندما يكون feeMode = ADMIN و adminFeeType = FIXED */
   adminFeeFixed: number
   /** اسم طريقة الدفع — مثال: محفظة جيب */
   paymentMethod: string
@@ -29,6 +37,7 @@ export interface PlatformSettings {
 }
 
 export const SETTINGS_DEFAULTS: PlatformSettings = {
+  feeMode: 'ADMIN',
   applicationFee: 1000,
   adminFeeType: 'PERCENTAGE',
   adminPercentage: 10,
@@ -40,6 +49,7 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
+  feeMode: 'feeMode',
   applicationFee: 'applicationFee',
   adminFeeType: 'adminFeeType',
   adminPercentage: 'adminPercentage',
@@ -51,9 +61,20 @@ const KEYS: Record<keyof PlatformSettings, string> = {
 }
 
 /**
+ * رسوم التقديم المُحصَّلة فعلياً — صفر ما لم يكن نمط الرسوم «رسوم تقديم»
+ */
+export function calcApplicationFee(settings: PlatformSettings): number {
+  return settings.feeMode === 'APPLICATION'
+    ? Math.max(0, Math.round(settings.applicationFee))
+    : 0
+}
+
+/**
  * حساب حصة الإدارة من قيمة التكليف — نسبة مئوية أو مبلغ ثابت
+ * تُحصَّل فقط عندما يكون نمط الرسوم «حصة إدارة»، وإلا تكون صفراً
  */
 export function calcAdminFee(value: number, settings: PlatformSettings): number {
+  if (settings.feeMode !== 'ADMIN') return 0
   if (settings.adminFeeType === 'FIXED') {
     return Math.max(0, Math.round(settings.adminFeeFixed))
   }
@@ -61,14 +82,20 @@ export function calcAdminFee(value: number, settings: PlatformSettings): number 
 }
 
 /**
- * وصف نصي لاحتساب حصة الإدارة — يُعرض للكادر والجهات
- * مثال: «10٪ من قيمة التكليف» أو «مبلغ ثابت: 5,000 ريال»
+ * وصف نصي لاحتساب الرسوم حسب النمط النشط
+ * مثال: «رسوم تقديم: 1,000 ريال» أو «10٪ من قيمة التكليف»
  */
-export function adminFeeLabel(settings: PlatformSettings): string {
+export function feeLabel(settings: PlatformSettings): string {
+  if (settings.feeMode === 'APPLICATION') {
+    return `رسوم تقديم ${settings.applicationFee.toLocaleString('ar-YE')} ريال`
+  }
   return settings.adminFeeType === 'FIXED'
-    ? `مبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
-    : `${settings.adminPercentage}٪ من قيمة التكليف`
+    ? `حصة إدارة بمبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
+    : `حصة إدارة ${settings.adminPercentage}٪ من قيمة التكليف`
 }
+
+/** alias قديم متوافق — وصف حصة الإدارة فقط */
+export const adminFeeLabel = feeLabel
 
 /**
  * قراءة الإعدادات من قاعدة البيانات مع دمج القيم الافتراضية
@@ -90,9 +117,11 @@ export async function getSettings(): Promise<PlatformSettings> {
       return raw != null && raw.trim() !== '' ? raw : fallback
     }
 
+    const feeMode = map.get(KEYS.feeMode) === 'APPLICATION' ? 'APPLICATION' : 'ADMIN'
     const adminFeeType = map.get(KEYS.adminFeeType) === 'FIXED' ? 'FIXED' : 'PERCENTAGE'
 
     return {
+      feeMode,
       applicationFee: num('applicationFee', SETTINGS_DEFAULTS.applicationFee),
       adminFeeType,
       adminPercentage: Math.min(100, num('adminPercentage', SETTINGS_DEFAULTS.adminPercentage)),

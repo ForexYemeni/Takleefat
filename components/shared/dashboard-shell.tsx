@@ -18,6 +18,7 @@ import {
   UserRound,
   Users,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
@@ -45,9 +46,10 @@ interface NavItem {
 /**
  * قوائم التنقل — تُعرَّف داخل مكوّن العميل لتوافق RSC
  */
-const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; items: NavItem[] }> = {
+const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string; items: NavItem[] }> = {
   ADMIN: {
     roleLabel: 'مدير النظام',
+    profilePath: '/admin/profile',
     items: [
       { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/admin/nurses', label: 'الكادر التمريضي', icon: Users },
@@ -55,10 +57,12 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; items: NavItem[] }>
       { href: '/admin/assignments', label: 'التكليفات', icon: ClipboardList },
       { href: '/admin/documents', label: 'مراجعة المستندات', icon: FileCheck2 },
       { href: '/admin/settings', label: 'الرسوم وطرق الدفع', icon: Settings2 },
+      { href: '/admin/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
   },
   NURSE: {
     roleLabel: 'الكادر التمريضي',
+    profilePath: '/nurse/profile',
     items: [
       { href: '/nurse', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/nurse/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
@@ -68,9 +72,11 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; items: NavItem[] }>
   },
   RECEIVER: {
     roleLabel: 'المستلم الإداري',
+    profilePath: '/receiver/profile',
     items: [
       { href: '/receiver', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/receiver/assignments', label: 'التكليفات والتقديمات', icon: Inbox },
+      { href: '/receiver/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
   },
 }
@@ -89,11 +95,14 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
   const pathname = usePathname()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { data: session } = useSession()
+  const profilePath = NAV_CONFIG[role].profilePath
+  const displayName = (session?.user?.name as string | undefined) || userName
   const [mobileOpen, setMobileOpen] = useState(false)
   const navItems = NAV_CONFIG[role].items
   const roleLabel = NAV_CONFIG[role].roleLabel
 
-  const initials = userName
+  const initials = displayName
     .split(' ')
     .slice(0, 2)
     .map((w) => w[0])
@@ -150,7 +159,7 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">{userName}</p>
+            <p className="truncate text-sm font-bold">{displayName}</p>
             <p className="text-xs text-muted-foreground">{roleLabel}</p>
           </div>
           <Button
@@ -215,17 +224,17 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
                       </AvatarFallback>
                     </Avatar>
                     <span className="hidden max-w-32 truncate text-sm font-semibold md:inline-block">
-                      {userName}
+                      {displayName}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
                   <DropdownMenuLabel>
-                    <p className="truncate text-sm font-bold">{userName}</p>
+                    <p className="truncate text-sm font-bold">{displayName}</p>
                     <p className="text-xs font-normal text-muted-foreground">{roleLabel}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/nurse/profile')} className="gap-2">
+                  <DropdownMenuItem onClick={() => router.push(profilePath)} className="gap-2">
                     <UserRound className="size-4" />
                     الملف الشخصي
                   </DropdownMenuItem>

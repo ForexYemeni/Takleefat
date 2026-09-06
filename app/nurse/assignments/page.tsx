@@ -66,6 +66,7 @@ interface OpenPost {
 }
 
 interface PlatformSettings {
+  feeMode: 'APPLICATION' | 'ADMIN'
   applicationFee: number
   adminFeeType: 'PERCENTAGE' | 'FIXED'
   adminPercentage: number
@@ -118,24 +119,33 @@ interface MyAssignment {
 }
 
 function computeFees(value: number, settings: PlatformSettings): FeeBreakdown {
+  // يُحصّل نوع واحد فقط حسب نمط الرسوم: حصة إدارة أو رسوم تقديم
   const adminFee =
-    settings.adminFeeType === 'FIXED'
-      ? Math.max(0, Math.round(settings.adminFeeFixed))
-      : Math.round((value * settings.adminPercentage) / 100)
+    settings.feeMode === 'ADMIN'
+      ? settings.adminFeeType === 'FIXED'
+        ? Math.max(0, Math.round(settings.adminFeeFixed))
+        : Math.round((value * settings.adminPercentage) / 100)
+      : 0
+  const applicationFee = settings.feeMode === 'APPLICATION' ? Math.max(0, settings.applicationFee) : 0
   return {
     value,
     adminFee,
-    applicationFee: settings.applicationFee,
-    dueToAdmin: adminFee + settings.applicationFee,
-    netForNurse: value - adminFee - settings.applicationFee,
+    applicationFee,
+    dueToAdmin: adminFee + applicationFee,
+    netForNurse: value - adminFee - applicationFee,
   }
 }
 
-function adminFeeLabel(settings: PlatformSettings): string {
+function feeLabel(settings: PlatformSettings): string {
+  if (settings.feeMode === 'APPLICATION') {
+    return `رسوم تقديم ${settings.applicationFee.toLocaleString('ar-YE')} ريال`
+  }
   return settings.adminFeeType === 'FIXED'
-    ? `مبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
-    : `${settings.adminPercentage}٪ من قيمة التكليف`
+    ? `حصة إدارة بمبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
+    : `حصة إدارة ${settings.adminPercentage}٪ من قيمة التكليف`
 }
+
+const adminFeeLabel = feeLabel
 
 export default function NurseAssignmentsPage() {
   const [tab, setTab] = useState('available')

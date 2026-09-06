@@ -27,6 +27,26 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/**
+ * DELETE /api/notifications — حذف جميع إشعارات المستخدم الحالي
+ */
+export async function DELETE() {
+  try {
+    const session = await requireSession()
+
+    const result = await db.notification.deleteMany({
+      where: { userId: session.user.id },
+    })
+
+    return NextResponse.json({
+      message: `تم حذف ${result.count} إشعار`,
+      deleted: result.count,
+    })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
 const markReadSchema = z.object({
   id: z.string().optional(),
   all: z.boolean().optional(),

@@ -32,6 +32,8 @@ import {
 } from '@/lib/validations/post'
 import { createAssignmentSchema, type CreateAssignmentInput } from '@/lib/validations/assignment'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { CreatePostDialog } from '@/components/shared/create-post-dialog'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -119,6 +121,7 @@ export default function AdminAssignmentsPage() {
   const [status, setStatus] = useState('ALL')
   const [createOpen, setCreateOpen] = useState(false)
   const [details, setDetails] = useState<AdminAssignment | null>(null)
+  const [pendingDeleteAssignment, setPendingDeleteAssignment] = useState<AdminAssignment | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-assignments'],
@@ -361,11 +364,7 @@ export default function AdminAssignmentsPage() {
                   variant="destructive"
                   className="gap-2"
                   disabled={deleteAssignmentMutation.isPending}
-                  onClick={() => {
-                    if (confirm(`حذف التكليف «${details.title}» نهائياً؟ سيُشعر المعنيون بالحذف.`)) {
-                      deleteAssignmentMutation.mutate(details.id)
-                    }
-                  }}
+                  onClick={() => setPendingDeleteAssignment(details)}
                 >
                   <Trash2 className="size-4" />
                   حذف التكليف نهائياً
@@ -375,6 +374,27 @@ export default function AdminAssignmentsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* بطاقة تأكيد حذف التكليف المؤكد */}
+      <ConfirmDialog
+        open={!!pendingDeleteAssignment}
+        onOpenChange={(v) => !v && setPendingDeleteAssignment(null)}
+        tone="danger"
+        title="حذف التكليف المؤكد"
+        description={
+          pendingDeleteAssignment
+            ? `سيتم حذف «${pendingDeleteAssignment.title}» نهائياً من سجلات المنصة مع سجل أحداثه، ويُشعر الكادر والجهة بالحذف.`
+            : ''
+        }
+        confirmLabel="نعم، احذف نهائياً"
+        processing={deleteAssignmentMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDeleteAssignment) return
+          deleteAssignmentMutation.mutate(pendingDeleteAssignment.id, {
+            onSuccess: () => setPendingDeleteAssignment(null),
+          })
+        }}
+      />
     </div>
   )
 }
@@ -567,6 +587,8 @@ function CreateAssignmentDialog({
 function AdminPostsTab() {
   const queryClient = useQueryClient()
   const [editPost, setEditPost] = useState<AdminPost | null>(null)
+  const [createPostOpen, setCreatePostOpen] = useState(false)
+  const [pendingDeletePost, setPendingDeletePost] = useState<AdminPost | null>(null)
 
   const { data } = useQuery({
     queryKey: ['admin-posts'],
@@ -596,13 +618,25 @@ function AdminPostsTab() {
       <EmptyState
         icon={ClipboardList}
         title="لا توجد تكليفات مُعلنة"
-        description="التكليفات التي ينشئها المستلمون الإداريون للتقديم عليها تظهر هنا — ويمكنك تعديل عنوانها أو حذفها."
+        description="أضف تكليفاً مُعلناً يقدّم عليه الكادر التمريضي — الجهات والأقسام من قوائم الإدارة."
+        action={
+          <Button onClick={() => setCreatePostOpen(true)} className="gap-2">
+            <Plus className="size-4" />
+            إضافة تكليف مُعلن
+          </Button>
+        }
       />
     )
   }
 
   return (
     <>
+      <div className="flex justify-end">
+        <Button onClick={() => setCreatePostOpen(true)} className="gap-2">
+          <Plus className="size-4" />
+          إضافة تكليف مُعلن
+        </Button>
+      </div>
       <div className="overflow-hidden rounded-2xl border bg-card">
         <div className="overflow-x-auto">
           <Table>
@@ -653,11 +687,7 @@ function AdminPostsTab() {
                         aria-label="حذف التكليف المُعلن"
                         className="text-muted-foreground hover:text-destructive"
                         disabled={deleteMutation.isPending}
-                        onClick={() => {
-                          if (confirm(`حذف «${p.title}» نهائياً؟ تُرفض التقديمات المعلقة بإشعار.`)) {
-                            deleteMutation.mutate(p.id)
-                          }
-                        }}
+                        onClick={() => setPendingDeletePost(p)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -671,6 +701,29 @@ function AdminPostsTab() {
       </div>
 
       <EditPostDialog post={editPost} onOpenChange={(open) => !open && setEditPost(null)} />
+
+      {/* إضافة تكليف مُعلن من حساب الإدارة — الجهات والأقسام من قوائم الإدارة */}
+      <CreatePostDialog
+        open={createPostOpen}
+        onOpenChange={setCreatePostOpen}
+        onCreated={() => invalidate()}
+      />
+
+      {/* بطاقة تأكيد الحذف الاحترافية */}
+      <ConfirmDialog
+        open={!!pendingDeletePost}
+        onOpenChange={(v) => !v && setPendingDeletePost(null)}
+        tone="danger"
+        title="حذف التكليف المُعلن"
+        description={
+          pendingDeletePost
+            ? `سيتم حذف «${pendingDeletePost.title}» نهائياً وتُرفض تقديماته المعلقة بإشعار لأصحابها. لا يمكن التراجع.`
+            : ''
+        }
+        confirmLabel="نعم، احذف التكليف"
+        processing={deleteMutation.isPending}
+        onConfirm={() => pendingDeletePost && deleteMutation.mutate(pendingDeletePost.id)}
+      />
     </>
   )
 }

@@ -15,9 +15,12 @@ export interface AppNotification {
 
 /**
  * إشعارات المستخدم — تحديث تلقائي كل 15 ثانية
+ * + حذف فردي وحذف الكل وتعليم كمقروء
  */
 export function useNotifications() {
   const queryClient = useQueryClient()
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['notifications'] })
 
   const query = useQuery({
     queryKey: ['notifications'],
@@ -35,7 +38,17 @@ export function useNotifications() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: invalidate,
+  })
+
+  const deleteOne = useMutation({
+    mutationFn: (id: string) => apiFetcher<{ message: string }>(`/api/notifications/${id}`, { method: 'DELETE' }),
+    onSuccess: invalidate,
+  })
+
+  const deleteAll = useMutation({
+    mutationFn: () => apiFetcher<{ message: string }>('/api/notifications', { method: 'DELETE' }),
+    onSuccess: invalidate,
   })
 
   return {
@@ -43,5 +56,8 @@ export function useNotifications() {
     unreadCount: query.data?.unreadCount ?? 0,
     isLoading: query.isLoading,
     markRead: markRead.mutate,
+    deleteOne: deleteOne.mutate,
+    deleteAll: deleteAll.mutate,
+    isDeleting: deleteOne.isPending || deleteAll.isPending,
   }
 }

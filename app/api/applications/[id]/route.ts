@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { reviewApplicationSchema } from '@/lib/validations/post'
-import { getSettings, calcAdminFee } from '@/lib/settings'
+import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
 import { notify } from '@/lib/notifications'
 import { formatCurrency } from '@/lib/utils'
 
@@ -118,10 +118,18 @@ export async function PATCH(
     ])
 
     // إشعار الكادر المقبول مع تفاصيل الدفع
-    const dueAmount = adminFee + settings.applicationFee
+    // يُحصّل نوع واحد فقط حسب نمط الرسوم: حصة الإدارة أو رسوم التقديم
+    const applicationFee = calcApplicationFee(settings)
+    const dueAmount = adminFee + applicationFee
+    const dueBreakdown =
+      adminFee > 0 && applicationFee > 0
+        ? `حصة الإدارة + رسوم التقديم`
+        : adminFee > 0
+          ? 'حصة الإدارة'
+          : 'رسوم التقديم'
     await notify(application.nurseId, {
       title: 'تهانينا! تم اعتماد تقديمك',
-      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (حصة الإدارة + رسوم التقديم) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName}`,
+      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (${dueBreakdown}) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName}`,
       type: 'APPLICATION_APPROVED',
       link: '/nurse/assignments',
     })

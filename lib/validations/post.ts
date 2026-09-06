@@ -70,6 +70,10 @@ export const reviewApplicationSchema = z.object({
 
 export const settingsSchema = z
   .object({
+    // نمط الرسوم — يُحصّل نوع واحد فقط: رسوم تقديم أو حصة إدارة
+    feeMode: z.enum(['APPLICATION', 'ADMIN'], {
+      error: 'نمط الرسوم غير صحيح',
+    }),
     applicationFee: z.coerce
       .number({ error: 'رسوم التقديم غير صحيحة' })
       .int('رسوم التقديم يجب أن تكون رقماً صحيحاً')
@@ -104,8 +108,16 @@ export const settingsSchema = z
     paymentNotes: z.string().max(500, 'الملاحظات طويلة جداً').optional().or(z.literal('')),
   })
   .refine(
-    (data) => data.adminFeeType === 'PERCENTAGE' || data.adminFeeFixed >= 1,
+    (data) =>
+      data.feeMode === 'APPLICATION' ||
+      data.adminFeeType === 'PERCENTAGE' ||
+      data.adminFeeFixed >= 1,
     { message: 'أدخل مبلغاً ثابتاً للحصة الإدارية أكبر من صفر', path: ['adminFeeFixed'] }
+  )
+  .refine(
+    (data) =>
+      data.feeMode === 'ADMIN' || data.applicationFee >= 1,
+    { message: 'أدخل رسوم تقديم أكبر من صفر أو حوّل النمط إلى حصة إدارة', path: ['applicationFee'] }
   )
 
 // ---------- الجهات الصحية والأقسام (تُدار من الإدارة) ----------
@@ -116,6 +128,9 @@ export const hospitalSchema = z.object({
     .min(2, 'اسم الجهة مطلوب')
     .max(150, 'الاسم طويل جداً'),
   location: z.string().max(150, 'الموقع طويل جداً').optional().or(z.literal('')),
+  // الموقع الجغرافي الحقيقي (إحداثيات من الخريطة التفاعلية)
+  lat: z.coerce.number().min(-90).max(90).nullable().optional(),
+  lng: z.coerce.number().min(-180).max(180).nullable().optional(),
 })
 
 export const hospitalUpdateSchema = hospitalSchema.partial().extend({

@@ -57,7 +57,10 @@ export async function GET(
       },
     })
 
-    return NextResponse.json({ applications })
+    // applicationId = معرّف التقديم (تتوقعه بطاقة السيرة الذاتية في الواجهة)
+    return NextResponse.json({
+      applications: applications.map((a) => ({ ...a, applicationId: a.id })),
+    })
   } catch (error) {
     return handleApiError(error)
   }

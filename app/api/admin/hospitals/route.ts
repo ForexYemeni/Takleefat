@@ -33,7 +33,12 @@ export async function POST(req: NextRequest) {
     if (exists) return jsonError('هذه الجهة الصحية مضافة مسبقاً', 409)
 
     const hospital = await db.hospital.create({
-      data: { name, location: parsed.data.location?.trim() || null },
+      data: {
+        name,
+        location: parsed.data.location?.trim() || null,
+        lat: parsed.data.lat ?? null,
+        lng: parsed.data.lng ?? null,
+      },
     })
 
     return NextResponse.json(

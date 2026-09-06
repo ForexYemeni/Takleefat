@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
-import { getSettings, calcAdminFee } from '@/lib/settings'
+import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
 
 /**
  * GET /api/me/applications — تقديمات الكادر التمريضي الحالي
@@ -35,17 +35,18 @@ export async function GET() {
       getSettings(),
     ])
 
-    // حساب حصة الإدارة والصافي المستحق لكل تقديم
+    // حساب المبلغ الواجب لكل تقديم — يُحصّل نوع واحد فقط حسب نمط الرسوم
     const enriched = applications.map((app) => {
       const adminFee = calcAdminFee(app.post.value, settings)
+      const applicationFee = calcApplicationFee(settings)
       return {
         ...app,
         fees: {
           value: app.post.value,
           adminFee,
-          applicationFee: settings.applicationFee,
-          dueToAdmin: adminFee + settings.applicationFee,
-          netForNurse: app.post.value - adminFee - settings.applicationFee,
+          applicationFee,
+          dueToAdmin: adminFee + applicationFee,
+          netForNurse: app.post.value - adminFee - applicationFee,
         },
       }
     })

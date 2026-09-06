@@ -31,6 +31,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const {
+      feeMode,
       applicationFee,
       adminFeeType,
       adminPercentage,
@@ -42,6 +43,7 @@ export async function PATCH(req: NextRequest) {
     } = parsed.data
 
     await Promise.all([
+      setSetting('feeMode', feeMode),
       setSetting('applicationFee', String(applicationFee)),
       setSetting('adminFeeType', adminFeeType),
       setSetting('adminPercentage', String(adminPercentage)),

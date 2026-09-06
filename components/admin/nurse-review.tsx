@@ -3,23 +3,19 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  BadgeCheck,
-  Ban,
   Eye,
   EyeOff,
   FileText,
   Lock,
-  MoreHorizontal,
   PhoneIcon,
   Search,
   UserPlus,
-  UserX,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
+import { apiFetcher, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '@/lib/utils'
 import {
   createNurseSchema,
@@ -27,6 +23,7 @@ import {
   type CreateNurseFormValues,
 } from '@/lib/validations/user'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { UserActionsMenu } from '@/components/admin/user-actions'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { DocumentViewer } from '@/components/shared/document-viewer'
 import { Button } from '@/components/ui/button'
@@ -100,8 +97,6 @@ export function NurseReview() {
   const [status, setStatus] = useState<string>('ALL')
   const [search, setSearch] = useState('')
   const [detailsUser, setDetailsUser] = useState<AdminUser | null>(null)
-  const [rejectUser, setRejectUser] = useState<AdminUser | null>(null)
-  const [rejectNote, setRejectNote] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -141,30 +136,6 @@ export function NurseReview() {
       !search || u.name.includes(search) || u.phone.includes(search)
     return matchesStatus && matchesSearch
   })
-
-  const reviewMutation = useMutation({
-    mutationFn: ({ id, newStatus, note }: { id: string; newStatus: string; note?: string }) =>
-      apiPatch<{ message: string }>(`/api/admin/users/${id}`, {
-        status: newStatus,
-        rejectNote: note ?? '',
-      }),
-    onSuccess: (res) => {
-      toast.success(res.message)
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      queryClient.invalidateQueries({ queryKey: ['stats'] })
-      setRejectUser(null)
-      setRejectNote('')
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const approve = (user: AdminUser) => {
-    reviewMutation.mutate({ id: user.id, newStatus: 'APPROVED' })
-  }
-
-  const suspend = (user: AdminUser) => {
-    reviewMutation.mutate({ id: user.id, newStatus: 'SUSPENDED' })
-  }
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -256,49 +227,18 @@ export function NurseReview() {
                       {formatDate(user.createdAt)}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="إجراءات الحساب">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => setDetailsUser(user)} className="gap-2">
-                            <Eye className="size-4" />
-                            عرض التفاصيل
-                          </DropdownMenuItem>
-                          {user.status !== 'APPROVED' && (
-                            <DropdownMenuItem
-                              onClick={() => approve(user)}
-                              className="gap-2 text-emerald-700 focus:text-emerald-700"
-                            >
-                              <BadgeCheck className="size-4" />
-                              اعتماد الحساب
-                            </DropdownMenuItem>
-                          )}
-                          {user.status !== 'REJECTED' && user.status !== 'APPROVED' && (
-                            <DropdownMenuItem
-                              onClick={() => setRejectUser(user)}
-                              className="gap-2 text-red-600 focus:text-red-600"
-                            >
-                              <UserX className="size-4" />
-                              رفض الحساب
-                            </DropdownMenuItem>
-                          )}
-                          {user.status === 'APPROVED' && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => suspend(user)}
-                                className="gap-2 text-red-600 focus:text-red-600"
-                              >
-                                <Ban className="size-4" />
-                                إيقاف الحساب
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <UserActionsMenu
+                        user={user}
+                        onChanged={() => {
+                          queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+                          queryClient.invalidateQueries({ queryKey: ['stats'] })
+                        }}
+                      >
+                        <DropdownMenuItem onClick={() => setDetailsUser(user)} className="gap-2">
+                          <Eye className="size-4" />
+                          عرض التفاصيل
+                        </DropdownMenuItem>
+                      </UserActionsMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -318,43 +258,6 @@ export function NurseReview() {
             </DialogDescription>
           </DialogHeader>
           {detailsUser && <NurseDetails userId={detailsUser.id} />}
-        </DialogContent>
-      </Dialog>
-
-      {/* رفض الحساب */}
-      <Dialog open={!!rejectUser} onOpenChange={(open) => !open && setRejectUser(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>رفض الحساب</DialogTitle>
-            <DialogDescription>
-              سيتم إشعار {rejectUser?.name} بسبب الرفض. يجب توضيح السبب.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="rejectNote">سبب الرفض</Label>
-            <Textarea
-              id="rejectNote"
-              placeholder="مثال: صورة المزاولة غير واضحة، يرجى رفع نسخة أوضح"
-              value={rejectNote}
-              onChange={(e) => setRejectNote(e.target.value)}
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectUser(null)}>
-              إلغاء
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={!rejectNote.trim() || reviewMutation.isPending}
-              onClick={() =>
-                rejectUser &&
-                reviewMutation.mutate({ id: rejectUser.id, newStatus: 'REJECTED', note: rejectNote })
-              }
-            >
-              تأكيد الرفض
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

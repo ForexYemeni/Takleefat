@@ -97,6 +97,7 @@ interface ReceiverAssignment {
 }
 
 interface PlatformSettings {
+  feeMode: 'APPLICATION' | 'ADMIN'
   applicationFee: number
   adminFeeType: 'PERCENTAGE' | 'FIXED'
   adminPercentage: number
@@ -274,9 +275,11 @@ function MyPosts({
                   <p className="text-muted-foreground">حصة الإدارة</p>
                   <p className="mt-0.5 font-bold" dir="ltr">
                     {settings
-                      ? settings.adminFeeType === 'FIXED'
-                        ? `${formatCurrency(settings.adminFeeFixed)} ثابت`
-                        : `${formatCurrency(Math.round((post.value * settings.adminPercentage) / 100))} (${settings.adminPercentage}٪)`
+                      ? settings.feeMode === 'ADMIN'
+                        ? settings.adminFeeType === 'FIXED'
+                          ? `${formatCurrency(settings.adminFeeFixed)} ثابت`
+                          : `${formatCurrency(Math.round((post.value * settings.adminPercentage) / 100))} (${settings.adminPercentage}٪)`
+                        : '— (نمط رسوم التقديم)'
                       : '—'}
                   </p>
                 </div>
@@ -323,19 +326,32 @@ function MyPosts({
                 </p>
               )}
 
-              {post.status !== 'OPEN' && post.status !== 'CANCELLED' && settings && (
-                <PaymentCard
-                  settings={settings}
-                  breakdown={[
-                    { label: `نسبة الإدارة (${settings.adminPercentage}٪)`, amount: Math.round((post.value * settings.adminPercentage) / 100) },
-                    { label: 'رسوم التقديم (لكل كادر معتمد)', amount: settings.applicationFee * Math.max(1, approvedCount) },
-                  ]}
-                  dueAmount={
-                    Math.round((post.value * settings.adminPercentage) / 100) +
-                    settings.applicationFee * Math.max(1, approvedCount)
-                  }
-                />
-              )}
+              {post.status !== 'OPEN' && post.status !== 'CANCELLED' && settings && (() => {
+                // يُحصّل نوع واحد فقط حسب نمط الرسوم المختار من الإدارة
+                const count = Math.max(1, approvedCount)
+                const breakdown =
+                  settings.feeMode === 'ADMIN'
+                    ? [
+                        {
+                          label:
+                            settings.adminFeeType === 'FIXED'
+                              ? `حصة الإدارة (مبلغ ثابت × ${count})`
+                              : `حصة الإدارة (${settings.adminPercentage}٪ × ${count})`,
+                          amount:
+                            (settings.adminFeeType === 'FIXED'
+                              ? settings.adminFeeFixed
+                              : Math.round((post.value * settings.adminPercentage) / 100)) * count,
+                        },
+                      ]
+                    : [
+                        {
+                          label: `رسوم التقديم (لكل كادر معتمد × ${count})`,
+                          amount: settings.applicationFee * count,
+                        },
+                      ]
+                const due = breakdown.reduce((s, b) => s + b.amount, 0)
+                return <PaymentCard settings={settings} breakdown={breakdown} dueAmount={due} />
+              })()}
 
               {post.status === 'OPEN' && (
                 <Button
