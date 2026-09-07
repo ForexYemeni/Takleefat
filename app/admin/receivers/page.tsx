@@ -11,11 +11,15 @@ import { formatDate, USER_STATUS_LABELS } from '@/lib/utils'
 import { createReceiverSchema, type CreateReceiverInput } from '@/lib/validations/user'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { UserActionsMenu } from '@/components/admin/user-actions'
+import { ReceiverProfileDialog } from '@/components/admin/receiver-profile'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -50,6 +54,8 @@ export default function AdminReceiversPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [detailsUserId, setDetailsUserId] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', 'RECEIVER'],
@@ -166,7 +172,18 @@ export default function AdminReceiversPage() {
                           queryClient.invalidateQueries({ queryKey: ['admin-users'] })
                           queryClient.invalidateQueries({ queryKey: ['stats'] })
                         }}
-                      />
+                      >
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setDetailsUserId(user.id)
+                            setDetailsOpen(true)
+                          }}
+                          className="gap-2"
+                        >
+                          <Eye className="size-4" />
+                          عرض البيانات الكاملة
+                        </DropdownMenuItem>
+                      </UserActionsMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -175,6 +192,13 @@ export default function AdminReceiversPage() {
           </div>
         </div>
       )}
+
+      {/* الملف التفصيلي للمستلم الإداري — قبل الاعتماد وبعده */}
+      <ReceiverProfileDialog
+        userId={detailsUserId}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+      />
 
       {/* حوار إضافة مستلم */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

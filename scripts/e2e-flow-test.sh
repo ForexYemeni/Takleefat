@@ -533,6 +533,52 @@ DELP_MSG=$(echo "$DELP" | jget "['message']")
 [ -n "$DELP_MSG" ] && check "الإدارة تحذف تكليفاً معلناً" "ok" "ok"
 echo "   $DELP_MSG"
 
+echo "=========== 20) الملف التفصيلي للمستلم الإداري (قبل الاعتماد وبعده) ==========="
+# مستلم جديد PENDING — يُعرض ملفه بالكامل قبل الاعتماد
+REG_P20=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"RECEIVER","name":"مستلم قيد المراجعة","phone":"755550201","password":"Pending@1234","confirmPassword":"Pending@1234","hospitalName":"مستشفى المراجعة العام"}')
+P20_ID=$(echo "$REG_P20" | jget "['user']['id']")
+[ -n "$P20_ID" ] && check "إنشاء مستلم جديد (PENDING) لعرض ملفه" "ok" "ok"
+
+P20_DET=$(code -b "$DIR/admin.jar" $BASE/api/admin/users/$P20_ID)
+check "عرض الملف التفصيلي لمستلم قبل الاعتماد (PENDING) → 200" "200" "$P20_DET"
+
+P20_DATA=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/users/$P20_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+u=d['user']; r=d['receiver']
+print(u['status'], u['phone'], u['hospitalName'], r['totals']['posts'], r['totals']['withdrawals'], r['earnings']['summary']['totalEarned'])")
+check "ملف PENDING: الحالة + الهاتف + الجهة + أصفار الأرباح" "PENDING 755550201 مستشفى المراجعة العام 0 0 0" "$P20_DATA"
+
+# المستلم المعتمد — الملف يعرض تكليفاته وأرباحه وسحوباته
+DET_CODE=$(code -b "$DIR/admin.jar" $BASE/api/admin/users/$RCV_ID)
+check "عرض الملف التفصيلي لمستلم معتمد → 200" "200" "$DET_CODE"
+
+DET_DATA=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/users/$RCV_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+u=d['user']; r=d['receiver']
+print(u['status'], u['phone'], r['totals']['posts'] > 0, 'available' in r['earnings']['summary'])")
+check "ملف المعتمد: الحالة + الهاتف + تكليفات معلنة + ملخص أرباح" "APPROVED 733333333 True True" "$DET_DATA"
+
+# نفس الملف التفصيلي يعمل للكادر التمريضي (بيانات + مستندات + تقييمات)
+NURSE_DET=$(code -b "$DIR/admin.jar" $BASE/api/admin/users/$NURSE_ID)
+check "الملف التفصيلي للكادر التمريضي → 200" "200" "$NURSE_DET"
+
+NURSE_DATA=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/users/$NURSE_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+u=d['user']; n=d['nurse']
+print(len(n['documents']) > 0, 'ratings' in n, 'average' in n['ratings'])")
+check "ملف الكادر: مستندات + تقييمات داخل الملف" "True True True" "$NURSE_DATA"
+
+# حماية: المستلم لا يستطيع عرض ملفات الآخرين
+DET_FORBID=$(code -b "$DIR/receiver.jar" $BASE/api/admin/users/$NURSE_ID)
+check "المستلم يُمنع من عرض الملفات → 403" "403" "$DET_FORBID"
+
+# تنظيف مستلم القسم 20
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$P20_ID -o /dev/null
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

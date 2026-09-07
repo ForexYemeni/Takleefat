@@ -388,25 +388,93 @@ export function NurseReview() {
 }
 
 /**
- * تفاصيل الكادر التمريضي + مستنداته داخل الحوار
+ * تفاصيل الكادر التمريضي — البيانات الشخصية + التقييمات + المستندات داخل الحوار
  */
+interface UserDetailsResponse {
+  user: AdminUser & { walletAddress: string | null; accountNumber: string | null; updatedAt: string }
+  nurse: {
+    documents: AdminDocument[]
+    ratings: {
+      average: number | null
+      count: number
+      dimensions: {
+        punctuality: number | null
+        quality: number | null
+        communication: number | null
+        discipline: number | null
+      }
+      recent: Array<{
+        id: string
+        overall: number
+        comment: string | null
+        createdAt: string
+        receiver: { name: string } | null
+        assignment: { title: string } | null
+      }>
+    }
+  }
+}
+
 function NurseDetails({ userId }: { userId: string }) {
   const [viewerDoc, setViewerDoc] = useState<AdminDocument | null>(null)
 
-  const { data: docsData } = useQuery({
-    queryKey: ['admin-documents', 'user', userId],
-    queryFn: () => apiFetcher<{ documents: AdminDocument[] }>(`/api/admin/documents`),
-    select: (res) => ({
-      documents: res.documents.filter((d) => d.userId === userId),
-    }),
+  const { data } = useQuery({
+    queryKey: ['admin-user-details', userId],
+    queryFn: () => apiFetcher<UserDetailsResponse>(`/api/admin/users/${userId}`),
   })
+
+  const user = data?.user
+  const nurse = data?.nurse
 
   return (
     <div className="space-y-4">
-      {docsData?.documents.length ? (
+      {/* البيانات الشخصية */}
+      {user && (
+        <div className="rounded-2xl border bg-gradient-to-bl from-primary/5 to-transparent p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2 text-base font-extrabold">
+                {user.name}
+                <StatusBadge status={user.status} labels={USER_STATUS_LABELS} />
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground" dir="ltr">
+                {user.phone}
+              </p>
+            </div>
+            {nurse?.ratings.average != null && (
+              <div className="rounded-xl border bg-background px-3 py-2 text-center">
+                <p className="text-base font-extrabold text-amber-600">★ {nurse.ratings.average}</p>
+                <p className="text-[10px] text-muted-foreground">{nurse.ratings.count} تقييم</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+            <div className="rounded-xl border bg-background p-2.5">
+              <p className="text-[11px] text-muted-foreground">التخصص</p>
+              <p className="truncate font-bold">{user.specialty ?? '—'}</p>
+            </div>
+            <div className="rounded-xl border bg-background p-2.5">
+              <p className="text-[11px] text-muted-foreground">المؤهل</p>
+              <p className="truncate font-bold">{user.qualification ?? '—'}</p>
+            </div>
+            <div className="rounded-xl border bg-background p-2.5">
+              <p className="text-[11px] text-muted-foreground">الخبرة</p>
+              <p className="font-bold">{user.yearsOfExperience != null ? `${user.yearsOfExperience} سنة` : '—'}</p>
+            </div>
+          </div>
+          {user.status === 'REJECTED' && user.rejectNote && (
+            <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+              سبب الرفض: {user.rejectNote}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* المستندات المرفوعة */}
+      {nurse?.documents.length ? (
         <div className="space-y-2">
           <p className="text-sm font-bold">المستندات المرفوعة</p>
-          {docsData.documents.map((doc) => (
+          {nurse.documents.map((doc) => (
             <button
               key={doc.id}
               onClick={() => setViewerDoc(doc)}

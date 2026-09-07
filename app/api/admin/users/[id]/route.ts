@@ -4,7 +4,177 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { reviewUserSchema, resetPasswordSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
+import { getSettings } from '@/lib/settings'
 import { USER_STATUS_LABELS } from '@/lib/utils'
+
+/**
+ * GET /api/admin/users/[id] — الملف التفصيلي الكامل للحساب (قبل الاعتماد وبعده)
+ * - المستلم الإداري: بياناته + تكليفاته المُعلنة + تكليفاته + أرباحه + طلبات سحبه + محفظته
+ * - الكادر التمريضي: بياناته + مستنداته + تكليفاته + تقييماته
+ * لا تُرجع كلمة المرور إطلاقاً، ولا ينطبق على حسابات المديرين.
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireRole('ADMIN')
+    const { id } = await params
+
+    const user = await db.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        status: true,
+        specialty: true,
+        qualification: true,
+        yearsOfExperience: true,
+        hospitalName: true,
+        rejectNote: true,
+        walletAddress: true,
+        accountNumber: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { documents: true, assignments: true, posts: true, notifications: true } },
+      },
+    })
+    if (!user) return jsonError('الحساب غير موجود', 404)
+    if (user.role === 'ADMIN') return jsonError('لا يمكن عرض ملفات مديري النظام', 403)
+
+    // ---------- المستلم الإداري: تكليفات مُعلنة + تكليفات + أرباح + سحوبات ----------
+    if (user.role === 'RECEIVER') {
+      const [posts, assignments, earningRecords, recentWithdrawals, allWithdrawals, earnedAgg, settings] =
+        await Promise.all([
+          db.post.findMany({
+            where: { receiverId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: {
+              id: true, number: true, title: true, facility: true, department: true,
+              value: true, hours: true, status: true, createdAt: true,
+              _count: { select: { applications: true } },
+            },
+          }),
+          db.assignment.findMany({
+            where: { receiverId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: {
+              id: true, title: true, facility: true, department: true, status: true,
+              value: true, adminFee: true, paymentStatus: true, createdAt: true,
+              nurse: { select: { name: true } },
+            },
+          }),
+          db.receiverEarning.findMany({
+            where: { receiverId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: {
+              id: true, amount: true, percent: true, createdAt: true,
+              assignment: { select: { id: true, title: true } },
+            },
+          }),
+          db.withdrawal.findMany({
+            where: { receiverId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          }),
+          db.withdrawal.findMany({ where: { receiverId: id }, select: { status: true, amount: true } }),
+          db.receiverEarning.aggregate({ where: { receiverId: id }, _sum: { amount: true } }),
+          getSettings(),
+        ])
+
+      const totalEarned = earnedAgg._sum.amount ?? 0
+      const withdrawn = allWithdrawals.filter((w) => w.status === 'PAID').reduce((s, w) => s + w.amount, 0)
+      const pending = allWithdrawals.filter((w) => w.status === 'PENDING').reduce((s, w) => s + w.amount, 0)
+      const available = Math.max(0, totalEarned - withdrawn - pending)
+
+      return NextResponse.json({
+        user,
+        receiver: {
+          posts,
+          assignments,
+          earnings: {
+            summary: {
+              totalEarned,
+              withdrawn,
+              pending,
+              available,
+              sharePercent: settings.receiverSharePercent,
+            },
+            records: earningRecords,
+          },
+          withdrawals: recentWithdrawals,
+          totals: {
+            posts: user._count.posts,
+            withdrawals: allWithdrawals.length,
+          },
+        },
+      })
+    }
+
+    // ---------- الكادر التمريضي: مستندات + تكليفات + تقييمات ----------
+    const [documents, assignments, ratingsAgg, recentRatings] = await Promise.all([
+      db.document.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, type: true, title: true, fileName: true, fileUrl: true,
+          fileSize: true, mimeType: true, status: true, reviewNote: true, createdAt: true,
+        },
+      }),
+      db.assignment.findMany({
+        where: { nurseId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true, title: true, facility: true, department: true, status: true,
+          value: true, adminFee: true, paymentStatus: true, createdAt: true,
+          receiver: { select: { name: true } },
+        },
+      }),
+      db.nurseRating.aggregate({
+        where: { nurseId: id },
+        _avg: { overall: true, punctuality: true, quality: true, communication: true, discipline: true },
+        _count: true,
+      }),
+      db.nurseRating.findMany({
+        where: { nurseId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true, overall: true, comment: true, createdAt: true,
+          receiver: { select: { name: true } },
+          assignment: { select: { title: true } },
+        },
+      }),
+    ])
+
+    return NextResponse.json({
+      user,
+      nurse: {
+        documents,
+        assignments,
+        ratings: {
+          average: ratingsAgg._avg.overall ? Number(ratingsAgg._avg.overall.toFixed(2)) : null,
+          count: ratingsAgg._count,
+          dimensions: {
+            punctuality: ratingsAgg._avg.punctuality ? Number(ratingsAgg._avg.punctuality.toFixed(2)) : null,
+            quality: ratingsAgg._avg.quality ? Number(ratingsAgg._avg.quality.toFixed(2)) : null,
+            communication: ratingsAgg._avg.communication ? Number(ratingsAgg._avg.communication.toFixed(2)) : null,
+            discipline: ratingsAgg._avg.discipline ? Number(ratingsAgg._avg.discipline.toFixed(2)) : null,
+          },
+          recent: recentRatings,
+        },
+      },
+    })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
 
 /**
  * PATCH /api/admin/users/[id]

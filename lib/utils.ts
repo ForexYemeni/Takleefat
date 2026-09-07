@@ -58,6 +58,12 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PAID: 'مدفوع',
 }
 
+export const WITHDRAWAL_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'قيد المعالجة',
+  PAID: 'تم الصرف',
+  REJECTED: 'مرفوض',
+}
+
 export const GENDER_LABELS: Record<string, string> = {
   MALE: 'ذكر',
   FEMALE: 'أنثى',
