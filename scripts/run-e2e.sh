@@ -12,17 +12,19 @@ sed -i 's/provider = "postgresql"/provider = "sqlite"/' prisma/schema.prisma
 grep -rl "mode: 'insensitive'" app/ | xargs -r sed -i "s/, mode: 'insensitive'//g"
 grep -rl 'mode: "insensitive"' app/ | xargs -r sed -i 's/, mode: "insensitive"//g'
 
-# 3) قاعدة نظيفة + push + seed
+# قاعدة نظيفة + push + generate + seed (الـ generate إلزامي بعد تغيير provider)
 rm -f db/custom.db
-npx prisma db push --skip-generate >/dev/null 2>&1
-node prisma/seed.js >/dev/null 2>&1
+npx prisma db push >/dev/null 2>&1
+node prisma/seed.js >/dev/null 2>&1 || { echo "SEED FAILED"; git checkout -- prisma/schema.prisma; exit 1; }
 
 # 4) بناء وتشغيل الخادم على 3111
 npx next build >/tmp/e2e-build.log 2>&1 || { echo "BUILD FAILED"; tail -30 /tmp/e2e-build.log; git checkout -- prisma/schema.prisma app/; npx prisma generate >/dev/null 2>&1; exit 1; }
 cp -r .next/static .next/standalone/.next/ 2>/dev/null
 cp -r public .next/standalone/ 2>/dev/null
 cd /home/z/my-project
-PORT=3111 HOSTNAME=127.0.0.1 NODE_ENV=production node .next/standalone/server.js >/tmp/e2e-server.log 2>&1 &
+# bun يحمّل .env تلقائياً (كما في npm start) — node لا يفعل فتفشل المصادقة 500
+# + سر المصادقة مطلوب في وضع الإنتاج (كما في Vercel عبر متغيرات البيئة)
+PORT=3111 HOSTNAME=127.0.0.1 NODE_ENV=production NEXTAUTH_SECRET=e2e-local-secret-takleefat AUTH_SECRET=e2e-local-secret-takleefat bun .next/standalone/server.js >/tmp/e2e-server.log 2>&1 &
 SERVER_PID=$!
 
 # 5) انتظار جهوزية الخادم
