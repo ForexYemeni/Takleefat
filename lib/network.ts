@@ -106,6 +106,43 @@ export async function resolveReceiverOrg(receiverId: string, hospitalName?: stri
   })
 }
 
+// ---------- شفاء الارتباطات المعلقة (إصلاح الجولة الثامنة) ----------
+
+/**
+ * شفاء الارتباطات المعلقة التي ما زالت PENDING لجهة صحية أصبحت نشطة:
+ * سيناريو «أُضيف الكادر ثم اعتُمدت الجهة الصحية» — يعتمد الارتباط تلقائياً
+ * على الحالة المطلوبة (requestedStatus) لأن اعتماد الجهة هو الموافقة المرجعية،
+ * ويبقى حاجز التكليفات مفعلاً عبر حالة الحساب (PENDING) والمستندات لدى الإدارة.
+ * تُستدعى بشكل كسول عند قراءة قوائم الكوادر (نفس نمط escalateDueProgressivePosts)
+ * — آمنة للتكرار (idempotent) ولا تمس طلبات الكادر لجهات نشطة أصلاً.
+ */
+export async function healReceiverPendingAffiliations(hospitalId?: string): Promise<number> {
+  const stuck = await db.nurseAffiliation.findMany({
+    where: {
+      status: 'PENDING',
+      ...(hospitalId ? { hospitalId } : {}),
+      hospital: { status: 'ACTIVE' },
+      requestedBy: { role: 'RECEIVER' },
+    },
+    select: { id: true, requestedStatus: true },
+    take: 100,
+  })
+  if (stuck.length === 0) return 0
+
+  let healed = 0
+  for (const aff of stuck) {
+    const res = await db.nurseAffiliation.updateMany({
+      where: { id: aff.id, status: 'PENDING' },
+      data: {
+        status: aff.requestedStatus ?? 'WORKING',
+        reviewedAt: new Date(),
+      },
+    })
+    healed += res.count
+  }
+  return healed
+}
+
 // ---------- جمهور التوزيع ----------
 
 /** الحالات المقبولة ضمن جمهور الارتباط بجهة ما */

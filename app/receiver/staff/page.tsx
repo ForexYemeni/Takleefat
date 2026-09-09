@@ -82,7 +82,7 @@ export default function ReceiverStaffPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['receiver-staff'],
-    queryFn: () => apiFetcher<{ org: { id: string; name: string; city: string | null } | null; nurses: StaffNurse[] }>('/api/receiver/staff'),
+    queryFn: () => apiFetcher<{ org: { id: string; name: string; city: string | null; status: string } | null; nurses: StaffNurse[] }>('/api/receiver/staff'),
   })
 
   const createForm = useForm<ReceiverCreateNurseFormValues, unknown, ReceiverCreateNurseInput>({
@@ -115,6 +115,7 @@ export default function ReceiverStaffPage() {
 
   const org = data?.org
   const nurses = data?.nurses ?? []
+  const orgPending = org?.status === 'PENDING'
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -145,8 +146,20 @@ export default function ReceiverStaffPage() {
         )}
       </div>
 
+      {/* تنبيه حالة الجهة: بانتظار الاعتماد */}
+      {orgPending && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+          <Building2 className="size-5 shrink-0" />
+          <p className="leading-relaxed">
+            جهتك الصحية <span className="font-bold">({org?.name})</span> بانتظار اعتماد الإدارة —
+            عند اعتمادها ستُعتمد ارتباطات كوادر الجهة تلقائياً، ويبقى اعتماد حساب كل كادر
+            ورفع مستنداته لدى الإدارة شرطاً لاستقبال التكليفات.
+          </p>
+        </div>
+      )}
+
       {/* تنبيه الحاجز: لا تكليفات قبل الاعتماد والمستندات */}
-      {org && (
+      {org && !orgPending && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <ShieldAlert className="size-5 shrink-0" />
           <p className="leading-relaxed">
@@ -403,6 +416,13 @@ export default function ReceiverStaffPage() {
                 <span className="text-muted-foreground">— الارتباط بالجهة:</span>
                 <Badge variant="outline">{details.affiliationStatusLabel}</Badge>
               </div>
+              {orgPending && details.affiliationStatus === 'PENDING' && (
+                <p className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+                  <Building2 className="mt-0.5 size-4 shrink-0" />
+                  الارتباط قيد المراجعة لأن الجهة الصحية نفسها بانتظار اعتماد الإدارة —
+                  سيُعتمد تلقائياً مع اعتماد الجهة دون أي إجراء إضافي.
+                </p>
+              )}
               {details.nurse.status === 'PENDING' && (
                 <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                   <BadgeCheck className="mt-0.5 size-4 shrink-0" />

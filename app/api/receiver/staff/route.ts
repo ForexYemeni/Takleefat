@@ -4,15 +4,16 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { receiverCreateNurseSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
-import { resolveReceiverOrg, AFFILIATION_STATUS_LABELS } from '@/lib/network'
+import { resolveReceiverOrg, AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations } from '@/lib/network'
 
 /**
  * POST /api/receiver/staff — إضافة ممرض للجهة الصحية (الجولة الثامنة)
  * يُمكّن المستلم الإداري من إضافة الممرضين الخاصين بجهته الصحية:
  * - يُنشأ حساب الكادر بحالة PENDING — لا يستقبل أي تكليف أو إجراء
- *   حتى اعتماده من حساب الإدارة ورفع مستنداته
+ *   حتى اعتماده من حساب الإدارة ورفع مستنداته (الحاجز الفعلي على مستوى الحساب)
  * - يظهر فوراً في حساب الإدارة (الكادر التمريضي) وفي لوحة الجهة
- * - يُسجل ارتباطه بجهة المستلم (PENDING — نوع العمل المطلوب: يعمل حالياً)
+ * - الارتباط بالجهة: جهة نشطة → WORKING مباشرة (سلطة المستلم على جهته)،
+ *   جهة بانتظار الاعتماد → PENDING وتُعتمد تلقائياً مع اعتماد الجهة (إصلاح الجولة الثامنة)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +41,10 @@ export async function POST(req: NextRequest) {
 
     const hashed = await hash(password, 12)
 
+    // الجهة النشطة: ارتباط فعلي معتمد من المستلم المخول لجهته
+    // الجهة المعلقة: يبقى الارتباط PENDING ويُعتمد تلقائياً عند اعتماد الجهة نفسها
+    const orgActive = org.status === 'ACTIVE'
+
     // حساب الكادر + ارتباطه بالجهة — معاملة واحدة
     const nurse = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -62,9 +67,11 @@ export async function POST(req: NextRequest) {
         data: {
           nurseId: user.id,
           hospitalId: org.id,
-          status: 'PENDING',
+          status: orgActive ? 'WORKING' : 'PENDING',
           requestedStatus: 'WORKING',
           requestedById: session.user.id,
+          reviewedById: orgActive ? session.user.id : null,
+          reviewedAt: orgActive ? new Date() : null,
           note: 'أُضيف من المستلم الإداري لجهته الصحية',
         },
       })
@@ -95,7 +102,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        message: `تمت إضافة ${nurse.name} إلى كوادر ${org.name} — يظهر الآن في حساب الإدارة ولن يستقبل أي تكليف قبل اعتماده ورفع مستنداته`,
+        message: orgActive
+          ? `تمت إضافة ${nurse.name} إلى كوادر ${org.name} — يظهر الآن في حساب الإدارة ولن يستقبل أي تكليف قبل اعتماد حسابه ورفع مستنداته`
+          : `تمت إضافة ${nurse.name} إلى كوادر ${org.name} — سيُعتمد ارتباطه تلقائياً عند اعتماد الجهة الصحية من الإدارة`,
         nurse,
       },
       { status: 201 }
@@ -116,6 +125,9 @@ export async function GET() {
     if (!org) {
       return NextResponse.json({ org: null, nurses: [] })
     }
+
+    // شفاء كسول: ارتباطات أُضيفت من المستلم ثم اعتُمدت الجهة وتوقفت على PENDING
+    await healReceiverPendingAffiliations(org.id)
 
     const affiliations = await db.nurseAffiliation.findMany({
       where: { hospitalId: org.id },

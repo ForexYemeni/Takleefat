@@ -841,6 +841,17 @@ d=json.load(sys.stdin)
 print(len(d['affiliations']), sum(1 for a in d['affiliations'] if a.get('workYears')==4))")
 check "السجل المهني: ارتباطان مع سنوات العمل محفوظة" "2 1" "$R8_PROF"
 
+# إصلاح الجولة الثامنة: اعتماد جهة معلقة يعتمد الارتباطات المعلقة عليها تلقائياً
+R8_ORG2_APPROVE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/hospitals/$R8_ORG2_ID -H "Content-Type: application/json" \
+  -d '{"status":"ACTIVE","isActive":true}' | jget "['hospital']['status']")
+check "اعتماد جهة الكادر الجديدة → ACTIVE" "ACTIVE" "$R8_ORG2_APPROVE"
+R8_AFF2_FINAL=$(curl -s -b "$DIR/r8nurse.jar" $BASE/api/me/professional-profile | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['affiliations'] if x['hospital']['name']=='مركز الجولة الثامنة']
+print(a[0]['status'] if a else '')")
+check "الارتباط المعلق يُعتمد تلقائياً مع اعتماد الجهة → FORMER" "FORMER" "$R8_AFF2_FINAL"
+
 # بوابة المستندات على اعتماد الارتباط — ثم الاعتماد بعد رفع مستند
 R8_GATE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R8_AFF_ID -H "Content-Type: application/json" -d '{"status":"WORKING"}')
 check "لا اعتماد ارتباط لكادر بلا مستندات → 422" "422" "$R8_GATE"
@@ -855,7 +866,7 @@ login "$DIR/r8receiver.jar" "788880302" "Round8@123"
 R8_STAFF=$(curl -s -b "$DIR/r8receiver.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
   -d '{"name":"هند عبده","phone":"788880303","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","yearsOfExperience":0}')
 R8_STAFF_ID=$(echo "$R8_STAFF" | jget "['nurse']['id']")
-[ -n "$R8_STAFF_ID" ] && check "المستلم يضيف ممرضة لجهته → 201 (حالة PENDING)" "ok" "ok" || check "إضافة ممرض للجهة" "id" "null"
+[ -n "$R8_STAFF_ID" ] && check "المستلم يضيف ممرضة لجهته النشطة → 201 (ارتباط WORKING مباشرة)" "ok" "ok" || check "إضافة ممرض للجهة" "id" "null"
 
 R8_STAFF_PHONE=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | python3 -c "
 import json,sys
@@ -869,9 +880,9 @@ import json,sys
 d=json.load(sys.stdin)
 n=[x for x in d['nurses'] if x['nurse']['phone']=='788880303']
 print(n[0]['affiliationStatus'], n[0]['nurse']['status'], n[0]['nurse']['_count']['documents'])" 2>/dev/null)
-check "كوادر الجهة: ارتباط PENDING + حساب PENDING + 0 مستندات" "PENDING PENDING 0" "$R8_STAFF_LIST"
+check "كوادر الجهة: ارتباط WORKING + حساب PENDING + 0 مستندات (الحاجز على مستوى الحساب)" "WORKING PENDING 0" "$R8_STAFF_LIST"
 
-# الكادر المضاف لا يستقبل أي تكليف قبل الاعتماد (حساب PENDING يُمنع من التقديم)
+# الكادر المضاف لا يستقبل أي تكليف قبل الاعتماد — حتى مع ارتباط WORKING (الحاجز = حالة الحساب)
 login "$DIR/r8staff.jar" "788880303" "Staff@12345"
 R8_POST_TODAY=$(date -u +%Y-%m-%d)
 R8_P=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
