@@ -586,7 +586,7 @@ ORG=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-
 ORG_ID=$(echo "$ORG" | jget "['hospital']['id']")
 [ -n "$ORG_ID" ] && check "إضافة جهة صحية ببيانات كاملة (نوع/مدينة/تواصل)" "ok" "ok"
 
-ORG_UPD=$(curl -s -b "$DIR/admin.jar" -X PATCH "$BASE/api/admin/hospitals?id=$ORG_ID" -H "Content-Type: application/json" \
+ORG_UPD=$(curl -s -b "$DIR/admin.jar" -X PATCH "$BASE/api/admin/hospitals/$ORG_ID" -H "Content-Type: application/json" \
   -d '{"type":"MEDICAL_COMPLEX","city":"عدن"}')
 ORG_TYPE=$(echo "$ORG_UPD" | jget "['hospital']['type']")
 check "تعديل الجهة (النوع والمدينة)" "MEDICAL_COMPLEX" "$ORG_TYPE"
@@ -615,7 +615,7 @@ check "الإدارة تعتمد الارتباط (بعد المستندات)" "
 
 # بوابة المستندات: كادر بلا مستندات لا يُعتمد ارتباطه
 REG_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","confirmPassword":"Net@12345","specialty":"عناية مركزة","yearsOfExperience":3,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","confirmPassword":"Net@12345","specialty":"عناية مركزة","qualification":"دبلوم تمريض","yearsOfExperience":3,"gender":"MALE"}')
 N2_ID=$(echo "$REG_N2" | jget "['user']['id']")
 [ -n "$N2_ID" ] && check "تسجيل كادر الشبكة (مع جنسه) → 201" "ok" "ok"
 login "$DIR/nurse2.jar" "766660202" "Net@12345"
