@@ -145,7 +145,7 @@ check "رؤية بيانات المتقدم (الاسم: سارة أحمد)" "س
 APP_PHONE=$(echo "$APPS_JSON" | jget "['applications'][0]['nurse']['phone']")
 check "بيانات التواصل ظاهرة للجهة (711111111)" "711111111" "$APP_PHONE"
 APP_SPEC=$(echo "$APPS_JSON" | jget "['applications'][0]['nurse']['specialty']")
-check "التخصص ظاهر في السيرة (تمريض عام)" "تمريض عام" "$APP_SPEC"
+check "التخصص ظاهر في السيرة (تمريض طوارئ)" "تمريض طوارئ" "$APP_SPEC"
 APP_ID=$(echo "$APPS_JSON" | jget "['applications'][0]['applicationId']")
 [ -n "$APP_ID" ] && check "حقل applicationId موجود في واجهة التقديمات" "ok" "ok" || check "حقل applicationId موجود" "id" "null"
 
@@ -617,6 +617,7 @@ check "الإدارة تعتمد الارتباط (بعد المستندات)" "
 REG_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
   -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","confirmPassword":"Net@12345","specialty":"عناية مركزة","yearsOfExperience":3,"gender":"MALE"}')
 N2_ID=$(echo "$REG_N2" | jget "['user']['id']")
+[ -n "$N2_ID" ] && check "تسجيل كادر الشبكة (مع جنسه) → 201" "ok" "ok"
 login "$DIR/nurse2.jar" "766660202" "Net@12345"
 curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N2_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 AFF_NODOC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
@@ -624,7 +625,7 @@ AFF_NODOC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/affiliations -H "Content-
 check "منع اعتماد ارتباط كادر بلا مستندات → 422" "422" "$AFF_NODOC"
 
 # --- المفضلة الخاصة بكل مستلم ---
-FAV1=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+FAV1=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
   -d "{\"nurseId\":\"$NURSE_ID\",\"category\":\"طوارئ\"}")
 check "المستلم يضيف الكادر لمفضلته → 201" "201" "$FAV1"
 

@@ -167,7 +167,7 @@ export function OrganizationsManager() {
         lng: values.lng ? Number(values.lng) : null,
       }
       if (editing) {
-        return apiPatch<{ message: string }>(`/api/admin/hospitals?id=${editing.id}`, payload)
+        return apiPatch<{ message: string }>(`/api/admin/hospitals/${editing.id}`, payload)
       }
       return apiPost<{ message: string }>('/api/admin/hospitals', payload)
     },
@@ -182,7 +182,7 @@ export function OrganizationsManager() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiDelete<{ message: string }>(`/api/admin/hospitals?id=${id}`),
+    mutationFn: (id: string) => apiDelete<{ message: string }>(`/api/admin/hospitals/${id}`),
     onSuccess: (res) => {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['admin-orgs'] })

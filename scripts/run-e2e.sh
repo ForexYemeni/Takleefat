@@ -14,6 +14,7 @@ grep -rl 'mode: "insensitive"' app/ | xargs -r sed -i 's/, mode: "insensitive"//
 
 # قاعدة نظيفة + push + generate + seed (الـ generate إلزامي بعد تغيير provider)
 rm -f db/custom.db
+rm -rf .next
 npx prisma db push >/dev/null 2>&1
 node prisma/seed.js >/dev/null 2>&1 || { echo "SEED FAILED"; git checkout -- prisma/schema.prisma; exit 1; }
 

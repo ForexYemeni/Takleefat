@@ -94,6 +94,18 @@ export async function POST(req: NextRequest) {
     if (!nurse || nurse.role !== 'NURSE') return jsonError('الكادر التمريضي غير موجود', 404)
     if (!hospital) return jsonError('الجهة الصحية غير موجودة', 404)
 
+    // الحماية أولاً: الكادر يطلب فقط — الحالات المحمية محرّمة عليه نهائياً (قبل فحص التكرار)
+    let finalStatus: string = requestedStatus
+    if (session.user.role === 'NURSE') {
+      if (!(NURSE_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
+        throw new ApiError(
+          'لا يمكنك تعيين حالة الاعتماد أو المقابلة بنفسك — طلبك يُسجل «قيد المراجعة» وتُعتمده الجهة المختصة',
+          403
+        )
+      }
+      finalStatus = 'PENDING'
+    }
+
     // التكرار ممنوع — ارتباط واحد لكل (كادر × جهة)
     const existing = await db.nurseAffiliation.findUnique({
       where: { nurseId_hospitalId: { nurseId: targetNurseId, hospitalId } },
@@ -105,18 +117,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    let finalStatus: string = requestedStatus
-
-    if (session.user.role === 'NURSE') {
-      // الكادر يطلب فقط — الحالات المحمية محرّمة عليه نهائياً
-      if (!(NURSE_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
-        throw new ApiError(
-          'لا يمكنك تعيين حالة الاعتماد أو المقابلة بنفسك — طلبك يُسجل «قيد المراجعة» وتُعتمده الجهة المختصة',
-          403
-        )
-      }
-      finalStatus = 'PENDING'
-    } else if (session.user.role === 'RECEIVER') {
+    if (session.user.role === 'RECEIVER') {
       // المستلم الإداري المخول: جهته الصحية فقط + الحالات المسموحة له
       const org = await resolveReceiverOrg(session.user.id)
       if (!org || org.id !== hospitalId) {
