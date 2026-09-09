@@ -75,10 +75,13 @@ enum Gender {
 }
 
 /// حالة الجهة الصحية
+/// PENDING/REJECTED: جهات يقترحها الكادر أو المستلم الإداري ولا تُنشّط إلا باعتماد الإدارة
 enum OrgStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  PENDING
+  REJECTED
 }
 
 /// نوع الجهة الصحية
@@ -516,6 +519,10 @@ model NurseAffiliation {
   nurseId       String
   hospitalId    String
   status        AffiliationStatus @default(PENDING)
+  /// الحالة التي طلبها مقدم الطلب (الكادر: يعمل حالياً/سابقاً) — الإدارة تعتمدها أو تعدّلها
+  requestedStatus AffiliationStatus?
+  /// سنوات العمل في الجهة — يُدخلها الكادر ضمن سيرته الذاتية
+  workYears     Int?
   /// مَن أنشأ الارتباط (الكادر بطلب / المستلم / الإدارة)
   requestedById String?
   note          String?

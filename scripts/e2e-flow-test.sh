@@ -56,15 +56,15 @@ check "لا أي مستلم إداري وهمي بعد التجهيز" "0" "$FAK
 
 # حسابات حقيقية عبر التسجيل العام — المستلم مع الجهة الصحية
 REG_N=$(curl -s -o "$DIR/reg_n.json" -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"سارة أحمد","phone":"711111111","password":"Nurse@1234","confirmPassword":"Nurse@1234","specialty":"تمريض طوارئ","qualification":"بكالوريوس تمريض","yearsOfExperience":5,"gender":"MALE"}')
-check "تسجيل حساب كادر جديد → 201" "201" "$REG_N"
+  -d '{"role":"NURSE","name":"سارة أحمد","phone":"711111111","password":"Nurse@1234","specialty":"تمريض طوارئ","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":5,"gender":"MALE"}')
+check "تسجيل حساب كادر جديد (بدون تأكيد كلمة المرور) → 201" "201" "$REG_N"
 
 REG_R=$(curl -s -o "$DIR/reg_r.json" -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"RECEIVER","name":"خالد عبدالله","phone":"733333333","password":"Receiver@1234","confirmPassword":"Receiver@1234","hospitalName":"مستشفى الاختبار التخصصي"}')
+  -d '{"role":"RECEIVER","name":"خالد عبدالله","phone":"733333333","password":"Receiver@1234","hospitalName":"مستشفى الاختبار التخصصي"}')
 check "تسجيل مستلم إداري مع الجهة الصحية → 201" "201" "$REG_R"
 
 REG_NOHOSP=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"RECEIVER","name":"بلا جهة","phone":"744444461","password":"NoHosp@1234","confirmPassword":"NoHosp@1234"}')
+  -d '{"role":"RECEIVER","name":"بلا جهة","phone":"744444461","password":"NoHosp@1234"}')
 check "رفض تسجيل مستلم بلا جهة صحية → 422" "422" "$REG_NOHOSP"
 
 # سياسة الدخول الجديدة: حساب PENDING يدخل فوراً بعد التسجيل
@@ -189,7 +189,7 @@ check "منع المستلم من تعديل الإعدادات → 403" "403" "
 
 echo "=========== 10) سياسة الاعتماد الصارمة + الجهة الصحية للإدارة ==========="
 REG2=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر بلا مستندات","phone":"744444460","password":"NoDocs@1234","confirmPassword":"NoDocs@1234","specialty":"تمريض عام","qualification":"دبلوم تمريض","yearsOfExperience":1}')
+  -d '{"role":"NURSE","name":"كادر بلا مستندات","phone":"744444460","password":"NoDocs@1234","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE"}')
 check "تسجيل كادر ثانٍ (بلا مستندات) → 201" "201" "$REG2"
 
 STRICT_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | jget "['users'][0]['id']")
@@ -264,7 +264,7 @@ echo "=========== 14) الملف الشخصي وكلمات المرور واله
 # حساب مؤقت لإجراءات الحساب
 TMP_PHONE="744444455"
 TMP_CREATE=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d "{\"name\":\"كادر مؤقت\",\"phone\":\"$TMP_PHONE\",\"password\":\"Temp@12345\",\"role\":\"NURSE\",\"specialty\":\"تمريض عام\",\"qualification\":\"بكالوريوس\",\"yearsOfExperience\":3}")
+  -d "{\"name\":\"كادر مؤقت\",\"phone\":\"$TMP_PHONE\",\"password\":\"Temp@12345\",\"role\":\"NURSE\",\"qualification\":\"بكالوريوس أربع سنوات\",\"gender\":\"MALE\",\"yearsOfExperience\":3}")
 TMP_ID=$(echo "$TMP_CREATE" | jget "['user']['id']")
 [ -n "$TMP_ID" ] && check "الإدارة تنشئ حساب كادر مؤقت للاختبار" "ok" "ok" || check "حساب مؤقت" "id" "null"
 
@@ -536,7 +536,7 @@ echo "   $DELP_MSG"
 echo "=========== 20) الملف التفصيلي للمستلم الإداري (قبل الاعتماد وبعده) ==========="
 # مستلم جديد PENDING — يُعرض ملفه بالكامل قبل الاعتماد
 REG_P20=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"RECEIVER","name":"مستلم قيد المراجعة","phone":"755550201","password":"Pending@1234","confirmPassword":"Pending@1234","hospitalName":"مستشفى المراجعة العام"}')
+  -d '{"role":"RECEIVER","name":"مستلم قيد المراجعة","phone":"755550201","password":"Pending@1234","hospitalName":"مستشفى المراجعة العام"}')
 P20_ID=$(echo "$REG_P20" | jget "['user']['id']")
 [ -n "$P20_ID" ] && check "إنشاء مستلم جديد (PENDING) لعرض ملفه" "ok" "ok"
 
@@ -615,7 +615,7 @@ check "الإدارة تعتمد الارتباط (بعد المستندات)" "
 
 # بوابة المستندات: كادر بلا مستندات لا يُعتمد ارتباطه
 REG_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","confirmPassword":"Net@12345","specialty":"عناية مركزة","qualification":"دبلوم تمريض","yearsOfExperience":3,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
 N2_ID=$(echo "$REG_N2" | jget "['user']['id']")
 [ -n "$N2_ID" ] && check "تسجيل كادر الشبكة (مع جنسه) → 201" "ok" "ok"
 login "$DIR/nurse2.jar" "766660202" "Net@12345"
@@ -740,6 +740,152 @@ curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P21_ID -o /dev/null
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P22_ID -o /dev/null
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P23_ID -o /dev/null
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$N2_ID -o /dev/null
+
+echo "=========== 22) الجولة الثامنة: قواعد التسجيل + جهات العمل + كوادر الجهة ==========="
+
+# --- القوائم العامة للتسجيل (بلا جلسة) ---
+PUB_ORG=$(code $BASE/api/hospitals/public)
+check "قائمة الجهات الصحية العامة للتسجيل → 200" "200" "$PUB_ORG"
+PUB_ORG_COUNT=$(curl -s $BASE/api/hospitals/public | jget "['hospitals'].__len__()")
+[ "$PUB_ORG_COUNT" -ge 1 ] && check "القائمة العامة تُظهر جهات الإدارة المعتمدة" "ok" "ok" || check "القائمة العامة فارغة!" "1+" "$PUB_ORG_COUNT"
+PUB_DEPT=$(code $BASE/api/departments/public)
+check "قائمة الأقسام العامة للتسجيل (التخصص) → 200" "200" "$PUB_DEPT"
+
+# --- قواعد التسجيل الجديدة ---
+BAD_PHONE=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"اختبار الهاتف","phone":"71111111111","password":"Round8@123","qualification":"بكالوريوس أربع سنوات","gender":"MALE"}')
+check "رفض هاتف أطول من 9 أرقام → 422" "422" "$BAD_PHONE"
+
+BAD_NAME=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"سارة","phone":"744440310","password":"Round8@123","qualification":"بكالوريوس أربع سنوات","gender":"FEMALE"}')
+check "رفض اسم بلا لقب (كلمة واحدة) → 422" "422" "$BAD_NAME"
+
+BAD_GENDER=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"نورا سالم","phone":"744440311","password":"Round8@123","qualification":"بكالوريوس أربع سنوات"}')
+check "رفض كادر بلا جنس (الجنس إجباري) → 422" "422" "$BAD_GENDER"
+
+BAD_QUAL=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"نورا سالم","phone":"744440312","password":"Round8@123","qualification":"دكتوراه","gender":"FEMALE"}')
+check "رفض مؤهل خارج الخيارات الثلاثة → 422" "422" "$BAD_QUAL"
+
+# --- كادر جديد بقواعد الجولة الثامنة (التخصص اختياري) ---
+R8_N=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"نورا الشبكي","phone":"788880301","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE"}')
+R8_N_ID=$(echo "$R8_N" | jget "['user']['id']")
+[ -n "$R8_N_ID" ] && check "تسجيل كادر بلا تخصص (اختياري) → 201" "ok" "ok" || check "تسجيل كادر الجولة الثامنة" "id" "null"
+
+# --- مستلم جديد بجهة صحية جديدة مع بقية بياناتها → تُرفع للاعتماد ---
+R8_R=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"RECEIVER","name":"أمين الجهة","phone":"788880302","password":"Round8@123","hospitalName":"مستشفى الجولة الثامنة","newOrg":{"type":"MEDICAL_CENTER","city":"عدن","address":"خور مكسر","phone":"712345678"}}')
+R8_R_ID=$(echo "$R8_R" | jget "['user']['id']")
+[ -n "$R8_R_ID" ] && check "تسجيل مستلم بجهة جديدة (مع بقية بياناتها) → 201" "ok" "ok" || check "تسجيل مستلم الجولة الثامنة" "id" "null"
+
+R8_ORG=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/hospitals | python3 -c "
+import json,sys
+hs=json.load(sys.stdin)['hospitals']
+o=[h for h in hs if h['name']=='مستشفى الجولة الثامنة']
+print(o[0]['id'], o[0]['status']) if o else print('', '')")
+R8_ORG_ID=$(echo "$R8_ORG" | cut -d' ' -f1)
+R8_ORG_STATUS=$(echo "$R8_ORG" | cut -d' ' -f2)
+check "الجهة الجديدة وصلت لكتالوج الإدارة بحالة PENDING" "PENDING" "$R8_ORG_STATUS"
+
+# القائمة العامة لا تُظهر الجهة قبل الاعتماد
+PUB_HAS_NEW=$(curl -s $BASE/api/hospitals/public | python3 -c "
+import json,sys
+hs=json.load(sys.stdin)['hospitals']
+print(len([h for h in hs if h['name']=='مستشفى الجولة الثامنة']))")
+check "القائمة العامة لا تُظهر الجهة قبل الاعتماد" "0" "$PUB_HAS_NEW"
+
+# الإدارة تعتمد الجهة الجديدة → ACTIVE وتظهر للعامة
+R8_APPROVE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/hospitals/$R8_ORG_ID -H "Content-Type: application/json" \
+  -d '{"status":"ACTIVE","isActive":true}' | jget "['hospital']['status']")
+check "الإدارة تعتمد الجهة الجديدة → ACTIVE" "ACTIVE" "$R8_APPROVE"
+PUB_HAS_NEW2=$(curl -s $BASE/api/hospitals/public | python3 -c "
+import json,sys
+hs=json.load(sys.stdin)['hospitals']
+print(len([h for h in hs if h['name']=='مستشفى الجولة الثامنة']))")
+check "الجهة المعتمدة تظهر في القائمة العامة" "1" "$PUB_HAS_NEW2"
+
+# --- الكادر يضيف جهات عمل من ملفه (السجل المهني) ---
+login "$DIR/r8nurse.jar" "788880301" "Round8@123"
+SEED_ORG_ID=$(curl -s -b "$DIR/r8nurse.jar" $BASE/api/hospitals | python3 -c "import json,sys;h=json.load(sys.stdin)['hospitals'];print(h[0]['id'] if h else '')")
+
+R8_AFF=$(curl -s -b "$DIR/r8nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$SEED_ORG_ID\",\"requestedStatus\":\"WORKING\",\"workYears\":4}")
+R8_AFF_ID=$(echo "$R8_AFF" | jget "['affiliation']['id']")
+R8_AFF_STATUS=$(echo "$R8_AFF" | jget "['affiliation']['status']")
+check "الكادر يطلب جهة عمل (حالياً + 4 سنوات) → PENDING" "PENDING" "$R8_AFF_STATUS"
+check "الطلب يحفظ سنوات العمل" "4" "$(echo "$R8_AFF" | jget "['affiliation']['workYears']")"
+
+R8_AFF_DUP=$(code -b "$DIR/r8nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$SEED_ORG_ID\",\"requestedStatus\":\"WORKING\",\"workYears\":4}")
+check "منع تكرار نفس جهة العمل → 409" "409" "$R8_AFF_DUP"
+
+# جهة جديدة غير موجودة من ملف الكادر → تُرفع للإدارة
+R8_AFF_NEW=$(curl -s -b "$DIR/r8nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d '{"newOrg":{"name":"مركز الجولة الثامنة","type":"CLINIC","city":"تعز"},"requestedStatus":"FORMER","workYears":2}')
+R8_AFF2_STATUS=$(echo "$R8_AFF_NEW" | jget "['affiliation']['status']")
+check "الكادر يضيف جهة جديدة لسجله (سابقاً + 2 سنوات) → PENDING" "PENDING" "$R8_AFF2_STATUS"
+
+R8_ORG2_ID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/hospitals | python3 -c "
+import json,sys
+hs=json.load(sys.stdin)['hospitals']
+o=[h for h in hs if h['name']=='مركز الجولة الثامنة']
+print(o[0]['id']) if o else print('')")
+[ -n "$R8_ORG2_ID" ] && check "جهة الكادر الجديدة وصلت لكتالوج الإدارة" "ok" "ok"
+
+# السجل المهني يعيد الارتباطات
+R8_PROF=$(curl -s -b "$DIR/r8nurse.jar" $BASE/api/me/professional-profile | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(len(d['affiliations']), sum(1 for a in d['affiliations'] if a.get('workYears')==4))")
+check "السجل المهني: ارتباطان مع سنوات العمل محفوظة" "2 1" "$R8_PROF"
+
+# بوابة المستندات على اعتماد الارتباط — ثم الاعتماد بعد رفع مستند
+R8_GATE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R8_AFF_ID -H "Content-Type: application/json" -d '{"status":"WORKING"}')
+check "لا اعتماد ارتباط لكادر بلا مستندات → 422" "422" "$R8_GATE"
+UP_R8=$(code -b "$DIR/r8nurse.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "الكادر يرفع مستنده → 201" "201" "$UP_R8"
+R8_ENDORSE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R8_AFF_ID -H "Content-Type: application/json" \
+  -d '{"status":"WORKING","note":"تم التحقق"}' | jget "['affiliation']['status']")
+check "الإدارة تعتمد جهة العمل بعد المستندات → WORKING" "WORKING" "$R8_ENDORSE"
+
+# --- كوادر الجهة: المستلم يضيف ممرض لجهته ---
+login "$DIR/r8receiver.jar" "788880302" "Round8@123"
+R8_STAFF=$(curl -s -b "$DIR/r8receiver.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
+  -d '{"name":"هند عبده","phone":"788880303","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","yearsOfExperience":0}')
+R8_STAFF_ID=$(echo "$R8_STAFF" | jget "['nurse']['id']")
+[ -n "$R8_STAFF_ID" ] && check "المستلم يضيف ممرضة لجهته → 201 (حالة PENDING)" "ok" "ok" || check "إضافة ممرض للجهة" "id" "null"
+
+R8_STAFF_PHONE=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | python3 -c "
+import json,sys
+us=json.load(sys.stdin)['users']
+n=[u for u in us if u['phone']=='788880303']
+print(n[0]['phone'] if n else '')")
+check "الكادر المضاف يظهر مباشرة في قائمة كوادر الإدارة" "788880303" "$R8_STAFF_PHONE"
+
+R8_STAFF_LIST=$(curl -s -b "$DIR/r8receiver.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+n=[x for x in d['nurses'] if x['nurse']['phone']=='788880303']
+print(n[0]['affiliationStatus'], n[0]['nurse']['status'], n[0]['nurse']['_count']['documents'])" 2>/dev/null)
+check "كوادر الجهة: ارتباط PENDING + حساب PENDING + 0 مستندات" "PENDING PENDING 0" "$R8_STAFF_LIST"
+
+# الكادر المضاف لا يستقبل أي تكليف قبل الاعتماد (حساب PENDING يُمنع من التقديم)
+login "$DIR/r8staff.jar" "788880303" "Staff@12345"
+R8_POST_TODAY=$(date -u +%Y-%m-%d)
+R8_P=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$SEED_ORG_ID\",\"department\":\"عناية\",\"startDate\":\"$R8_POST_TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":20000}" | jget "['post']['id']")
+R8_STAFF_APPLY=$(code -b "$DIR/r8staff.jar" -X POST $BASE/api/posts/$R8_P/apply -H "Content-Type: application/json" -d '{}')
+check "كادر جهة غير معتمد لا يستقبل أي تكليف → 403" "403" "$R8_STAFF_APPLY"
+
+# --- تنظيف القسم ---
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$R8_P -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R8_STAFF_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R8_N_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R8_R_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R8_ORG_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R8_ORG2_ID -o /dev/null
 
 echo ""
 echo "==========================================="

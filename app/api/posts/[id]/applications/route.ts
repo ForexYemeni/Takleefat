@@ -52,6 +52,17 @@ export async function GET(
               },
               orderBy: { createdAt: 'desc' },
             },
+            // السجل المهني — الجهات التي عمل بها مع سنوات العمل (الجولة الثامنة)
+            // تُستثنى الطلبات قيد المراجعة — يظهر التاريخ المهني المعتمد فقط
+            affiliations: {
+              where: { status: { not: 'PENDING' } },
+              orderBy: { createdAt: 'desc' },
+              select: {
+                status: true,
+                workYears: true,
+                hospital: { select: { name: true, type: true, city: true } },
+              },
+            },
             // التقييمات الاحترافية — تُضاف إلى السيرة الذاتية عند التقديم لأي تكليف
             ratingsReceived: {
               orderBy: { createdAt: 'desc' },
@@ -92,11 +103,12 @@ export async function GET(
           ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
           : null
       }
-      const { ratingsReceived, ...nurse } = a.nurse
+      const { ratingsReceived, affiliations, ...nurse } = a.nurse
       return {
         ...a,
         nurse: {
           ...nurse,
+          affiliations,
           isFavorite: favSet.has(a.nurse.id),
           ratings: {
             average,

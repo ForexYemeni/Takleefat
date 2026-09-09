@@ -9,6 +9,7 @@ import { apiFetcher, apiPatch } from '@/lib/api-client'
 import { formatDate, ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
+import { AffiliationsManager } from '@/components/nurse/affiliations-manager'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -163,6 +164,13 @@ export default function NurseProfilePage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* جهات العمل — السجل المهني: إضافة جهات حالية/سابقة مع سنوات العمل */}
+      <Card>
+        <CardContent className="pt-6">
+          <AffiliationsManager />
         </CardContent>
       </Card>
 

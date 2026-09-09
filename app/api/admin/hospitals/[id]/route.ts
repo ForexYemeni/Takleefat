@@ -75,6 +75,8 @@ export async function GET(
         status: a.status,
         statusLabel: AFFILIATION_STATUS_LABELS[a.status] ?? a.status,
         note: a.note,
+        workYears: a.workYears,
+        requestedStatus: a.requestedStatus,
         createdAt: a.createdAt,
         nurse: a.nurse,
       })),

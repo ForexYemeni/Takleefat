@@ -81,11 +81,47 @@ export async function POST(req: NextRequest) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
 
-    const { hospitalId, note } = parsed.data
+    const { note, workYears, newOrg } = parsed.data
     // الكادر يطلب لنفسه — المستلم/الإدارة يحددان الكادر
     const targetNurseId = session.user.role === 'NURSE' ? session.user.id : parsed.data.nurseId
     if (!targetNurseId) return jsonError('معرّف الكادر مطلوب', 422)
+    // الحالة الفعلية المطلوبة: المستلم/الإدارة يضبطونها — الكادر يطلب نوع العمل فقط (الجولة الثامنة)
     const requestedStatus = parsed.data.status ?? (session.user.role === 'NURSE' ? 'PENDING' : 'WORKING')
+
+    // ---------- جهة صحية جديدة؟ (الجولة الثامنة) تُرفع للإدارة بانتظار الاعتماد ----------
+    let hospitalId = parsed.data.hospitalId
+    if (!hospitalId && newOrg) {
+      const orgName = newOrg.name.trim()
+      const dup = await db.hospital.findUnique({ where: { name: orgName } })
+      if (dup) {
+        return jsonError('هذه الجهة الصحية موجودة مسبقاً في كتالوج الإدارة — اخترها من القائمة', 409)
+      }
+      const createdOrg = await db.hospital.create({
+        data: {
+          name: orgName,
+          type: newOrg.type ?? 'HOSPITAL',
+          city: newOrg.city?.trim() || null,
+          address: newOrg.address?.trim() || null,
+          phone: newOrg.phone?.trim() || null,
+          email: newOrg.email?.trim() || null,
+          status: 'PENDING',
+          isActive: false,
+        },
+      })
+      hospitalId = createdOrg.id
+      const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
+      await Promise.all(
+        admins.map((a) =>
+          notify(a.id, {
+            title: 'جهة صحية جديدة بانتظار الاعتماد',
+            body: `اقترح ${session.user.name} جهة (${orgName}) — راجع بياناتها في الجهات الصحية واعتمدها أو ارفضها`,
+            type: 'AFFILIATION_UPDATED',
+            link: '/admin/organizations',
+          })
+        )
+      )
+    }
+    if (!hospitalId) return jsonError('الجهة الصحية مطلوبة — اخترها من القائمة أو أضفها كجهة جديدة', 422)
 
     const [nurse, hospital] = await Promise.all([
       db.user.findUnique({ where: { id: targetNurseId }, select: { id: true, name: true, role: true, status: true } }),
@@ -96,6 +132,7 @@ export async function POST(req: NextRequest) {
 
     // الحماية أولاً: الكادر يطلب فقط — الحالات المحمية محرّمة عليه نهائياً (قبل فحص التكرار)
     let finalStatus: string = requestedStatus
+    let finalRequestedStatus: string | null = null
     if (session.user.role === 'NURSE') {
       if (!(NURSE_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
         throw new ApiError(
@@ -103,6 +140,8 @@ export async function POST(req: NextRequest) {
           403
         )
       }
+      // طلب الكادر: نوع العمل (يعمل حالياً / عمل سابقاً) — يُحفظ كطلب والفعلي يبقى قيد المراجعة
+      finalRequestedStatus = parsed.data.requestedStatus ?? 'WORKING'
       finalStatus = 'PENDING'
     }
 
@@ -144,6 +183,8 @@ export async function POST(req: NextRequest) {
         nurseId: targetNurseId,
         hospitalId,
         status: finalStatus as never,
+        requestedStatus: (finalRequestedStatus as never) ?? null,
+        workYears: workYears ?? null,
         note: note?.trim() || null,
         requestedById: session.user.id,
         reviewedById: session.user.role === 'NURSE' ? null : session.user.id,

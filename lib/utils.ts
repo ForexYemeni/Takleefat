@@ -69,6 +69,19 @@ export const GENDER_LABELS: Record<string, string> = {
   FEMALE: 'أنثى',
 }
 
+/**
+ * المؤهل العلمي — ثلاثة خيارات ثابتة فقط (الجولة الثامنة):
+ * أورديلي سنة / دبلوم ثلاث سنوات / بكالوريوس أربع سنوات
+ * القيمة تُخزّن كما هي (نص عربي) للتوافق الكامل مع البيانات السابقة الحرة.
+ */
+export const QUALIFICATION_OPTIONS = [
+  { value: 'أورديلي سنة', label: 'أورديلي — سنة دراسية', hint: 'مساعد تمريض' },
+  { value: 'دبلوم ثلاث سنوات', label: 'دبلوم — ثلاث سنوات', hint: 'معهد صحي' },
+  { value: 'بكالوريوس أربع سنوات', label: 'بكالوريوس — أربع سنوات', hint: 'كلية العلوم الطبية' },
+] as const
+
+export type QualificationValue = (typeof QUALIFICATION_OPTIONS)[number]['value']
+
 export const POST_GENDER_LABELS: Record<string, string> = {
   MALE: 'ذكر',
   FEMALE: 'أنثى',

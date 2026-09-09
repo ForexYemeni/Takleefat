@@ -4,26 +4,32 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Building2,
+  CheckCircle2,
   Cross,
   Hospital,
+  Hourglass,
   Mail,
   MapPin,
   Pencil,
   Phone,
   Plus,
   Search,
+  ShieldAlert,
   Stethoscope,
+  Trash2,
   Users,
+  XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiDelete, apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
-import { formatDate, USER_STATUS_LABELS } from '@/lib/utils'
+import { formatDate, USER_STATUS_LABELS, GENDER_LABELS } from '@/lib/utils'
 import { ORG_STATUS_LABELS, ORG_TYPE_LABELS } from '@/lib/network'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { MapPicker } from '@/components/shared/map-picker'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -97,10 +103,12 @@ interface OrgDashboard {
     status: string
     statusLabel: string
     note: string | null
+    workYears?: number | null
     createdAt: string
     nurse: {
       id: string; name: string; phone: string; gender: string | null
-      specialty: string | null; yearsOfExperience: number | null; status: string
+      specialty: string | null; qualification: string | null
+      yearsOfExperience: number | null; status: string
     }
   }>
   activePosts: Array<{ id: string; number: number; title: string; status: string; value: number; department: string | null }>
@@ -123,6 +131,16 @@ type OrgFormValues = {
 const TYPE_OPTIONS = ['HOSPITAL', 'MEDICAL_CENTER', 'SPECIALIZED_CENTER', 'CLINIC', 'MEDICAL_COMPLEX', 'OTHER'] as const
 const STATUS_OPTIONS = ['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const
 
+/** تبويبات تصفية الجهات — تُبرز طلبات الجهات الجديدة أولاً */
+const ORG_FILTER_TABS = [
+  { value: 'ALL', label: 'الكل' },
+  { value: 'PENDING', label: 'بانتظار الاعتماد' },
+  { value: 'ACTIVE', label: 'نشطة' },
+  { value: 'INACTIVE', label: 'غير نشطة' },
+  { value: 'SUSPENDED', label: 'معلقة' },
+  { value: 'REJECTED', label: 'مرفوضة' },
+] as const
+
 function TypeIcon({ type }: { type: string }) {
   if (type === 'CLINIC') return <Stethoscope className="size-4" />
   if (type === 'MEDICAL_CENTER' || type === 'MEDICAL_COMPLEX') return <Cross className="size-4" />
@@ -132,10 +150,12 @@ function TypeIcon({ type }: { type: string }) {
 export function OrganizationsManager() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Org | null>(null)
   const [dashboardId, setDashboardId] = useState<string | null>(null)
   const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Org | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-orgs'],
@@ -187,6 +207,19 @@ export function OrganizationsManager() {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['admin-orgs'] })
       queryClient.invalidateQueries({ queryKey: ['hospitals'] })
+      setDeleteTarget(null)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // اعتماد جهة جديدة مقترحة (PENDING → ACTIVE) أو رفضها (PENDING → REJECTED)
+  const reviewMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'REJECTED' }) =>
+      apiPatch<{ message: string }>(`/api/admin/hospitals/${id}`, { status, isActive: status === 'ACTIVE' }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-orgs'] })
+      queryClient.invalidateQueries({ queryKey: ['hospitals'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -215,8 +248,11 @@ export function OrganizationsManager() {
   }
 
   const orgs = (data?.hospitals ?? []).filter(
-    (o) => !search || o.name.includes(search) || (o.city ?? '').includes(search)
+    (o) =>
+      (statusFilter === 'ALL' || o.status === statusFilter) &&
+      (!search || o.name.includes(search) || (o.city ?? '').includes(search))
   )
+  const pendingCount = (data?.hospitals ?? []).filter((o) => o.status === 'PENDING').length
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -240,6 +276,49 @@ export function OrganizationsManager() {
           </Button>
         </div>
       </div>
+
+      {/* تبويبات تصفية الحالة — تُبرز الجهات الجديدة بانتظار الاعتماد */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {ORG_FILTER_TABS.map((tab) => {
+          const count =
+            tab.value === 'ALL'
+              ? (data?.hospitals ?? []).length
+              : (data?.hospitals ?? []).filter((o) => o.status === tab.value).length
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setStatusFilter(tab.value)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
+                statusFilter === tab.value
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:border-primary/40'
+              }`}
+            >
+              {tab.label}
+              {tab.value !== 'ALL' && <span className="ms-1 opacity-70">({count})</span>}
+            </button>
+          )
+        })}
+      </div>
+
+      {pendingCount > 0 && statusFilter !== 'PENDING' && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <Hourglass className="size-5 shrink-0" />
+          <p className="leading-relaxed">
+            يوجد <span className="font-extrabold">{pendingCount}</span> جهة صحية جديدة اقترحها
+            الكوادر أو المستلمون الإداريون — راجع بياناتها واعتمدها أو ارفضها.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ms-auto shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100"
+            onClick={() => setStatusFilter('PENDING')}
+          >
+            مراجعة الطلبات
+          </Button>
+        </div>
+      )}
 
       {orgs.length === 0 ? (
         <EmptyState
@@ -277,6 +356,12 @@ export function OrganizationsManager() {
                         <TypeIcon type={org.type} />
                         {org.name}
                       </p>
+                      {org.status === 'PENDING' && (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300">
+                          <ShieldAlert className="size-3" />
+                          جهة مقترحة — بانتظار مراجعتها واعتمادها
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <Badge variant="outline">{ORG_TYPE_LABELS[org.type] ?? org.type}</Badge>
@@ -299,6 +384,31 @@ export function OrganizationsManager() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        {/* جهة مقترحة: اعتماد / رفض مباشر */}
+                        {org.status === 'PENDING' && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-xs text-emerald-700 hover:text-emerald-700"
+                              disabled={reviewMutation.isPending}
+                              onClick={() => reviewMutation.mutate({ id: org.id, status: 'ACTIVE' })}
+                            >
+                              <CheckCircle2 className="size-3.5" />
+                              اعتماد
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-xs text-red-600 hover:text-red-600"
+                              disabled={reviewMutation.isPending}
+                              onClick={() => reviewMutation.mutate({ id: org.id, status: 'REJECTED' })}
+                            >
+                              <XCircle className="size-3.5" />
+                              رفض
+                            </Button>
+                          </>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -320,13 +430,9 @@ export function OrganizationsManager() {
                           aria-label="حذف"
                           className="text-red-600 hover:text-red-600"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (confirm(`حذف جهة (${org.name}) نهائياً؟ يُمنع الحذف إذا كانت مرتبطة بتكليفات.`)) {
-                              deleteMutation.mutate(org.id)
-                            }
-                          }}
+                          onClick={() => setDeleteTarget(org)}
                         >
-                          <span className="text-lg leading-none">×</span>
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -460,15 +566,27 @@ export function OrganizationsManager() {
                     </p>
                   ) : (
                     dashboard.nurses.map((n) => (
-                      <div key={n.affiliationId} className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold">{n.nurse.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {n.nurse.specialty ?? 'بلا تخصص'} — {n.nurse.yearsOfExperience != null ? `${n.nurse.yearsOfExperience} سنة خبرة` : 'خبرة غير محددة'} — <span dir="ltr">{n.nurse.phone}</span>
-                          </p>
+                      <div key={n.affiliationId} className="rounded-xl border p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold">{n.nurse.name}</p>
+                            <p className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
+                              {n.nurse.gender && <span>{GENDER_LABELS[n.nurse.gender] ?? n.nurse.gender}</span>}
+                              <span>{n.nurse.specialty ?? 'بلا تخصص'}</span>
+                              <span>{n.nurse.qualification ?? '—'}</span>
+                              <span>{n.nurse.yearsOfExperience != null ? `${n.nurse.yearsOfExperience} سنة خبرة` : 'خبرة غير محددة'}</span>
+                              <span dir="ltr">{n.nurse.phone}</span>
+                            </p>
+                          </div>
+                          <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
+                          <Badge variant="outline">{n.statusLabel}</Badge>
                         </div>
-                        <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
-                        <Badge variant="outline">{n.statusLabel}</Badge>
+                        {(n.workYears != null || n.note) && (
+                          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[11px] text-muted-foreground">
+                            {n.workYears != null && <span>سنوات العمل بالجهة: {n.workYears}</span>}
+                            {n.note && <span>ملاحظة: {n.note}</span>}
+                          </p>
+                        )}
                       </div>
                     ))
                   )}
@@ -504,6 +622,27 @@ export function OrganizationsManager() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ---------- بطاقة تأكيد الحذف الاحترافية — مع إحصاءات التأثير ---------- */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        tone="danger"
+        icon={Trash2}
+        title={`حذف جهة «${deleteTarget?.name ?? ''}» نهائياً`}
+        description={
+          deleteTarget
+            ? `سيتم حذف الجهة نهائياً مع ${deleteTarget._count?.affiliations ?? 0} ارتباط كوادر بسجلها${
+                (deleteTarget._count?.posts ?? 0) > 0
+                  ? ` و${deleteTarget._count?.posts ?? 0} تكليف مُعلن مرتبط بها`
+                  : ' — لا توجد تكليفات مرتبطة بها'
+              }. لا يمكن التراجع عن هذا الإجراء!`
+            : ''
+        }
+        confirmLabel="نعم، احذف الجهة نهائياً"
+        processing={deleteMutation.isPending}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
     </div>
   )
 }

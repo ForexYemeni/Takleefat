@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  Building2,
   Eye,
   EyeOff,
   FileText,
@@ -16,7 +17,7 @@ import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPost } from '@/lib/api-client'
-import { formatDate, USER_STATUS_LABELS, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '@/lib/utils'
+import { formatDate, USER_STATUS_LABELS, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS, QUALIFICATION_OPTIONS } from '@/lib/utils'
 import {
   createNurseSchema,
   type CreateNurseInput,
@@ -54,6 +55,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export interface AdminUser {
   id: string
@@ -66,6 +74,8 @@ export interface AdminUser {
   yearsOfExperience: number | null
   rejectNote: string | null
   createdAt: string
+  /** جهة الكادر (إن أضافه مستلم إداري لجهته) — تُعرض تحت الاسم */
+  affiliations?: Array<{ hospital: { name: string; status: string } }>
   _count: { documents: number; assignments: number }
 }
 
@@ -107,9 +117,10 @@ export function NurseReview() {
       phone: '',
       password: '',
       specialty: '',
-      qualification: '',
-      yearsOfExperience: '0',
-    },
+      qualification: undefined,
+      gender: undefined,
+      yearsOfExperience: undefined,
+    } as unknown as CreateNurseFormValues,
   })
 
   const createMutation = useMutation({
@@ -207,6 +218,12 @@ export function NurseReview() {
                     <TableCell>
                       <p className="font-bold">{user.name}</p>
                       <p className="text-xs text-muted-foreground md:hidden">{user.phone}</p>
+                      {user.affiliations?.[0]?.hospital && (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-primary">
+                          <Building2 className="size-3" />
+                          {user.affiliations[0].hospital.name}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell" dir="ltr">
                       <span className="text-start">{user.phone}</span>
@@ -275,7 +292,7 @@ export function NurseReview() {
             className="space-y-4"
           >
             <div className="space-y-2">
-              <Label htmlFor="nurse-name">الاسم الكامل</Label>
+              <Label htmlFor="nurse-name">الاسم مع اللقب</Label>
               <Input id="nurse-name" placeholder="مثال: سارة أحمد" {...createForm.register('name')} />
               {createForm.formState.errors.name && (
                 <p className="text-xs text-destructive">
@@ -290,7 +307,9 @@ export function NurseReview() {
                 <Input
                   id="nurse-phone"
                   type="tel"
+                  inputMode="numeric"
                   dir="ltr"
+                  maxLength={9}
                   placeholder="7xxxxxxxx"
                   className="ps-10 text-start"
                   {...createForm.register('phone')}
@@ -304,7 +323,7 @@ export function NurseReview() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="nurse-specialty">التخصص</Label>
+                <Label htmlFor="nurse-specialty">التخصص (اختياري)</Label>
                 <Input
                   id="nurse-specialty"
                   placeholder="مثال: تمريض طوارئ"
@@ -317,12 +336,14 @@ export function NurseReview() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nurse-experience">سنوات الخبرة</Label>
+                <Label htmlFor="nurse-experience">سنوات الخبرة (اختياري)</Label>
                 <Input
                   id="nurse-experience"
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={50}
+                  placeholder="أدخل عدد السنوات"
                   {...createForm.register('yearsOfExperience')}
                 />
                 {createForm.formState.errors.yearsOfExperience && (
@@ -332,18 +353,48 @@ export function NurseReview() {
                 )}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="nurse-qualification">المؤهل العلمي</Label>
-              <Input
-                id="nurse-qualification"
-                placeholder="مثال: بكالوريوس تمريض"
-                {...createForm.register('qualification')}
-              />
-              {createForm.formState.errors.qualification && (
-                <p className="text-xs text-destructive">
-                  {createForm.formState.errors.qualification.message}
-                </p>
-              )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>المؤهل العلمي *</Label>
+                <Select
+                  value={createForm.watch('qualification') ?? ''}
+                  onValueChange={(v) => createForm.setValue('qualification', v as never)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر المؤهل" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUALIFICATION_OPTIONS.map((q) => (
+                      <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {createForm.formState.errors.qualification && (
+                  <p className="text-xs text-destructive">
+                    {createForm.formState.errors.qualification.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>الجنس *</Label>
+                <Select
+                  value={createForm.watch('gender') ?? ''}
+                  onValueChange={(v) => createForm.setValue('gender', v as 'MALE' | 'FEMALE')}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر الجنس" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">ذكر</SelectItem>
+                    <SelectItem value="FEMALE">أنثى</SelectItem>
+                  </SelectContent>
+                </Select>
+                {createForm.formState.errors.gender && (
+                  <p className="text-xs text-destructive">
+                    {createForm.formState.errors.gender.message}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="nurse-password">كلمة المرور</Label>

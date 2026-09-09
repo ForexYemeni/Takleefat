@@ -45,6 +45,12 @@ export async function GET(req: NextRequest) {
         hospitalName: true,
         rejectNote: true,
         createdAt: true,
+        // جهة الكادر الأولى (إذا أضافه مستلم إداري لجهته) — تُعرض في قائمة الكادر
+        affiliations: {
+          take: 1,
+          orderBy: { createdAt: 'desc' as const },
+          select: { hospital: { select: { name: true, status: true } } },
+        },
         _count: { select: { documents: true, assignments: true } },
       },
     })
@@ -73,7 +79,7 @@ export async function POST(req: NextRequest) {
       if (!parsed.success) {
         return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
       }
-      const { name, phone, password, specialty, qualification, yearsOfExperience } = parsed.data
+      const { name, phone, password, specialty, qualification, gender, yearsOfExperience } = parsed.data
 
       const existing = await db.user.findUnique({ where: { phone } })
       if (existing) {
@@ -88,9 +94,11 @@ export async function POST(req: NextRequest) {
           password: hashed,
           role: 'NURSE',
           status: 'APPROVED',
-          specialty,
+          // التخصص اختياري (الجولة الثامنة) — المؤهل من 3 خيارات والجنس إجباري
+          specialty: specialty?.trim() || null,
           qualification,
-          yearsOfExperience,
+          gender,
+          yearsOfExperience: yearsOfExperience ?? 0,
         },
         select: { id: true, name: true, phone: true, role: true, status: true },
       })

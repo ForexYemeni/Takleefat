@@ -82,6 +82,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     items: [
       { href: '/receiver', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/receiver/assignments', label: 'التكليفات والتقديمات', icon: Inbox },
+      { href: '/receiver/staff', label: 'كوادر جهتي', icon: Users },
       { href: '/receiver/favorites', label: 'الكوادر المفضلة', icon: Star },
       { href: '/receiver/earnings', label: 'أرباحي', icon: Coins },
       { href: '/receiver/profile', label: 'الملف الشخصي', icon: UserRound },

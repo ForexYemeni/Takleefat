@@ -1,17 +1,15 @@
 import { z } from 'zod'
+import { PHONE_REGEX, PHONE_MESSAGE, QUALIFICATION_VALUES } from '@/lib/validations/auth'
 
 /**
- * حسابات يُنشئها مدير النظام مباشرة (مستلم إداري / كادر تمريضي)
- * يُنشأ الحساب معتمداً تلقائياً ويمكن للمالك تسجيل الدخول فوراً.
- * رقم الهاتف يجب أن يتبع الصيغة اليمنية: يبدأ بـ 7 ويتكوّن من 9 أرقام.
+ * حسابات يُنشئها مدير النظام (مستلم إداري / كادر تمريضي) ومستلم الجهة لكوادر جهته.
+ * نفس قواعد التسجيل الذاتي — الجولة الثامنة:
+ * الاسم مع اللقب فقط + هاتف 9 أرقام + مؤهل من 3 خيارات + جنس إجباري للكادر.
  */
 
 const adminPhoneSchema = z
   .string({ error: 'رقم الهاتف مطلوب' })
-  .regex(
-    /^7\d{8}$/,
-    'رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام — مثال: 773178684'
-  )
+  .regex(PHONE_REGEX, PHONE_MESSAGE)
 
 const adminPasswordSchema = z
   .string({ error: 'كلمة المرور مطلوبة' })
@@ -19,11 +17,18 @@ const adminPasswordSchema = z
   .regex(/[A-Za-z]/, 'كلمة المرور يجب أن تحتوي على حروف')
   .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على أرقام')
 
+/** الاسم مع اللقب فقط — كلمتان على الأقل (تُطبق على كل الأدوار) */
+export const fullNameSchema = z
+  .string({ error: 'الاسم مطلوب' })
+  .min(3, 'الاسم يجب أن يكون 3 أحرف على الأقل')
+  .max(80, 'الاسم طويل جداً')
+  .refine(
+    (v) => v.trim().split(/\s+/).filter(Boolean).length >= 2,
+    'أدخل الاسم مع اللقب — مثال: أحمد صالح (الاسم واللقب فقط)'
+  )
+
 export const createReceiverSchema = z.object({
-  name: z
-    .string({ error: 'الاسم مطلوب' })
-    .min(3, 'الاسم يجب أن يكون 3 أحرف على الأقل')
-    .max(80, 'الاسم طويل جداً'),
+  name: fullNameSchema,
   phone: adminPhoneSchema,
   password: adminPasswordSchema,
   // الجهة الصحية (المستشفى) — اختيارية عند الإنشاء من الإدارة لأن الإدارة قد تعبئها لاحقاً
@@ -31,25 +36,37 @@ export const createReceiverSchema = z.object({
 })
 
 export const createNurseSchema = z.object({
-  name: z
-    .string({ error: 'الاسم مطلوب' })
-    .min(3, 'الاسم يجب أن يكون 3 أحرف على الأقل')
-    .max(80, 'الاسم طويل جداً'),
+  name: fullNameSchema,
   phone: adminPhoneSchema,
   password: adminPasswordSchema,
-  specialty: z
-    .string({ error: 'التخصص مطلوب' })
-    .min(2, 'التخصص مطلوب')
-    .max(80, 'التخصص طويل جداً'),
+  // التخصص اختياري — يُختار من الأقسام المُدارة في حساب الإدارة
+  specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
   qualification: z
-    .string({ error: 'المؤهل العلمي مطلوب' })
-    .min(2, 'المؤهل العلمي مطلوب')
-    .max(120, 'المؤهل طويل جداً'),
+    .enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
+  gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
   yearsOfExperience: z.coerce
-    .number({ error: 'سنوات الخبرة مطلوبة' })
+    .number({ error: 'سنوات الخبرة غير صحيحة' })
     .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
     .min(0, 'سنوات الخبرة غير صحيحة')
-    .max(50, 'سنوات الخبرة غير صحيحة'),
+    .max(50, 'سنوات الخبرة غير صحيحة')
+    .optional(),
+})
+
+/** إضافة ممرض لجهة المستلم الإداري — الجولة الثامنة */
+export const receiverCreateNurseSchema = z.object({
+  name: fullNameSchema,
+  phone: adminPhoneSchema,
+  password: adminPasswordSchema,
+  gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
+  qualification: z
+    .enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
+  specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
+  yearsOfExperience: z.coerce
+    .number({ error: 'سنوات الخبرة غير صحيحة' })
+    .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
+    .min(0, 'سنوات الخبرة غير صحيحة')
+    .max(50, 'سنوات الخبرة غير صحيحة')
+    .optional(),
 })
 
 export const reviewUserSchema = z.object({
@@ -62,6 +79,8 @@ export const reviewUserSchema = z.object({
 export type CreateReceiverInput = z.infer<typeof createReceiverSchema>
 export type CreateNurseInput = z.infer<typeof createNurseSchema>
 export type CreateNurseFormValues = z.input<typeof createNurseSchema>
+export type ReceiverCreateNurseInput = z.infer<typeof receiverCreateNurseSchema>
+export type ReceiverCreateNurseFormValues = z.input<typeof receiverCreateNurseSchema>
 
 // ---------- إدارة الحساب من الإدارة (تغيير كلمة المرور / حذف نهائي) ----------
 
@@ -72,10 +91,7 @@ export const resetPasswordSchema = z.object({
 // ---------- الملف الشخصي الذاتي (جميع الأدوار) ----------
 
 export const updateProfileSchema = z.object({
-  name: z
-    .string({ error: 'الاسم مطلوب' })
-    .min(3, 'الاسم يجب أن يكون 3 أحرف على الأقل')
-    .max(80, 'الاسم طويل جداً'),
+  name: fullNameSchema,
 })
 
 export const changePasswordSchema = z.object({

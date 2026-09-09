@@ -167,7 +167,7 @@ export const hospitalSchema = z.object({
   address: z.string().max(200, 'العنوان طويل جداً').optional().or(z.literal('')),
   phone: z.string().max(20, 'رقم التواصل طويل جداً').optional().or(z.literal('')),
   email: z.string().email('البريد الإلكتروني غير صحيح').max(120).optional().or(z.literal('')),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'], { error: 'حالة الجهة غير صحيحة' }).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING', 'REJECTED'], { error: 'حالة الجهة غير صحيحة' }).optional(),
 })
 
 export const hospitalUpdateSchema = hospitalSchema.partial().extend({
@@ -179,12 +179,39 @@ export const hospitalUpdateSchema = hospitalSchema.partial().extend({
 export const affiliationCreateSchema = z.object({
   // يُستنتج من الجلسة للكادر نفسه — إلزامي للمستلم/الإدارة
   nurseId: z.string().min(1).optional(),
-  hospitalId: z.string({ error: 'الجهة الصحية مطلوبة' }).min(1, 'الجهة الصحية مطلوبة'),
+  hospitalId: z.string().min(1).optional(),
+  // جهة صحية جديدة لا توجد في القائمة — تُرفع للإدارة بانتظار الاعتماد (الجولة الثامنة)
+  newOrg: z
+    .object({
+      name: z
+        .string({ error: 'اسم الجهة الصحية مطلوب' })
+        .min(2, 'اسم الجهة مطلوب')
+        .max(150, 'الاسم طويل جداً'),
+      type: z
+        .enum(['HOSPITAL', 'MEDICAL_CENTER', 'SPECIALIZED_CENTER', 'CLINIC', 'MEDICAL_COMPLEX', 'OTHER'])
+        .optional(),
+      city: z.string().max(80).optional().or(z.literal('')),
+      address: z.string().max(200).optional().or(z.literal('')),
+      phone: z.string().max(20).optional().or(z.literal('')),
+      email: z.string().email('البريد الإلكتروني غير صحيح').max(120).optional().or(z.literal('')),
+    })
+    .optional(),
   status: z
     .enum(
       ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
       { error: 'حالة الارتباط غير صحيحة' }
     )
+    .optional(),
+  // الحالة التي يطلبها الكادر (يعمل حالياً / عمل سابقاً) — الاعتماد النهائي للإدارة
+  requestedStatus: z
+    .enum(['WORKING', 'FORMER'], { error: 'نوع العمل غير صحيح' })
+    .optional(),
+  // سنوات العمل في الجهة — ضمن السيرة الذاتية للكادر
+  workYears: z.coerce
+    .number({ error: 'سنوات العمل غير صحيحة' })
+    .int('سنوات العمل يجب أن تكون رقماً صحيحاً')
+    .min(0, 'سنوات العمل غير صحيحة')
+    .max(50, 'سنوات العمل غير صحيحة')
     .optional(),
   note: z.string().max(500, 'الملاحظة طويلة جداً').optional().or(z.literal('')),
 })

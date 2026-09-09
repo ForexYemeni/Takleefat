@@ -46,6 +46,8 @@ export async function GET() {
         id: a.id,
         status: a.status,
         statusLabel: AFFILIATION_STATUS_LABELS[a.status] ?? a.status,
+        requestedStatus: a.requestedStatus,
+        workYears: a.workYears,
         note: a.note,
         createdAt: a.createdAt,
         hospital: a.hospital,

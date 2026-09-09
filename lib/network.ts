@@ -32,6 +32,8 @@ export const ORG_STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'نشطة',
   INACTIVE: 'غير نشطة',
   SUSPENDED: 'معلقة',
+  PENDING: 'بانتظار اعتماد الإدارة',
+  REJECTED: 'مرفوضة',
 }
 
 export const DISTRIBUTION_LABELS: Record<string, string> = {

@@ -1,76 +1,109 @@
 import { z } from 'zod'
 
+/**
+ * قواعد التسجيل — الجولة الثامنة:
+ * - الاسم: الاسم مع اللقب فقط (كلمتان على الأقل) للكادر والمستلم
+ * - الهاتف: 9 أرقام حصراً (يبدأ بـ 7) ولا يقبل رقماً إضافياً
+ * - كلمة المرور: تُدخل مرة واحدة دون تأكيد
+ * - التخصص: اختياري (من الأقسام المُدارة في حساب الإدارة)
+ * - المؤهل العلمي: ثلاثة خيارات ثابتة (أورديلي سنة / دبلوم ثلاث سنوات / بكالوريوس أربع سنوات)
+ * - الجنس: إجباري للكادر التمريضي (ذكر أو أنثى)
+ * - سنوات الخبرة: الحقل يبدأ فارغاً (بلا صفر افتراضي) والفراغ يعادل 0
+ * - المستلم الإداري: الجهة الصحية من قائمة الإدارة أو جهة جديدة تُرفع للاعتماد مع بقية بياناتها
+ */
+
+export const PHONE_REGEX = /^7\d{8}$/
+export const PHONE_MESSAGE =
+  'رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام فقط — مثال: 773178684'
+
+/** المؤهل العلمي — الخيارات الثابتة الثلاثة (نفس قيم QUALIFICATION_OPTIONS في lib/utils) */
+export const QUALIFICATION_VALUES = ['أورديلي سنة', 'دبلوم ثلاث سنوات', 'بكالوريوس أربع سنوات'] as const
+
 export const loginSchema = z.object({
   phone: z
     .string({ error: 'رقم الهاتف مطلوب' })
-    .regex(
-      /^7\d{8}$/,
-      'رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام — مثال: 773178684'
-    ),
+    .regex(PHONE_REGEX, PHONE_MESSAGE),
   password: z
     .string({ error: 'كلمة المرور مطلوبة' })
     .min(6, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'),
+})
+
+/** بيانات الجهة الصحية الجديدة — يكملها مقدّم الطلب ليُراجعها حساب الإدارة ويعتمدها أو يرفضها */
+export const newOrgSchema = z.object({
+  type: z
+    .enum(['HOSPITAL', 'MEDICAL_CENTER', 'SPECIALIZED_CENTER', 'CLINIC', 'MEDICAL_COMPLEX', 'OTHER'], {
+      error: 'نوع الجهة غير صحيح',
+    })
+    .default('HOSPITAL'),
+  city: z.string().max(80, 'المدينة طويلة جداً').optional().or(z.literal('')),
+  address: z.string().max(200, 'العنوان طويل جداً').optional().or(z.literal('')),
+  phone: z.string().max(20, 'رقم التواصل طويل جداً').optional().or(z.literal('')),
+  email: z
+    .string()
+    .email('البريد الإلكتروني غير صحيح')
+    .max(120)
+    .optional()
+    .or(z.literal('')),
 })
 
 export const registerSchema = z
   .object({
     // الافتراضي: كادر تمريضي — للتوافق مع أي طلبات قديمة لا تُرسل الحقل
     role: z.enum(['NURSE', 'RECEIVER'], { error: 'نوع الحساب مطلوب' }).default('NURSE'),
+    // الاسم مع اللقب فقط — كلمتان على الأقل (تُفحص في superRefine)
     name: z
       .string({ error: 'الاسم مطلوب' })
       .min(3, 'الاسم يجب أن يكون 3 أحرف على الأقل')
       .max(80, 'الاسم طويل جداً'),
-    phone: z
-      .string({ error: 'رقم الهاتف مطلوب' })
-      .regex(
-        /^7\d{8}$/,
-        'رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام — مثال: 773178684'
-      ),
+    phone: z.string({ error: 'رقم الهاتف مطلوب' }).regex(PHONE_REGEX, PHONE_MESSAGE),
+    // كلمة المرور تُدخل مرة واحدة — دون تأكيد (الجولة الثامنة)
     password: z
       .string({ error: 'كلمة المرور مطلوبة' })
       .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
       .regex(/[A-Za-z]/, 'كلمة المرور يجب أن تحتوي على حروف')
       .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على أرقام'),
-    confirmPassword: z.string({ error: 'تأكيد كلمة المرور مطلوب' }),
-    // حقول خاصة بالكادر التمريضي فقط — تُتحقق شرطياً في superRefine
+    // حقول خاصة بالكادر التمريضي فقط — التخصص اختياري (الجولة الثامنة)
     specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
-    qualification: z.string().max(120, 'المؤهل طويل جداً').optional(),
+    qualification: z.enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }).optional(),
     // الجهة الصحية (المستشفى) — خاصة بالمستلم الإداري
     hospitalName: z.string().max(120, 'اسم الجهة الصحية طويل جداً').optional(),
-    gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس غير صحيح' }).optional(),
+    // جهة صحية جديدة لا توجد في قائمة الإدارة — تُرفع بانتظار الاعتماد مع بقية بياناتها
+    newOrg: newOrgSchema.optional(),
+    // الجنس إجباري للكادر التمريضي
+    gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }).optional(),
+    // سنوات الخبرة — الفراغ يعادل 0 (لا صفر ظاهر في الحقل)
     yearsOfExperience: z.coerce
-      .number({ error: 'سنوات الخبرة مطلوبة' })
+      .number({ error: 'سنوات الخبرة غير صحيحة' })
       .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
       .min(0, 'سنوات الخبرة غير صحيحة')
       .max(50, 'سنوات الخبرة غير صحيحة')
       .optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.password !== data.confirmPassword) {
+    // الاسم مع اللقب فقط: كلمتان على الأقل
+    const words = data.name.trim().split(/\s+/).filter(Boolean)
+    if (words.length < 2) {
       ctx.addIssue({
         code: 'custom',
-        message: 'كلمتا المرور غير متطابقتين',
-        path: ['confirmPassword'],
+        message: 'أدخل الاسم مع اللقب — مثال: أحمد صالح (الاسم واللقب فقط)',
+        path: ['name'],
       })
     }
 
-    // بيانات الكادر التمريضي إلزامية، أما المستلم الإداري فيُلزم بإدخال الجهة الصحية
+    // بيانات الكادر التمريضي: المؤهل والجنس إلزامية، التخصص اختياري، الخبرة تعادل 0 عند الفراغ
     if (data.role === 'NURSE') {
-      if (!data.specialty || data.specialty.trim().length < 2) {
-        ctx.addIssue({ code: 'custom', message: 'التخصص مطلوب', path: ['specialty'] })
-      }
-      if (!data.qualification || data.qualification.trim().length < 2) {
+      if (!data.qualification) {
         ctx.addIssue({
           code: 'custom',
-          message: 'المؤهل العلمي مطلوب',
+          message: 'المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)',
           path: ['qualification'],
         })
       }
-      if (data.yearsOfExperience === undefined || Number.isNaN(data.yearsOfExperience)) {
+      if (!data.gender) {
         ctx.addIssue({
           code: 'custom',
-          message: 'سنوات الخبرة مطلوبة',
-          path: ['yearsOfExperience'],
+          message: 'الجنس مطلوب — اختر ذكر أو أنثى',
+          path: ['gender'],
         })
       }
     }
@@ -79,7 +112,7 @@ export const registerSchema = z
       if (!data.hospitalName || data.hospitalName.trim().length < 2) {
         ctx.addIssue({
           code: 'custom',
-          message: 'اسم الجهة الصحية (المستشفى) مطلوب',
+          message: 'اسم الجهة الصحية مطلوب — اخترها من القائمة أو أضفها كجهة جديدة',
           path: ['hospitalName'],
         })
       }

@@ -112,8 +112,9 @@ function LoginForm() {
             <Input
               id="phone"
               type="tel"
-              inputMode="tel"
+              inputMode="numeric"
               dir="ltr"
+              maxLength={9}
               placeholder="7xxxxxxxx"
               className="ps-10 text-start"
               {...form.register('phone')}

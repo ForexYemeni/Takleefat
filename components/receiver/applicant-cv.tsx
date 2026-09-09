@@ -21,6 +21,7 @@ import { DocumentViewer, type ViewableDocument } from '@/components/shared/docum
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { FavoriteStar } from '@/components/shared/favorite-star'
+import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import {
   APPLICATION_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -74,6 +75,12 @@ export interface ApplicantData {
     isFavorite?: boolean
     documents: ApplicantDocument[]
     ratings?: ApplicantRatings
+    /** السجل المهني — الجهات التي عمل بها مع سنوات العمل (الجولة الثامنة) */
+    affiliations?: Array<{
+      status: string
+      workYears: number | null
+      hospital: { name: string; type: string; city: string | null }
+    }>
   }
 }
 
@@ -133,6 +140,44 @@ export function ApplicantCV({
           value={nurse.yearsOfExperience != null ? `${nurse.yearsOfExperience} سنة` : '—'}
         />
       </div>
+
+      {/* السجل المهني — جهات العمل المعتمدة مع سنوات العمل */}
+      {nurse.affiliations && nurse.affiliations.length > 0 && (
+        <div className="rounded-2xl border-2 border-teal-200 bg-gradient-to-bl from-teal-50/60 to-transparent p-4 dark:border-teal-900 dark:from-teal-950/20">
+          <p className="flex items-center gap-1.5 text-sm font-extrabold">
+            <Briefcase className="size-4 text-primary" />
+            السجل المهني — الجهات الصحية
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            الجهات التي عمل بها الكادر مع سنوات العمل — يُعتمد سجلها المهني من إدارة المنصة
+          </p>
+          <div className="mt-3 grid gap-2">
+            {nurse.affiliations.map((aff, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-center gap-2 rounded-xl bg-background/70 px-3 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold">{aff.hospital.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {[
+                      aff.hospital.city,
+                      aff.workYears != null
+                        ? `${aff.workYears} ${aff.workYears === 1 ? 'سنة' : aff.workYears === 2 ? 'سنتان' : 'سنوات'} عمل`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' — ') || '—'}
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[11px]">
+                  {AFFILIATION_STATUS_LABELS[aff.status] ?? aff.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* التقييمات الاحترافية — تُضاف للسيرة الذاتية من المستلمين السابقين */}
       {nurse.ratings && nurse.ratings.count > 0 && (
