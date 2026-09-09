@@ -898,6 +898,69 @@ curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R8_R_ID -o /dev/nul
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R8_ORG_ID -o /dev/null
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R8_ORG2_ID -o /dev/null
 
+# ============================================================
+# القسم 23 — مراجعة طلبات الارتباط من لوحة الجهة (الكوادر والتكليفات)
+# إصلاح: طلب الكادر بجهة نشطة يبقى «قيد المراجعة» حتى تراجعه الإدارة من لوحة الجهة
+# ============================================================
+echo "=========== 23) مراجعة طلبات الارتباط المعلقة من لوحة الجهة ==========="
+
+R9_N=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"طلاب المراجعة","phone":"788880401","password":"Round9@1234","qualification":"بكالوريوس أربع سنوات","gender":"MALE"}')
+R9_N_ID=$(echo "$R9_N" | jget "['user']['id']")
+[ -n "$R9_N_ID" ] && check "تسجيل كادر قسم المراجعة → 201" "ok" "ok" || check "تسجيل كادر قسم المراجعة" "id" "null"
+
+login "$DIR/r9nurse.jar" "788880401" "Round9@1234"
+R9_AFF=$(curl -s -b "$DIR/r9nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$SEED_ORG_ID\",\"requestedStatus\":\"WORKING\",\"workYears\":3}")
+R9_AFF_ID=$(echo "$R9_AFF" | jget "['affiliation']['id']")
+R9_AFF_STATUS=$(echo "$R9_AFF" | jget "['affiliation']['status']")
+check "طلب ارتباط كادر بجهة نشطة → PENDING" "PENDING" "$R9_AFF_STATUS"
+
+# لوحة الجهة تعيد الحقلين معاً: حالة الارتباط + حالة حساب الكادر (عقد البيانات لعرض «الحساب/الارتباط»)
+R9_DASH=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$SEED_ORG_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+n=[x for x in d['nurses'] if x['nurse']['phone']=='788880401']
+print(n[0]['status'], n[0]['statusLabel'], n[0]['nurse']['status'], n[0]['requestedStatus']) if n else print('', '', '', '')" 2>/dev/null)
+check "لوحة الجهة: ارتباط PENDING («قيد المراجعة») + حساب الكادر + الحالة المطلوبة" "PENDING قيد المراجعة PENDING WORKING" "$R9_DASH"
+
+# بوابة المستندات قبل الاعتماد — ثم رفع مستند والاعتماد
+R9_GATE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R9_AFF_ID -H "Content-Type: application/json" -d '{"status":"WORKING"}')
+check "لا اعتماد ارتباط بلا مستندات → 422" "422" "$R9_GATE"
+
+UP_R9=$(code -b "$DIR/r9nurse.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "الكادر يرفع مستنده → 201" "201" "$UP_R9"
+
+R9_APPROVE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R9_AFF_ID -H "Content-Type: application/json" \
+  -d '{"status":"WORKING"}' | jget "['affiliation']['status']")
+check "اعتماد الطلب من لوحة الجهة → WORKING (لم يبق قيد المراجعة)" "WORKING" "$R9_APPROVE"
+
+R9_DASH2=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$SEED_ORG_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+n=[x for x in d['nurses'] if x['nurse']['phone']=='788880401']
+print(n[0]['status'], n[0]['statusLabel']) if n else print('', '')" 2>/dev/null)
+check "لوحة الجهة بعد الاعتماد: WORKING («يعمل حالياً»)" "WORKING يعمل حالياً" "$R9_DASH2"
+
+# رفض طلب الارتباط المعلق (حذف الطلب) — جهة ثانية نشطة
+R9_ORG2=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"جهة رفض الطلب","type":"CLINIC","status":"ACTIVE"}')
+R9_ORG2_ID=$(echo "$R9_ORG2" | jget "['hospital']['id']")
+R9_AFF2=$(curl -s -b "$DIR/r9nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R9_ORG2_ID\",\"requestedStatus\":\"WORKING\"}")
+R9_AFF2_ID=$(echo "$R9_AFF2" | jget "['affiliation']['id']")
+R9_REJECT=$(code -b "$DIR/admin.jar" -X DELETE $BASE/api/affiliations/$R9_AFF2_ID)
+check "رفض طلب الارتباط المعلق → 200" "200" "$R9_REJECT"
+R9_GONE=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$R9_ORG2_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(len([x for x in d['nurses'] if x['nurse']['phone']=='788880401']))")
+check "الطلب المرفوض اختفى من لوحة الجهة" "0" "$R9_GONE"
+
+# --- تنظيف القسم ---
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R9_N_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R9_ORG2_ID -o /dev/null
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

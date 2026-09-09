@@ -25,7 +25,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiDelete, apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS, GENDER_LABELS } from '@/lib/utils'
-import { ORG_STATUS_LABELS, ORG_TYPE_LABELS } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, ORG_STATUS_LABELS, ORG_TYPE_LABELS } from '@/lib/network'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { MapPicker } from '@/components/shared/map-picker'
@@ -102,6 +102,7 @@ interface OrgDashboard {
     affiliationId: string
     status: string
     statusLabel: string
+    requestedStatus?: string | null
     note: string | null
     workYears?: number | null
     createdAt: string
@@ -220,6 +221,30 @@ export function OrganizationsManager() {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['admin-orgs'] })
       queryClient.invalidateQueries({ queryKey: ['hospitals'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // اعتماد/رفض طلب ارتباط معلق من لوحة الجهة — الإصلاح: طلبات الكادر التي كانت تبقى «قيد المراجعة» بلا إجراء
+  const reviewAffMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiPatch<{ message: string }>(`/api/affiliations/${id}`, { status }),
+    onSuccess: (res) => {
+      toast.success(res.message ?? 'تم تحديث حالة الارتباط')
+      queryClient.invalidateQueries({ queryKey: ['admin-org-dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-orgs'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const [removeAffTarget, setRemoveAffTarget] = useState<{ affiliationId: string; nurseName: string } | null>(null)
+  const removeAffMutation = useMutation({
+    mutationFn: (id: string) => apiDelete<{ message: string }>(`/api/affiliations/${id}`),
+    onSuccess: (res) => {
+      toast.success(res.message ?? 'تم رفض طلب الارتباط')
+      setRemoveAffTarget(null)
+      queryClient.invalidateQueries({ queryKey: ['admin-org-dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-orgs'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -578,9 +603,44 @@ export function OrganizationsManager() {
                               <span dir="ltr">{n.nurse.phone}</span>
                             </p>
                           </div>
+                          <span className="text-[10px] text-muted-foreground">الحساب:</span>
                           <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
+                          <span className="text-[10px] text-muted-foreground">الارتباط:</span>
                           <Badge variant="outline">{n.statusLabel}</Badge>
                         </div>
+                        {n.status === 'PENDING' && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 p-2 dark:border-sky-900 dark:bg-sky-950/40">
+                            <Hourglass className="size-3.5 shrink-0 text-sky-700 dark:text-sky-300" />
+                            <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-sky-900 dark:text-sky-200">
+                              طلب ارتباط بانتظار مراجعة الإدارة
+                              {n.requestedStatus && n.requestedStatus !== 'PENDING'
+                                ? ` — الحالة المطلوبة: ${AFFILIATION_STATUS_LABELS[n.requestedStatus] ?? n.requestedStatus}`
+                                : ''}
+                              {' — «الحساب: معتمد» تعني اعتماد حساب الكادر نفسه، أما الارتباط فيُعتمد من هنا'}
+                            </p>
+                            <Button
+                              size="sm"
+                              className="h-7 gap-1.5 text-xs"
+                              disabled={reviewAffMutation.isPending}
+                              onClick={() =>
+                                reviewAffMutation.mutate({ id: n.affiliationId, status: n.requestedStatus ?? 'WORKING' })
+                              }
+                            >
+                              <CheckCircle2 className="size-3.5" />
+                              اعتماد
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1.5 text-xs text-destructive"
+                              disabled={removeAffMutation.isPending}
+                              onClick={() => setRemoveAffTarget({ affiliationId: n.affiliationId, nurseName: n.nurse.name })}
+                            >
+                              <XCircle className="size-3.5" />
+                              رفض الطلب
+                            </Button>
+                          </div>
+                        )}
                         {(n.workYears != null || n.note) && (
                           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[11px] text-muted-foreground">
                             {n.workYears != null && <span>سنوات العمل بالجهة: {n.workYears}</span>}
@@ -642,6 +702,19 @@ export function OrganizationsManager() {
         confirmLabel="نعم، احذف الجهة نهائياً"
         processing={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+
+      {/* ---------- تأكيد رفض طلب الارتباط المعلق ---------- */}
+      <ConfirmDialog
+        open={!!removeAffTarget}
+        onOpenChange={(v) => !v && setRemoveAffTarget(null)}
+        tone="danger"
+        icon={XCircle}
+        title={`رفض طلب ارتباط «${removeAffTarget?.nurseName ?? ''}»`}
+        description="سيُحذف طلب الارتباط المعلق من سجل الكادر نهائياً ويصله إشعار بالرفض. يمكنه التقديم مرة أخرى لاحقاً."
+        confirmLabel="نعم، ارفض الطلب"
+        processing={removeAffMutation.isPending}
+        onConfirm={() => removeAffTarget && removeAffMutation.mutate(removeAffTarget.affiliationId)}
       />
     </div>
   )

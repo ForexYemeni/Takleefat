@@ -202,6 +202,7 @@ export default function ReceiverStaffPage() {
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold">
                   {n.nurse.name}
+                  <span className="text-[10px] font-normal text-muted-foreground">الحساب:</span>
                   <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
                 </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -219,6 +220,7 @@ export default function ReceiverStaffPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">الارتباط:</span>
                 <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
                 <Button
                   variant="ghost"
