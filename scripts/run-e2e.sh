@@ -15,11 +15,19 @@ grep -rl 'mode: "insensitive"' app/ | xargs -r sed -i 's/, mode: "insensitive"//
 # قاعدة نظيفة + push + generate + seed (الـ generate إلزامي بعد تغيير provider)
 rm -f db/custom.db
 rm -rf .next
+
+# حماية: الملفات الحرجة لا يجوز أن تكون مفقودة من مساحة العمل (درس تسرب مسار الرفع)
+for CRITICAL in app/api/upload/route.ts app/api/auth/register/route.ts app/api/affiliations/route.ts; do
+  [ -f "$CRITICAL" ] || { echo "CRITICAL: $CRITICAL مفقود! شغّل: git checkout -- app/"; exit 1; }
+done
+
 npx prisma db push >/dev/null 2>&1
 node prisma/seed.js >/dev/null 2>&1 || { echo "SEED FAILED"; git checkout -- prisma/schema.prisma; exit 1; }
 
 # 4) بناء وتشغيل الخادم على 3111
 npx next build >/tmp/e2e-build.log 2>&1 || { echo "BUILD FAILED"; tail -30 /tmp/e2e-build.log; git checkout -- prisma/schema.prisma app/; npx prisma generate >/dev/null 2>&1; exit 1; }
+# حماية: بناء turbopack قد يُخفي مسارات — تحقق أن مسار الرفع في قائمة البناء
+grep -q "api/upload" /tmp/e2e-build.log || { echo "BUILD MISSING /api/upload!"; tail -40 /tmp/e2e-build.log; git checkout -- prisma/schema.prisma app/; npx prisma generate >/dev/null 2>&1; exit 1; }
 cp -r .next/static .next/standalone/.next/ 2>/dev/null
 cp -r public .next/standalone/ 2>/dev/null
 cd /home/z/my-project
