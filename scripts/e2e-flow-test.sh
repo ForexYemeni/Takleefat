@@ -56,7 +56,7 @@ check "لا أي مستلم إداري وهمي بعد التجهيز" "0" "$FAK
 
 # حسابات حقيقية عبر التسجيل العام — المستلم مع الجهة الصحية
 REG_N=$(curl -s -o "$DIR/reg_n.json" -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"سارة أحمد","phone":"711111111","password":"Nurse@1234","confirmPassword":"Nurse@1234","specialty":"تمريض عام","qualification":"بكالوريوس تمريض","yearsOfExperience":5}')
+  -d '{"role":"NURSE","name":"سارة أحمد","phone":"711111111","password":"Nurse@1234","confirmPassword":"Nurse@1234","specialty":"تمريض طوارئ","qualification":"بكالوريوس تمريض","yearsOfExperience":5,"gender":"MALE"}')
 check "تسجيل حساب كادر جديد → 201" "201" "$REG_N"
 
 REG_R=$(curl -s -o "$DIR/reg_r.json" -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
@@ -578,6 +578,167 @@ check "المستلم يُمنع من عرض الملفات → 403" "403" "$DET
 
 # تنظيف مستلم القسم 20
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$P20_ID -o /dev/null
+
+echo "=========== 21) شبكة الكوادر الصحية المعتمدة (الارتباط + المفضلة + الاستدعاء + فلترة الجنس + التدريجي) ==========="
+# --- الجهات الصحية: حقول كاملة + حالة ---
+ORG=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى الشبكة التخصصي","type":"SPECIALIZED_CENTER","city":"صنعاء","address":"حدة","phone":"770000001","email":"net@org.com","status":"ACTIVE","location":"صنعاء — حدة"}')
+ORG_ID=$(echo "$ORG" | jget "['hospital']['id']")
+[ -n "$ORG_ID" ] && check "إضافة جهة صحية ببيانات كاملة (نوع/مدينة/تواصل)" "ok" "ok"
+
+ORG_UPD=$(curl -s -b "$DIR/admin.jar" -X PATCH "$BASE/api/admin/hospitals?id=$ORG_ID" -H "Content-Type: application/json" \
+  -d '{"type":"MEDICAL_COMPLEX","city":"عدن"}')
+ORG_TYPE=$(echo "$ORG_UPD" | jget "['hospital']['type']")
+check "تعديل الجهة (النوع والمدينة)" "MEDICAL_COMPLEX" "$ORG_TYPE"
+
+# لوحة الجهة
+ORG_DASH=$(code -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$ORG_ID)
+check "لوحة الجهة الصحية (كوادر + تكليفات)" "200" "$ORG_DASH"
+
+# --- الارتباط المهني: طلب الكادر + الحالات المحمية ---
+AFF_REQ=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"status\":\"PENDING\",\"note\":\"أعمل لديهم في الطوارئ\"}")
+check "الكادر يطلب ارتباطاً (قيد المراجعة) → 201" "201" "$AFF_REQ"
+
+AFF_PROTECT=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"status\":\"ENDORSED\"}")
+check "الكادر يُمنع من تعيين «معتمد» لنفسه → 403" "403" "$AFF_PROTECT"
+
+AFF_DUP=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"status\":\"PENDING\"}")
+check "منع تكرار الارتباط (كادر×جهة) → 409" "409" "$AFF_DUP"
+
+# الإدارة: اعتماد الارتباط (المستندات مرفوعة للكادر من أقسام سابقة) ثم مقابلة
+AFF_LIST=$(curl -s -b "$DIR/admin.jar" "$BASE/api/affiliations?hospitalId=$ORG_ID" | jget "['affiliations'][0]['id']")
+AFF_ENDORSE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$AFF_LIST -H "Content-Type: application/json" -d '{"status":"ENDORSED"}' | jget "['affiliation']['status']")
+check "الإدارة تعتمد الارتباط (بعد المستندات)" "ENDORSED" "$AFF_ENDORSE"
+
+# بوابة المستندات: كادر بلا مستندات لا يُعتمد ارتباطه
+REG_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","confirmPassword":"Net@12345","specialty":"عناية مركزة","yearsOfExperience":3,"gender":"MALE"}')
+N2_ID=$(echo "$REG_N2" | jget "['user']['id']")
+login "$DIR/nurse2.jar" "766660202" "Net@12345"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N2_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+AFF_NODOC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N2_ID\",\"hospitalId\":\"$ORG_ID\",\"status\":\"ENDORSED\"}")
+check "منع اعتماد ارتباط كادر بلا مستندات → 422" "422" "$AFF_NODOC"
+
+# --- المفضلة الخاصة بكل مستلم ---
+FAV1=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$NURSE_ID\",\"category\":\"طوارئ\"}")
+check "المستلم يضيف الكادر لمفضلته → 201" "201" "$FAV1"
+
+FAV_DUP=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$NURSE_ID\"}")
+check "منع تكرار نفس الكادر في المفضلة → 409" "409" "$FAV_DUP"
+
+FAV_LIST=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/favorites | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['favorites']
+n=[x for x in d if x['id']=='$NURSE_ID']
+print(n[0]['isFavorite'], n[0].get('category'), n[0]['isAvailable'])" 2>/dev/null)
+check "قائمة مفضلتي: الكادر موجود بتصنيفه" "True طوارئ True" "$FAV_LIST"
+
+# --- المطابقة الذكية + البحث المتقدم ---
+MATCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/receiver/nurses?hospitalId=$ORG_ID&gender=MALE&department=طوارئ" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+n=[x for x in d['nurses'] if x['id']=='$NURSE_ID']
+print(len(n), n[0]['priority'] if n else 0, n[0]['isFavorite'] if n else False)" 2>/dev/null)
+check "المطابقة الذكية: الكادر المفضل بالأولوية القصوى" "1 5 True" "$MATCH"
+
+# --- فلترة الجنس الصارمة: تكليف أنثى لا يراه الكادر الذكر ---
+P21=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"department\":\"حضانة\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":4,\"gender\":\"FEMALE\",\"value\":40000,\"distribution\":\"ALL_MATCHING\"}")
+P21_ID=$(echo "$P21" | jget "['post']['id']")
+
+FEED_GENDER=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$P21_ID' for p in d['posts']))")
+check "تكليف «أنثى فقط» لا يظهر في قائمة كادر ذكر (API)" "False" "$FEED_GENDER"
+
+DIRECT_GENDER=$(code -b "$DIR/nurse.jar" $BASE/api/posts/$P21_ID)
+check "الرابط المباشر لتكليف «أنثى فقط» محجوب على كادر ذكر → 404" "404" "$DIRECT_GENDER"
+
+APPLY_GENDER=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P21_ID/apply -H "Content-Type: application/json" -d '{}')
+check "التقديم عبر API على تكليف مخالف للجنس → 403" "403" "$APPLY_GENDER"
+
+INVITE_GENDER=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts/$P21_ID/invite -H "Content-Type: application/json" \
+  -d "{\"nurseIds\":[\"$NURSE_ID\"]}")
+check "استدعاء كادر مخالف للجنس ممنوع → 422" "422" "$INVITE_GENDER"
+
+# --- الاستدعاء المباشر: تكليف خاص لا يظهر إلا للمستدعى ---
+P22=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"department\":\"طوارئ\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"MALE\",\"value\":50000,\"distribution\":\"INVITE_SELECTED\",\"invitedNurseIds\":[\"$NURSE_ID\"]}")
+P22_ID=$(echo "$P22" | jget "['post']['id']")
+
+P22_MSG=$(echo "$P22" | jget "['message']")
+echo "$P22_MSG" | grep -q "الاستدعاء" && check "إنشاء تكليف واستدعاء مباشر في خطوة واحدة" "ok" "ok"
+
+PRIVATE_VISIBLE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$P22_ID' for p in d['posts']))")
+check "التكليف الخاص (استدعاء) يظهر للمستدعى فقط في قائمته" "True" "$PRIVATE_VISIBLE"
+
+N2_INVITE=$(curl -s -b "$DIR/nurse2.jar" $BASE/api/me/invitations | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(len(d['invitations']))")
+check "كادر آخر لا يملك استدعاءات (قائمة الاستدعاءات خاصة)" "0" "$N2_INVITE"
+
+ACCEPT=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/invitations | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+inv=[i for i in d['invitations'] if i['post']['id']=='$P22_ID'][0]
+print(inv['id'])")
+INV_ACCEPT=$(curl -s -b "$DIR/nurse.jar" -X PATCH $BASE/api/me/invitations/$ACCEPT -H "Content-Type: application/json" -d '{"action":"ACCEPT"}' | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('accepted' if d.get('application') else d.get('message','?')[:20])")
+check "قبول الاستدعاء يُنشئ تقديماً تلقائياً" "accepted" "$INV_ACCEPT"
+
+# --- النشر التدريجي: المرحلة 1 (المفضلون) ثم التوسيع اليدوي ---
+P23=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":6,\"gender\":\"MALE\",\"value\":30000,\"distribution\":\"PROGRESSIVE\",\"progressiveStageHours\":24}")
+P23_ID=$(echo "$P23" | jget "['post']['id']")
+P23_STAGE=$(echo "$P23" | jget "['post']['progressiveStage']")
+check "النشر التدريجي يبدأ بالمرحلة 1 (المفضلون)" "0" "$P23_STAGE"
+
+PROG_VISIBLE_FAV=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$P23_ID' for p in d['posts']))")
+check "المرحلة 1 تظهر للمفضل المطابق" "True" "$PROG_VISIBLE_FAV"
+
+PROG_HIDDEN_N2=$(curl -s -b "$DIR/nurse2.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$P23_ID' for p in d['posts']))")
+check "المرحلة 1 لا تظهر لغير المفضلين" "False" "$PROG_HIDDEN_N2"
+
+ESCALATE=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/posts/$P23_ID -H "Content-Type: application/json" \
+  -d '{"escalateStage":true}' | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('escalated' if 'توسيع' in d.get('message','') else '?')")
+check "التوسيع اليدوي للمرحلة التالية" "escalated" "$ESCALATE"
+
+N2_AFF=$(code -b "$DIR/admin.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N2_ID\",\"hospitalId\":\"$ORG_ID\",\"status\":\"WORKING\"}" -o /dev/null -w "%{http_code}")
+[ "$N2_AFF" = "422" ] && N2_AFF=$(code -b "$DIR/admin.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N2_ID\",\"hospitalId\":\"$ORG_ID\",\"status\":\"PENDING\"}")
+check "ربط كادر الشبكة بالجهة (بلا مستندات = قيد المراجعة)" "201" "$N2_AFF"
+
+UP_N2_DOC=$(code -b "$DIR/nurse2.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "كادر الشبكة يرفع مستنده (شرط الاعتماد)" "201" "$UP_N2_DOC"
+
+# --- تنظيف القسم ---
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P21_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P22_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$P23_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$N2_ID -o /dev/null
 
 echo ""
 echo "==========================================="

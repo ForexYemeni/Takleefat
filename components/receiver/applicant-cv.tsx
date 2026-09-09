@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
+import { FavoriteStar } from '@/components/shared/favorite-star'
 import {
   APPLICATION_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -70,6 +71,7 @@ export interface ApplicantData {
     specialty: string | null
     qualification: string | null
     yearsOfExperience: number | null
+    isFavorite?: boolean
     documents: ApplicantDocument[]
     ratings?: ApplicantRatings
   }
@@ -109,7 +111,10 @@ export function ApplicantCV({
             </p>
           </div>
         </div>
-        <StatusBadge status={applicant.status} labels={APPLICATION_STATUS_LABELS} />
+        <div className="flex flex-col items-end gap-2">
+          <StatusBadge status={applicant.status} labels={APPLICATION_STATUS_LABELS} />
+          <FavoriteStar nurseId={nurse.id} isFavorite={!!nurse.isFavorite} size="sm" showLabel />
+        </div>
       </div>
 
       {/* البيانات الأساسية */}

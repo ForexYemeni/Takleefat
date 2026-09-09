@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { updatePostSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
+import { canNurseSeePost, escalateDueProgressivePosts, progressiveAudienceIds, DISTRIBUTION_LABELS } from '@/lib/network'
 import type { Gender } from '@prisma/client'
 
 /**
@@ -23,6 +24,7 @@ export async function GET(
       where: { id },
       include: {
         receiver: { select: { id: true, name: true } },
+        hospital: { select: { id: true, name: true, type: true, city: true, status: true } },
         applications: {
           include: {
             nurse: {
@@ -54,6 +56,18 @@ export async function GET(
     if (!post) return jsonError('التكليف غير موجود', 404)
 
     if (session.user.role === 'NURSE') {
+      await escalateDueProgressivePosts()
+      const me = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { gender: true },
+      })
+      // حماية الرابط المباشر: غير المطابق للجنس أو غير المضمّن في جمهور التوزيع = 404
+      const allowed = await canNurseSeePost(post, {
+        nurseId: session.user.id,
+        nurseGender: me?.gender ?? null,
+      })
+      if (!allowed) return jsonError('هذا التكليف غير متاح لك', 404)
+
       const { applications, ...rest } = post
       const mine = applications.find((a) => a.nurse.id === session.user.id) ?? null
       return NextResponse.json({ post: rest, myApplication: mine })
@@ -143,7 +157,7 @@ export async function PATCH(
       data: {
         ...(data.title != null ? { title: data.title.trim() } : {}),
         ...(data.description !== undefined ? { description: data.description || null } : {}),
-        ...(facility != null ? { facility, location } : {}),
+        ...(facility != null ? { facility, location, hospitalId: data.hospitalId } : {}),
         ...(data.department !== undefined ? { department: data.department || null } : {}),
         ...(start != null ? { startDate: start } : {}),
         ...(data.hours !== undefined ? { hours: data.hours ? Number(data.hours) : null } : {}),
@@ -152,8 +166,38 @@ export async function PATCH(
         ...(data.value != null ? { value: data.value } : {}),
         ...(data.status != null ? { status: data.status } : {}),
       },
-      select: { id: true, title: true, status: true, facility: true, location: true },
+      select: { id: true, title: true, status: true, facility: true, location: true, distribution: true, progressiveStage: true },
     })
+
+    // ---------- ترقية مرحلة النشر التدريجي يدوياً ----------
+    if (data.escalateStage && updated.distribution === 'PROGRESSIVE' && updated.progressiveStage < 3 && !data.status) {
+      const nextStage = updated.progressiveStage + 1
+      await db.post.update({
+        where: { id },
+        data: {
+          progressiveStage: nextStage,
+          progressiveNextAt: nextStage >= 3 ? null : new Date(Date.now() + (data.progressiveStageHours ?? 24) * 60 * 60 * 1000),
+        },
+      })
+      const fresh = await db.post.findUnique({ where: { id } })
+      if (fresh) {
+        const audience = await progressiveAudienceIds(fresh)
+        await Promise.all(
+          audience.map((nurseId) =>
+            notify(nurseId, {
+              title: 'تكليف متاح في مرحلتك',
+              body: `تم توسيع نشر التكليف (${updated.title}) ليشمل فئتك — راجعه وتقدّم الآن`,
+              type: 'POST_CREATED',
+              link: '/nurse/assignments',
+            })
+          )
+        )
+      }
+      return NextResponse.json({
+        message: `تم توسيع نشر التكليف إلى ${DISTRIBUTION_LABELS.PROGRESSIVE} — المرحلة ${nextStage + 1}`,
+        post: updated,
+      })
+    }
 
     // إشعار المتقدمين عند الإلغاء
     if (data.status === 'CANCELLED') {

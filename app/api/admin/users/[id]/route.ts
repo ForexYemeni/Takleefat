@@ -335,6 +335,15 @@ export async function DELETE(
         where: { reviewedById: id },
         data: { reviewedById: null },
       })
+      // شبكة الكوادر: مراجعات/طلبات الارتباط التي أجراها الحساب
+      await tx.nurseAffiliation.updateMany({
+        where: { reviewedById: id },
+        data: { reviewedById: null },
+      })
+      await tx.nurseAffiliation.updateMany({
+        where: { requestedById: id },
+        data: { requestedById: null },
+      })
 
       // سجلات الأحداث التي أنشأها الحساب على أي تكليف — تُحذف كي لا تعيق حذف الحساب
       await tx.assignmentLog.deleteMany({ where: { userId: id } })

@@ -1,20 +1,27 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   BriefcaseMedical,
   CalendarDays,
+  CheckSquare,
   Clock,
   Coins,
+  Layers,
   MapPin,
+  Send,
+  Square,
   Stethoscope,
+  Star,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPost } from '@/lib/api-client'
 import { POST_GENDER_LABELS } from '@/lib/utils'
+import { AFFILIATION_STATUS_LABELS, DISTRIBUTION_LABELS, MATCH_PRIORITY_LABELS } from '@/lib/network'
 import {
   createPostSchema,
   type CreatePostInput,
@@ -24,6 +31,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { FavoriteStar } from '@/components/shared/favorite-star'
+import { NursePickList, type SuggestedNurse } from '@/components/shared/nurse-pick-list'
 import {
   Dialog,
   DialogContent,
@@ -60,6 +70,8 @@ interface DepartmentOption {
   isActive: boolean
 }
 
+
+
 interface CreatePostDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -80,6 +92,8 @@ export function CreatePostDialog({ open, onOpenChange, onCreated }: CreatePostDi
       hours: '',
       gender: 'ANY',
       value: '',
+      distribution: 'ALL_MATCHING',
+      progressiveStageHours: '',
     },
   })
 
@@ -99,16 +113,37 @@ export function CreatePostDialog({ open, onOpenChange, onCreated }: CreatePostDi
 
   const selectedHospitalId = form.watch('hospitalId')
   const selectedHospital = hospitals.find((h) => h.id === selectedHospitalId)
+  const distribution = form.watch('distribution') || 'ALL_MATCHING'
+
+  // ---------- اختيار الكوادر عند التوزيع المحدد/الاستدعاء ----------
+  const [selectedNurseIds, setSelectedNurseIds] = useState<string[]>([])
+  const { data: suggestedData } = useQuery({
+    queryKey: ['suggested-nurses', selectedHospitalId, form.watch('gender')],
+    queryFn: () =>
+      apiFetcher<{ nurses: SuggestedNurse[]; priorityLabels: Record<string, string> }>(
+        `/api/receiver/nurses?hospitalId=${selectedHospitalId}&gender=${form.watch('gender') || 'ANY'}`
+      ),
+    enabled: open && !!selectedHospitalId,
+  })
+  const suggested = useMemo(() => suggestedData?.nurses ?? [], [suggestedData])
+
+  const toggleNurse = (id: string) => {
+    setSelectedNurseIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
 
   const submitMutation = async (values: CreatePostInput) => {
     try {
       const res = await apiPost<{ message: string; post: { id: string; title: string; number: number } }>(
         '/api/posts',
-        values
+        {
+          ...values,
+          ...(values.distribution === 'INVITE_SELECTED' ? { invitedNurseIds: selectedNurseIds } : {}),
+        }
       )
       toast.success(`${res.message} (${res.post.title})`)
       onOpenChange(false)
       form.reset()
+      setSelectedNurseIds([])
       onCreated?.(res.post)
     } catch (e) {
       toast.error((e as Error).message)
@@ -267,12 +302,111 @@ export function CreatePostDialog({ open, onOpenChange, onCreated }: CreatePostDi
             />
           </div>
 
+          {/* ---------- طريقة توزيع التكليف — شبكة الكوادر الصحية المعتمدة ---------- */}
+          <div className="space-y-2 rounded-2xl border bg-secondary/30 p-4">
+            <Label className="flex items-center gap-1.5 text-sm font-extrabold">
+              <Layers className="size-4 text-primary" />
+              طريقة توزيع التكليف
+            </Label>
+            <Select
+              value={distribution}
+              onValueChange={(v) => {
+                form.setValue('distribution', v as CreatePostInput['distribution'])
+                if (v !== 'INVITE_SELECTED') setSelectedNurseIds([])
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(DISTRIBUTION_LABELS).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              {distribution === 'ALL_MATCHING' && 'يُنشر التكليف لكل الكوادر المطابقين للجنس المطلوب — الفلترة مطبقة على مستوى قاعدة البيانات والAPI'}
+              {distribution === 'AUTO_MATCH' && 'يظهر فقط للكوادر المطابقين ذكاءً: تخصص يوافق القسم أو مرتبطون بالجهة الصحية'}
+              {distribution === 'INVITE_SELECTED' && 'استدعاء مباشر: اختر كادراً أو أكثر من القائمة أدناه — يصلهم إشعار بالقبول/الرفض'}
+              {distribution === 'FAVORITES' && 'يظهر حصراً لكوادرك المفضلين المطابقين للجنس'}
+              {distribution === 'SAME_ORG' && 'يظهر حصراً للكوادر المرتبطين بالجهة الصحية المختارة'}
+              {distribution === 'ENDORSED' && 'يظهر حصراً للكوادر المعتمدين لدى الجهة'}
+              {distribution === 'INTERVIEWED' && 'يظهر حصراً للكوادر الذين تمت مقابلتهم لدى الجهة'}
+              {distribution === 'PROGRESSIVE' && 'النشر التدريجي: المفضلون ← نفس الجهة ← المعتمدون ← الخارجيون المؤهلون — ينتقل تلقائياً كل مرحلة'}
+            </p>
+
+            {/* مدة المرحلة التدريجية */}
+            {distribution === 'PROGRESSIVE' && (
+              <div className="max-w-48">
+                <Label htmlFor="cp-stage-hours">مدة كل مرحلة (ساعات)</Label>
+                <Input id="cp-stage-hours" type="number" min={1} max={720} placeholder="24" {...form.register('progressiveStageHours')} />
+              </div>
+            )}
+
+            {/* الاستدعاء المحدد: اختيار تفاعلي */}
+            {distribution === 'INVITE_SELECTED' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-1.5 text-xs font-bold">
+                    <Users className="size-3.5" />
+                    اختيار الكوادر المستدعين ({selectedNurseIds.length})
+                  </p>
+                  <Badge variant="secondary">مرتبون بالمطابقة الذكية</Badge>
+                </div>
+                <NursePickList
+                  hospitalId={selectedHospitalId}
+                  gender={form.watch('gender')}
+                  selected={selectedNurseIds}
+                  onToggle={toggleNurse}
+                  emptyText="لا يوجد كوادر مطابقون للجنس المطلوب — أضف كوادر أو اختر جهة أخرى"
+                />
+                {selectedNurseIds.length === 0 && (
+                  <p className="text-xs font-bold text-amber-600">اختر كادراً واحداً على الأقل قبل النشر</p>
+                )}
+              </div>
+            )}
+
+            {/* جمهور التوزيع الآلي: معاينة فقط */}
+            {distribution !== 'INVITE_SELECTED' && distribution !== 'ALL_MATCHING' && distribution !== 'AUTO_MATCH' && distribution !== 'PROGRESSIVE' && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold">معاينة الجمهور المستهدف ({suggested.length} كادر مطابق للجنس):</p>
+                <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl border bg-background p-2">
+                  {suggested.slice(0, 8).map((n) => (
+                    <div key={n.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-amber-500" title={n.priorityLabel}>{'★'.repeat(Math.max(1, n.priority))}</span>
+                      <span className="font-semibold">{n.name}</span>
+                      {n.affiliationStatus && <Badge variant="outline" className="text-[10px]">{AFFILIATION_STATUS_LABELS[n.affiliationStatus]}</Badge>}
+                      <FavoriteStar nurseId={n.id} isFavorite={n.isFavorite} size="sm" />
+                    </div>
+                  ))}
+                  {suggested.length === 0 && <p className="p-2 text-center text-xs text-muted-foreground">لا يوجد كوادر مطابقون بعد</p>}
+                  {suggested.length > 8 && <p className="p-1 text-center text-[11px] text-muted-foreground">+{suggested.length - 8} كادر آخر</p>}
+                </div>
+              </div>
+            )}
+
+            {/* معاينة مراحل النشر التدريجي */}
+            {distribution === 'PROGRESSIVE' && (
+              <ol className="space-y-1 rounded-xl border bg-background p-3 text-xs">
+                <li>1️⃣ الكوادر المفضلون لديك</li>
+                <li>2️⃣ العاملون في نفس الجهة الصحية</li>
+                <li>3️⃣ المعتمدون والمتقابَل معهم</li>
+                <li>4️⃣ كل الكوادر المؤهلين المطابقين للجنس</li>
+              </ol>
+            )}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               إلغاء
             </Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? 'جارٍ النشر...' : 'نشر التكليف'}
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting || (distribution === 'INVITE_SELECTED' && selectedNurseIds.length === 0)}
+              className="gap-2"
+            >
+              <Send className="size-4" />
+              {form.formState.isSubmitting ? 'جارٍ النشر...' : distribution === 'INVITE_SELECTED' ? 'إنشاء وإرسال الاستدعاء' : 'نشر التكليف'}
             </Button>
           </DialogFooter>
         </form>

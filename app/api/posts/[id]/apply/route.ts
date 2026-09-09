@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
+import { canNurseSeePost } from '@/lib/network'
 
 /**
  * POST /api/posts/[id]/apply — تقديم الكادر التمريضي على تكليف مُعلن
@@ -37,6 +38,16 @@ export async function POST(
     if (!post) return jsonError('التكليف غير موجود', 404)
     if (post.status !== 'OPEN') {
       return jsonError('هذا التكليف غير متاح للتقديم حالياً', 409)
+    }
+
+    // حماية مزدوجة: فلتر الجنس + خصوصية التوزيع — حتى لو وصل عبر رابط مباشر أو API
+    const me = await db.user.findUnique({ where: { id: session.user.id }, select: { gender: true } })
+    const allowed = await canNurseSeePost(post, {
+      nurseId: session.user.id,
+      nurseGender: me?.gender ?? null,
+    })
+    if (!allowed) {
+      return jsonError('هذا التكليف غير متاح للتقديم من حسابك (شروط الجنس أو جمهور التوزيع)', 403)
     }
 
     const existing = await db.application.findUnique({

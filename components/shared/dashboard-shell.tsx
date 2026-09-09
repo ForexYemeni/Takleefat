@@ -5,15 +5,18 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
+  Building2,
   ClipboardList,
   Coins,
   FileCheck2,
   Inbox,
   LayoutDashboard,
   LogOut,
+  MailPlus,
   Menu,
   Moon,
   Settings2,
+  Star,
   Sun,
   UserCog,
   UserRound,
@@ -55,6 +58,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/admin/nurses', label: 'الكادر التمريضي', icon: Users },
       { href: '/admin/receivers', label: 'المستلمون الإداريون', icon: UserCog },
+      { href: '/admin/organizations', label: 'الجهات الصحية', icon: Building2 },
       { href: '/admin/assignments', label: 'التكليفات', icon: ClipboardList },
       { href: '/admin/documents', label: 'مراجعة المستندات', icon: FileCheck2 },
       { href: '/admin/settings', label: 'الرسوم وطرق الدفع', icon: Settings2 },
@@ -67,6 +71,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     items: [
       { href: '/nurse', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/nurse/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
+      { href: '/nurse/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
       { href: '/nurse/documents', label: 'مستنداتي', icon: FileCheck2 },
       { href: '/nurse/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
@@ -77,6 +82,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     items: [
       { href: '/receiver', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/receiver/assignments', label: 'التكليفات والتقديمات', icon: Inbox },
+      { href: '/receiver/favorites', label: 'الكوادر المفضلة', icon: Star },
       { href: '/receiver/earnings', label: 'أرباحي', icon: Coins },
       { href: '/receiver/profile', label: 'الملف الشخصي', icon: UserRound },
     ],

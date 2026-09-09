@@ -72,7 +72,13 @@ export async function GET(
       },
     })
 
-    // ملخص التقييمات لكل متقدم (المتوسط + العدد + أحدث التعليقات)
+    // ملخص التقييمات لكل متقدم (المتوسط + العدد + أحدث التعليقات) + علم المفضلة الخاص بالمستلم
+    const favorites = await db.favoriteNurse.findMany({
+      where: { receiverId: session.user.id },
+      select: { nurseId: true },
+    })
+    const favSet = new Set(favorites.map((f) => f.nurseId))
+
     const applicationsWithRatings = applications.map((a) => {
       const rs = a.nurse.ratingsReceived
       const count = rs.length
@@ -91,6 +97,7 @@ export async function GET(
         ...a,
         nurse: {
           ...nurse,
+          isFavorite: favSet.has(a.nurse.id),
           ratings: {
             average,
             count,

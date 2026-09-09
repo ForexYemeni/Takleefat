@@ -31,6 +31,22 @@ export const createPostSchema = z.object({
     .int('قيمة التكليف يجب أن تكون رقماً صحيحاً')
     .min(1, 'قيمة التكليف يجب أن تكون أكبر من صفر')
     .max(999_999_999, 'قيمة التكليف كبيرة جداً'),
+  // ---------- طريقة توزيع التكليف (شبكة الكوادر الصحية المعتمدة) ----------
+  distribution: z
+    .enum(
+      ['ALL_MATCHING', 'AUTO_MATCH', 'INVITE_SELECTED', 'FAVORITES', 'SAME_ORG', 'ENDORSED', 'INTERVIEWED', 'PROGRESSIVE'],
+      { error: 'طريقة التوزيع غير صحيحة' }
+    )
+    .optional(),
+  // الكوادر المستدعون مباشرة (استدعاء محدد أو من المفضلة/الجهة/المعتمدين)
+  invitedNurseIds: z.array(z.string().min(1)).max(100).optional(),
+  // مدة كل مرحلة بالساعات في النشر التدريجي (افتراضي 24 ساعة)
+  progressiveStageHours: z.coerce
+    .number()
+    .int()
+    .min(1, 'مدة المرحلة ساعة واحدة على الأقل')
+    .max(720, 'الحد الأقصى 720 ساعة (30 يوماً)')
+    .optional(),
 })
 
 /** تحديث التكليف المُعلن — الإدارة (أي تكليف) أو المالك (تكليفه وهو مفتوح) */
@@ -61,6 +77,9 @@ export const updatePostSchema = z.object({
     .max(999_999_999, 'قيمة التكليف كبيرة جداً')
     .optional(),
   status: z.enum(['OPEN', 'CANCELLED'], { error: 'الحالة غير صحيحة' }).optional(),
+  // ترقية مرحلة النشر التدريجي يدوياً + مدة المرحلة التالية بالساعات
+  escalateStage: z.boolean().optional(),
+  progressiveStageHours: z.coerce.number().int().min(1).max(720).optional(),
 })
 
 export const reviewApplicationSchema = z.object({
@@ -138,10 +157,64 @@ export const hospitalSchema = z.object({
   // الموقع الجغرافي الحقيقي (إحداثيات من الخريطة التفاعلية)
   lat: z.coerce.number().min(-90).max(90).nullable().optional(),
   lng: z.coerce.number().min(-180).max(180).nullable().optional(),
+  // ---------- بيانات الجهة الكاملة (شبكة الكوادر الصحية المعتمدة) ----------
+  type: z
+    .enum(['HOSPITAL', 'MEDICAL_CENTER', 'SPECIALIZED_CENTER', 'CLINIC', 'MEDICAL_COMPLEX', 'OTHER'], {
+      error: 'نوع الجهة غير صحيح',
+    })
+    .optional(),
+  city: z.string().max(80, 'المدينة طويلة جداً').optional().or(z.literal('')),
+  address: z.string().max(200, 'العنوان طويل جداً').optional().or(z.literal('')),
+  phone: z.string().max(20, 'رقم التواصل طويل جداً').optional().or(z.literal('')),
+  email: z.string().email('البريد الإلكتروني غير صحيح').max(120).optional().or(z.literal('')),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED'], { error: 'حالة الجهة غير صحيحة' }).optional(),
 })
 
 export const hospitalUpdateSchema = hospitalSchema.partial().extend({
   isActive: z.boolean().optional(),
+})
+
+// ---------- الارتباط المهني (شبكة الكوادر) ----------
+
+export const affiliationCreateSchema = z.object({
+  // يُستنتج من الجلسة للكادر نفسه — إلزامي للمستلم/الإدارة
+  nurseId: z.string().min(1).optional(),
+  hospitalId: z.string({ error: 'الجهة الصحية مطلوبة' }).min(1, 'الجهة الصحية مطلوبة'),
+  status: z
+    .enum(
+      ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
+      { error: 'حالة الارتباط غير صحيحة' }
+    )
+    .optional(),
+  note: z.string().max(500, 'الملاحظة طويلة جداً').optional().or(z.literal('')),
+})
+
+export const affiliationUpdateSchema = z.object({
+  status: z.enum(
+    ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
+    { error: 'حالة الارتباط غير صحيحة' }
+  ),
+  note: z.string().max(500, 'الملاحظة طويلة جداً').optional().or(z.literal('')),
+})
+
+// ---------- المفضلة ----------
+
+export const favoriteSchema = z.object({
+  nurseId: z.string({ error: 'الكادر مطلوب' }).min(1, 'الكادر مطلوب'),
+  category: z.string().max(60, 'التصنيف طويل جداً').optional().or(z.literal('')),
+  note: z.string().max(300, 'الملاحظة طويلة جداً').optional().or(z.literal('')),
+})
+
+export const favoriteUpdateSchema = favoriteSchema.omit({ nurseId: true }).partial()
+
+// ---------- الاستدعاء المباشر ----------
+
+export const inviteSchema = z.object({
+  nurseIds: z
+    .array(z.string().min(1), { error: 'حدد كادراً واحداً على الأقل' })
+    .min(1, 'حدد كادراً واحداً على الأقل')
+    .max(100, 'الحد الأقصى 100 كادر في الاستدعاء'),
+  message: z.string().max(500, 'الرسالة طويلة جداً').optional().or(z.literal('')),
 })
 
 export const departmentSchema = z.object({

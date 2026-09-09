@@ -74,6 +74,57 @@ enum Gender {
   ANY
 }
 
+/// حالة الجهة الصحية
+enum OrgStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+/// نوع الجهة الصحية
+enum OrgType {
+  HOSPITAL
+  MEDICAL_CENTER
+  SPECIALIZED_CENTER
+  CLINIC
+  MEDICAL_COMPLEX
+  OTHER
+}
+
+/// حالة الارتباط المهني للكادر مع الجهة الصحية
+/// الحالات المحمية (ENDORSED/INTERVIEWED/UNENDORSED) لا يمكن للكادر تعيينها بنفسه
+enum AffiliationStatus {
+  WORKING      /// يعمل حالياً
+  FORMER       /// عمل سابقاً
+  INTERVIEWED  /// تمت مقابلته
+  ENDORSED     /// معتمد
+  PENDING      /// قيد المراجعة (طلب الكادر)
+  EXTERNAL     /// خارجي مؤهل
+  UNENDORSED   /// غير معتمد
+  SUSPENDED    /// موقوف
+}
+
+/// طريقة توزيع التكليف المُعلن
+enum DistributionMethod {
+  ALL_MATCHING    /// نشر للجميع المطابقين (الافتراضي التاريخي)
+  AUTO_MATCH      /// نشر تلقائي للمطابقين ذكاءً
+  INVITE_SELECTED /// استدعاء ممرضين محددين
+  FAVORITES       /// اختيار من المفضلة
+  SAME_ORG        /// العاملون في نفس الجهة
+  ENDORSED        /// المعتمدون
+  INTERVIEWED     /// تمت مقابلتهم
+  PROGRESSIVE     /// النشر التدريجي
+}
+
+/// حالة استدعاء كادر لتكليف محدد
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+}
+
 /// حالة الدفع للإدارة
 enum PaymentStatus {
   UNPAID
@@ -101,6 +152,12 @@ enum NotificationType {
   APPLICATION_SUBMITTED
   APPLICATION_APPROVED
   APPLICATION_REJECTED
+  INVITATION_RECEIVED
+  INVITATION_ACCEPTED
+  INVITATION_DECLINED
+  INVITATION_EXPIRED
+  AFFILIATION_UPDATED
+  FAVORITE_ADDED
   GENERIC
 }
 
@@ -136,6 +193,14 @@ model User {
   posts               Post[]
   applications        Application[]
   applicationsReviewed Application[] @relation("ApplicationReviewer")
+  // شبكة الكوادر: الارتباط المهني + المفضلة + الاستدعاءات
+  affiliations          NurseAffiliation[] @relation("NurseAffiliations")
+  affiliationsReviewed  NurseAffiliation[] @relation("AffiliationReviewer")
+  affiliationRequests   NurseAffiliation[] @relation("AffiliationRequester")
+  favoritesGiven        FavoriteNurse[]    @relation("ReceiverFavorites")
+  favoritedBy           FavoriteNurse[]    @relation("NurseFavoritedBy")
+  invitationsReceived   NurseInvitation[]  @relation("InvitedNurse")
+  invitationsSent       NurseInvitation[]  @relation("InvitingReceiver")
   // حقول خاصة بالمستلم الإداري — بيانات السحب (تُحفظ بشكل رئيسي للسحب)
   walletAddress       String?
   accountNumber       String?
@@ -263,19 +328,30 @@ model Post {
   value        Int
   status       PostStatus @default(OPEN)
   receiverId   String
+  /// الجهة الصحية المرتبطة (للمطابقة والارتباط المهني)
+  hospitalId   String?
+  /// طريقة توزيع التكليف — null يعني النشر العام للجميع (التوافق مع التكليفات السابقة)
+  distribution        DistributionMethod?
+  /// مرحلة النشر التدريجي الحالية (0 = المفضلون ... 3 = الخارجيون المؤهلون)
+  progressiveStage    Int       @default(0)
+  /// موعد الانتقال للمرحلة التالية في النشر التدريجي
+  progressiveNextAt   DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   receiver     User          @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+  hospital     Hospital?     @relation(fields: [hospitalId], references: [id])
   applications Application[]
   assignments  Assignment[]
+  invitations  NurseInvitation[]
 
   @@index([status])
   @@index([receiverId])
   @@map("posts")
 }
 
-/// الجهات الصحية (المستشفيات) — تُدار من حساب الإدارة وتظهر كقوائم اختيار
+/// الجهات الصحية (المستشفيات والمراكز الطبية) — كيانات مستقلة تُدار من الإدارة
+/// وتُربط بها الكوادر التمريضية عبر الارتباط المهني وتُبنى عليها التكليفات
 model Hospital {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -284,8 +360,19 @@ model Hospital {
   /// الإحداثيات الجغرافية الحقيقية (تُلتقط من الخريطة التفاعلية)
   lat       Float?
   lng       Float?
+  /// نوع الجهة: مستشفى / مركز طبي / مركز تخصصي / عيادة / مجمع طبي / أخرى
+  type      OrgType  @default(HOSPITAL)
+  city      String?
+  address   String?
+  phone     String?
+  email     String?
+  /// حالة الجهة: نشطة / غير نشطة / معلقة — الحقول المشتقة (isActive) للتوافق
+  status    OrgStatus @default(ACTIVE)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  affiliations NurseAffiliation[]
+  posts        Post[]
 
   @@map("hospitals")
 }
@@ -420,4 +507,74 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+/// الارتباط المهني — يربط الكادر التمريضي بجهة صحية مع تحديد طبيعة العلاقة
+/// شبكة الكوادر الصحية المعتمدة | Verified Healthcare Workforce Network
+model NurseAffiliation {
+  id            String            @id @default(cuid())
+  nurseId       String
+  hospitalId    String
+  status        AffiliationStatus @default(PENDING)
+  /// مَن أنشأ الارتباط (الكادر بطلب / المستلم / الإدارة)
+  requestedById String?
+  note          String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  nurse       User     @relation("NurseAffiliations", fields: [nurseId], references: [id], onDelete: Cascade)
+  hospital    Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  requestedBy User?    @relation("AffiliationRequester", fields: [requestedById], references: [id])
+  reviewedBy  User?    @relation("AffiliationReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([nurseId, hospitalId])
+  @@index([nurseId])
+  @@index([hospitalId])
+  @@index([status])
+  @@map("nurse_affiliations")
+}
+
+/// الممرضون المفضلون — قائمة خاصة بكل مستلم إداري لا تظهر لغيره
+model FavoriteNurse {
+  id         String   @id @default(cuid())
+  receiverId String
+  nurseId    String
+  /// تصنيف اختياري ضمن المفضلة (مثال: عناية مركزة، طوارئ)
+  category   String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  receiver User @relation("ReceiverFavorites", fields: [receiverId], references: [id], onDelete: Cascade)
+  nurse    User @relation("NurseFavoritedBy", fields: [nurseId], references: [id], onDelete: Cascade)
+
+  @@unique([receiverId, nurseId])
+  @@index([receiverId])
+  @@index([nurseId])
+  @@map("favorite_nurses")
+}
+
+/// استدعاء مباشر لكادر تمريضي لتكليف مُعلن — يحتوي قبول/رفض
+model NurseInvitation {
+  id          String           @id @default(cuid())
+  postId      String
+  nurseId     String
+  receiverId  String
+  status      InvitationStatus @default(PENDING)
+  message     String?
+  respondedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime         @default(now())
+
+  post     Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  nurse    User @relation("InvitedNurse", fields: [nurseId], references: [id], onDelete: Cascade)
+  receiver User @relation("InvitingReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, nurseId])
+  @@index([nurseId])
+  @@index([postId])
+  @@index([receiverId])
+  @@index([status])
+  @@map("nurse_invitations")
 }
