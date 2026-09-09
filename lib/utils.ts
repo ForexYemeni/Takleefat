@@ -5,6 +5,45 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ---------- واتساب | WhatsApp deep-links (الجولة العاشرة) ----------
+
+/** رمز الدولة الافتراضي — قابل للتغيير عبر NEXT_PUBLIC_WHATSAPP_COUNTRY_CODE */
+const WHATSAPP_COUNTRY_CODE = process.env.NEXT_PUBLIC_WHATSAPP_COUNTRY_CODE ?? '967'
+
+/**
+ * رابط واتساب جاهز (wa.me) — أرقام الهواتف مخزنة بدون رمز الدولة (9 أرقام).
+ * بلا رقم → مشاركة عامة يختار فيها المرسل المحادثة بنفسه.
+ */
+export function whatsappLink(phone: string | null | undefined, message: string): string {
+  const digits = (phone ?? '').replace(/\D/g, '')
+  const text = encodeURIComponent(message)
+  if (!digits) return `https://wa.me/?text=${text}`
+  const local = digits.startsWith('0') ? digits.slice(1) : digits
+  return `https://wa.me/${WHATSAPP_COUNTRY_CODE}${local}?text=${text}`
+}
+
+/** رسالة مشاركة تكليف مُعلن جاهزة للإرسال عبر واتساب */
+export function buildPostShareMessage(post: {
+  title: string
+  facility: string
+  department?: string | null
+  value?: number | null
+  hours?: number | null
+  startDate?: string | null
+  gender?: string | null
+}, genderLabel?: (g: string) => string, origin?: string): string {
+  const lines = [
+    'تكليف جديد في منصة تكليفات | Takleefat',
+    `${post.title} — ${post.facility}${post.department ? ` (${post.department})` : ''}`,
+  ]
+  if (post.value != null) lines.push(`قيمة التكليف: ${formatCurrency(post.value)}`)
+  if (post.hours != null) lines.push(`عدد الساعات: ${post.hours}`)
+  if (post.startDate) lines.push(`تاريخ البدء: ${formatDate(post.startDate)}`)
+  if (post.gender && post.gender !== 'ANY' && genderLabel) lines.push(`الجنس المطلوب: ${genderLabel(post.gender)}`)
+  if (origin) lines.push(`التقديم عبر المنصة: ${origin}/nurse/assignments`)
+  return lines.join('\n')
+}
+
 // ---------- التسميات العربية الموحدة ----------
 
 export const USER_STATUS_LABELS: Record<string, string> = {

@@ -1,8 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Eye, FileCheck2, FileText, XCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  Eye,
+  FileCheck2,
+  FileText,
+  Search,
+  XCircle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPatch } from '@/lib/api-client'
 import { formatDateTime, DOCUMENT_STATUS_LABELS, DOCUMENT_TYPE_LABELS, formatFileSize } from '@/lib/utils'
@@ -10,7 +17,9 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { DocumentViewer } from '@/components/shared/document-viewer'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -21,6 +30,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+
+/**
+ * مراجعة المستندات — بطاقات الكوادر (الجولة العاشرة):
+ * بدل سرد كل مستند منفصلاً، تُعرض بطاقة احترافية لكل كادر باسمه،
+ * وعند الضغط عليها تظهر جميع مستنداته المرفوعة مع أدوات الاعتماد والرفض.
+ */
 
 interface AdminDoc {
   id: string
@@ -37,9 +52,16 @@ interface AdminDoc {
   user: { id: string; name: string; phone: string; specialty: string | null; status: string }
 }
 
+interface DocOwner {
+  user: AdminDoc['user']
+  docs: AdminDoc[]
+}
+
 export default function AdminDocumentsPage() {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState('PENDING')
+  const [search, setSearch] = useState('')
+  const [openUser, setOpenUser] = useState<DocOwner | null>(null)
   const [viewDoc, setViewDoc] = useState<AdminDoc | null>(null)
   const [rejectDoc, setRejectDoc] = useState<AdminDoc | null>(null)
   const [rejectNote, setRejectNote] = useState('')
@@ -47,6 +69,14 @@ export default function AdminDocumentsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin-documents', status],
     queryFn: () => apiFetcher<{ documents: AdminDoc[] }>(`/api/admin/documents?status=${status}`),
+  })
+
+  // كل مستندات الكادر المختار (كل الحالات) — لبطاقة «جميع المستندات المرفوعة»
+  const { data: userData, isLoading: userDocsLoading } = useQuery({
+    queryKey: ['admin-documents-user', openUser?.user.id],
+    queryFn: () =>
+      apiFetcher<{ documents: AdminDoc[] }>(`/api/admin/documents?userId=${openUser!.user.id}`),
+    enabled: !!openUser,
   })
 
   const reviewMutation = useMutation({
@@ -58,6 +88,7 @@ export default function AdminDocumentsPage() {
     onSuccess: (res) => {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['admin-documents'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-documents-user'] })
       queryClient.invalidateQueries({ queryKey: ['stats'] })
       setViewDoc(null)
       setRejectDoc(null)
@@ -68,6 +99,22 @@ export default function AdminDocumentsPage() {
 
   const documents = data?.documents ?? []
 
+  // تجميع المستندات حسب الكادر — بطاقة واحدة لكل كادر
+  const owners = useMemo<DocOwner[]>(() => {
+    const map = new Map<string, DocOwner>()
+    for (const doc of documents) {
+      const existing = map.get(doc.userId)
+      if (existing) existing.docs.push(doc)
+      else map.set(doc.userId, { user: doc.user, docs: [doc] })
+    }
+    const term = search.trim()
+    const list = Array.from(map.values())
+    if (!term) return list
+    return list.filter(
+      (o) => o.user.name.includes(term) || o.user.phone.includes(term)
+    )
+  }, [documents, search])
+
   if (isLoading) return <DashboardSkeleton />
 
   return (
@@ -75,83 +122,171 @@ export default function AdminDocumentsPage() {
       <div>
         <h1 className="text-2xl font-extrabold">مراجعة المستندات</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          اعتماد أو رفض مستندات الكادر التمريضي: صور المزاولة والبطاقات وشهادات الخبرة
+          بطاقة لكل كادر — اضغط على البطاقة لعرض جميع مستنداته المرفوعة واعتمادها أو رفضها
         </p>
       </div>
 
-      <Tabs value={status} onValueChange={setStatus}>
-        <TabsList className="h-auto flex-wrap justify-start gap-1">
-          <TabsTrigger value="PENDING">قيد المراجعة</TabsTrigger>
-          <TabsTrigger value="APPROVED">معتمد</TabsTrigger>
-          <TabsTrigger value="REJECTED">مرفوض</TabsTrigger>
-          <TabsTrigger value="ALL">الكل</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={status} onValueChange={setStatus}>
+          <TabsList className="h-auto flex-wrap justify-start gap-1">
+            <TabsTrigger value="PENDING">قيد المراجعة</TabsTrigger>
+            <TabsTrigger value="APPROVED">معتمد</TabsTrigger>
+            <TabsTrigger value="REJECTED">مرفوض</TabsTrigger>
+            <TabsTrigger value="ALL">الكل</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ابحث بالاسم أو رقم الهاتف"
+            className="ps-9"
+          />
+        </div>
+      </div>
 
-      {documents.length === 0 ? (
+      {owners.length === 0 ? (
         <EmptyState
           icon={FileCheck2}
           title="لا توجد مستندات"
           description="لا توجد مستندات ضمن هذا التصنيف حالياً."
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {documents.map((doc) => (
-            <div key={doc.id} className="rounded-2xl border bg-card p-4">
-              <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-secondary p-3">
-                  <FileText className="size-5 text-muted-foreground" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold">{doc.title}</p>
-                    <StatusBadge status={doc.status} labels={DOCUMENT_STATUS_LABELS} />
-                  </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {doc.user.name} — {doc.user.specialty ?? 'بدون تخصص'}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {doc.fileName} • {formatFileSize(doc.fileSize)} • {formatDateTime(doc.createdAt)}
-                  </p>
-                  {doc.reviewNote && (
-                    <p className="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-700">
-                      سبب الرفض: {doc.reviewNote}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {owners.map((owner) => {
+            const counts = {
+              PENDING: owner.docs.filter((d) => d.status === 'PENDING').length,
+              APPROVED: owner.docs.filter((d) => d.status === 'APPROVED').length,
+              REJECTED: owner.docs.filter((d) => d.status === 'REJECTED').length,
+            }
+            return (
+              <button
+                key={owner.user.id}
+                onClick={() => setOpenUser(owner)}
+                className="group rounded-2xl border bg-card p-4 text-start transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-teal-100 text-lg font-extrabold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+                    {owner.user.name.slice(0, 1)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold group-hover:text-primary">{owner.user.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {owner.user.specialty ?? 'بدون تخصص'}
                     </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setViewDoc(doc)}>
-                      <Eye className="size-3.5" />
-                      عرض
-                    </Button>
-                    {doc.status !== 'APPROVED' && (
-                      <Button
-                        size="sm"
-                        className="gap-1.5"
-                        disabled={reviewMutation.isPending}
-                        onClick={() => reviewMutation.mutate({ id: doc.id, newStatus: 'APPROVED' })}
-                      >
-                        <CheckCircle2 className="size-3.5" />
-                        اعتماد
-                      </Button>
-                    )}
-                    {doc.status !== 'REJECTED' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                        onClick={() => setRejectDoc(doc)}
-                      >
-                        <XCircle className="size-3.5" />
-                        رفض
-                      </Button>
-                    )}
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground" dir="ltr">
+                      {owner.user.phone}
+                    </p>
                   </div>
+                  <StatusBadge status={owner.user.status} labels={{ PENDING: 'قيد المراجعة', APPROVED: 'معتمد', REJECTED: 'مرفوض', SUSPENDED: 'موقوف' }} />
                 </div>
-              </div>
-            </div>
-          ))}
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <Badge variant="secondary" className="gap-1">
+                    <FileText className="size-3" />
+                    {owner.docs.length} {owner.docs.length === 1 ? 'مستند' : 'مستندات'}
+                  </Badge>
+                  {counts.PENDING > 0 && (
+                    <Badge className="border-transparent bg-amber-100 text-[11px] text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      {counts.PENDING} بانتظار المراجعة
+                    </Badge>
+                  )}
+                  {counts.APPROVED > 0 && (
+                    <Badge className="border-transparent bg-emerald-100 text-[11px] text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      {counts.APPROVED} معتمد
+                    </Badge>
+                  )}
+                  {counts.REJECTED > 0 && (
+                    <Badge className="border-transparent bg-red-100 text-[11px] text-red-700 dark:bg-red-950/60 dark:text-red-300">
+                      {counts.REJECTED} مرفوض
+                    </Badge>
+                  )}
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
+
+      {/* ---------- حوار جميع مستندات الكادر ---------- */}
+      <Dialog open={!!openUser} onOpenChange={(open) => !open && setOpenUser(null)}>
+        <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex size-9 items-center justify-center rounded-full bg-teal-100 text-base font-extrabold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+                {openUser?.user.name.slice(0, 1)}
+              </span>
+              مستندات {openUser?.user.name}
+            </DialogTitle>
+            <DialogDescription>
+              جميع المستندات المرفوعة (كل الحالات) — اعتمد أو ارفض كل مستند مع إشعار صاحبه
+            </DialogDescription>
+          </DialogHeader>
+
+          {userDocsLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+          ) : (userData?.documents ?? []).length === 0 ? (
+            <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+              لا توجد مستندات مرفوعة لهذا الكادر بعد
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {(userData?.documents ?? []).map((doc) => (
+                <div key={doc.id} className="rounded-xl border bg-card p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-lg bg-secondary p-2">
+                      <FileText className="size-4 text-muted-foreground" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-bold">{doc.title}</p>
+                        <StatusBadge status={doc.status} labels={DOCUMENT_STATUS_LABELS} />
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.type} • {doc.fileName} •{' '}
+                        {formatFileSize(doc.fileSize)} • {formatDateTime(doc.createdAt)}
+                      </p>
+                      {doc.reviewNote && (
+                        <p className="mt-1.5 rounded-lg bg-red-50 px-2.5 py-1 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                          سبب الرفض: {doc.reviewNote}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex w-full flex-wrap gap-1.5 sm:w-auto">
+                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setViewDoc(doc)}>
+                        <Eye className="size-3.5" />
+                        عرض
+                      </Button>
+                      {doc.status !== 'APPROVED' && (
+                        <Button
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs"
+                          disabled={reviewMutation.isPending}
+                          onClick={() => reviewMutation.mutate({ id: doc.id, newStatus: 'APPROVED' })}
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          اعتماد
+                        </Button>
+                      )}
+                      {doc.status !== 'REJECTED' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 border-red-200 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => setRejectDoc(doc)}
+                        >
+                          <XCircle className="size-3.5" />
+                          رفض
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <DocumentViewer
         document={viewDoc}

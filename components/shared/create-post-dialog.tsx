@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { NursePickList, type SuggestedNurse } from '@/components/shared/nurse-pick-list'
+import { AudiencePreviewCard } from '@/components/shared/audience-preview-card'
 import {
   Dialog,
   DialogContent,
@@ -72,13 +73,28 @@ interface DepartmentOption {
 
 
 
+/** مصدر إعادة النشر — بيانات آخر تكليف مُعلن لملء النموذج تلقائياً (الجولة العاشرة) */
+export interface RepostSource {
+  title?: string | null
+  description?: string | null
+  hospitalId?: string | null
+  department?: string | null
+  gender?: string | null
+  value?: number | null
+  hours?: number | null
+  nursesNeeded?: number | null
+  distribution?: string | null
+}
+
 interface CreatePostDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (post: { id: string; title: string; number: number }) => void
+  /** آخر تكليف — يُملأ به النموذج تلقائياً عند الفتح (زر «أعد نشر آخر تكليف») */
+  repostSource?: RepostSource | null
 }
 
-export function CreatePostDialog({ open, onOpenChange, onCreated }: CreatePostDialogProps) {
+export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }: CreatePostDialogProps) {
   const form = useForm<CreatePostFormValues, unknown, CreatePostInput>({
     resolver: zodResolver(createPostSchema),
     defaultValues: {
@@ -110,6 +126,26 @@ export function CreatePostDialog({ open, onOpenChange, onCreated }: CreatePostDi
 
   const hospitals = hospitalsData?.hospitals ?? []
   const departments = (departmentsData?.departments ?? []).filter((d) => d.isActive)
+
+  // إعادة نشر: ملء النموذج من آخر تكليف (العنوان يُترك فارغاً ليأخذ الرقم الجديد تلقائياً)
+  useEffect(() => {
+    if (open && repostSource) {
+      form.reset({
+        title: '',
+        description: repostSource.description ?? '',
+        hospitalId: repostSource.hospitalId ?? '',
+        department: repostSource.department ?? '',
+        location: '',
+        startDate: new Date().toISOString().slice(0, 10),
+        nursesNeeded: repostSource.nursesNeeded != null ? String(repostSource.nursesNeeded) : '1',
+        hours: repostSource.hours != null ? String(repostSource.hours) : '',
+        gender: (repostSource.gender as 'MALE' | 'FEMALE' | 'ANY') ?? 'ANY',
+        value: repostSource.value != null ? String(repostSource.value) : '',
+        distribution: (repostSource.distribution as CreatePostInput['distribution']) ?? 'ALL_MATCHING',
+        progressiveStageHours: '',
+      })
+    }
+  }, [open, repostSource])
 
   const selectedHospitalId = form.watch('hospitalId')
   const selectedHospital = hospitals.find((h) => h.id === selectedHospitalId)
@@ -341,6 +377,17 @@ export function CreatePostDialog({ open, onOpenChange, onCreated }: CreatePostDi
                 <Label htmlFor="cp-stage-hours">مدة كل مرحلة (ساعات)</Label>
                 <Input id="cp-stage-hours" type="number" min={1} max={720} placeholder="24" {...form.register('progressiveStageHours')} />
               </div>
+            )}
+
+            {/* المعاينة الحية لجمهور التكليف (الجولة العاشرة) — لكل طرق التوزيع عدا الاستدعاء المحدد */}
+            {distribution !== 'INVITE_SELECTED' && (
+              <AudiencePreviewCard
+                hospitalId={selectedHospitalId}
+                gender={form.watch('gender') || 'ANY'}
+                department={form.watch('department') || ''}
+                distribution={distribution}
+                enabled={open}
+              />
             )}
 
             {/* الاستدعاء المحدد: اختيار تفاعلي */}

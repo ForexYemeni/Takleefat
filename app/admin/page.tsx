@@ -11,7 +11,11 @@ import {
   Users,
 } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
+import { formatCurrency, POST_STATUS_LABELS } from '@/lib/utils'
+import { StatusBadge } from '@/components/shared/status-badge'
+import { AssignmentAlertCard } from '@/components/shared/assignment-alert-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
 
@@ -27,11 +31,29 @@ interface AdminStats {
   pendingDocuments: number
 }
 
+interface AdminLatestPost {
+  id: string
+  title: string
+  facility: string
+  department: string | null
+  status: string
+  value: number
+  startDate: string
+  _count: { applications: number }
+}
+
 export default function AdminOverviewPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['stats'],
     queryFn: () => apiFetcher<AdminStats>('/api/stats'),
   })
+
+  // أحدث تكليف مُعلن — لبطاقة «وجود تكليف» أعلى الصفحة
+  const { data: postsData } = useQuery({
+    queryKey: ['admin-posts'],
+    queryFn: () => apiFetcher<{ posts: AdminLatestPost[] }>('/api/posts'),
+  })
+  const latestPost = postsData?.posts?.[0]
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -85,6 +107,39 @@ export default function AdminOverviewPage() {
           ملخص أداء منصة تكليفات | Takleefat — الحسابات والتكليفات والمستندات
         </p>
       </div>
+
+      {/* بطاقة وجود تكليف — أحدث تكليف مُعلن على المنصة */}
+      {latestPost ? (
+        <AssignmentAlertCard
+          tone={latestPost.status === 'OPEN' ? 'open' : 'active'}
+          eyebrow="أحدث تكليف مُعلن"
+          title={latestPost.title}
+          subtitle={`${latestPost.facility}${latestPost.department ? ` — ${latestPost.department}` : ''}`}
+          chips={
+            <>
+              <StatusBadge status={latestPost.status} labels={POST_STATUS_LABELS} />
+              <Badge variant="outline" className="gap-1">
+                {formatCurrency(latestPost.value)}
+              </Badge>
+              <Badge variant="outline" className="gap-1">
+                <Users className="size-3" />
+                {latestPost._count.applications} تقديم
+              </Badge>
+            </>
+          }
+          href="/admin/assignments"
+          ctaLabel="إدارة التكليفات"
+        />
+      ) : (
+        <AssignmentAlertCard
+          tone="empty"
+          eyebrow="التكليفات المُعلنة"
+          title="لا توجد تكليفات مُعلنة بعد"
+          subtitle="أنشئ أول تكليف أو فعّل المستلمين الإداريين لنشر تكليفاتهم"
+          href="/admin/assignments"
+          ctaLabel="إنشاء تكليف"
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (

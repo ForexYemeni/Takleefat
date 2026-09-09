@@ -117,6 +117,8 @@ export interface AdminPost {
   value: number
   status: string
   createdAt: string
+  hospitalId?: string | null
+  distribution?: string | null
   receiver: { id: string; name: string }
   _count: { applications: number }
 }
@@ -1005,6 +1007,7 @@ function AdminPostsTab() {
   const queryClient = useQueryClient()
   const [editPost, setEditPost] = useState<AdminPost | null>(null)
   const [createPostOpen, setCreatePostOpen] = useState(false)
+  const [repostMode, setRepostMode] = useState(false)
   const [pendingDeletePost, setPendingDeletePost] = useState<AdminPost | null>(null)
 
   const { data } = useQuery({
@@ -1048,7 +1051,24 @@ function AdminPostsTab() {
 
   return (
     <>
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setRepostMode(true)
+            setCreatePostOpen(true)
+          }}
+          disabled={posts.length === 0}
+          title={
+            posts.length === 0
+              ? 'لا يوجد تكليف سابق لإعادة نشره'
+              : 'أنشئ تكليفاً جديداً بنفس بيانات آخر تكليف — عدّل ما يلزم وانشر'
+          }
+          className="gap-2"
+        >
+          <History className="size-4" />
+          أعد نشر آخر تكليف
+        </Button>
         <Button onClick={() => setCreatePostOpen(true)} className="gap-2">
           <Plus className="size-4" />
           إضافة تكليف مُعلن
@@ -1122,7 +1142,11 @@ function AdminPostsTab() {
       {/* إضافة تكليف مُعلن من حساب الإدارة — الجهات والأقسام من قوائم الإدارة */}
       <CreatePostDialog
         open={createPostOpen}
-        onOpenChange={setCreatePostOpen}
+        onOpenChange={(open) => {
+          setCreatePostOpen(open)
+          if (!open) setRepostMode(false)
+        }}
+        repostSource={repostMode ? posts[0] ?? null : null}
         onCreated={() => invalidate()}
       />
 

@@ -143,6 +143,138 @@ export async function healReceiverPendingAffiliations(hospitalId?: string): Prom
   return healed
 }
 
+// ---------- معاينة جمهور التكليف الحية (الجولة العاشرة) ----------
+
+export interface AudiencePreviewResult {
+  distribution: string
+  total: number
+  breakdown: {
+    favorites: number
+    working: number
+    endorsed: number
+    interviewed: number
+    external: number
+    former: number
+    basic: number
+  }
+  /** عدادات مراحل النشر التدريجي — تُملأ فقط عند distribution = PROGRESSIVE */
+  progressive?: { stage0: number; stage1: number; stage2: number; stage3: number }
+}
+
+/**
+ * معاينة حية لجمهور تكليف قبل نشره — بنفس منطق canNurseSeePost حرفياً
+ * (فلتر الجنس + خصوصية التوزيع + مطابقة القسم) حتى يطابق العدد المتوقع
+ * ما يحدث فعلاً بعد النشر دون أي مفاجأة.
+ */
+export async function getAudiencePreview(opts: {
+  receiverId: string
+  hospitalId?: string | null
+  department?: string | null
+  gender?: Gender | null
+  distribution?: string | null
+}): Promise<AudiencePreviewResult> {
+  const genderWhere = opts.gender && opts.gender !== 'ANY' ? { gender: opts.gender } : {}
+  const base = { role: 'NURSE' as const, status: 'APPROVED' as const, ...genderWhere }
+
+  const [nurses, favorites] = await Promise.all([
+    db.user.findMany({
+      where: base,
+      select: { id: true, specialty: true, qualification: true },
+    }),
+    db.favoriteNurse.findMany({ where: { receiverId: opts.receiverId }, select: { nurseId: true } }),
+  ])
+
+  const nurseIds = nurses.map((n) => n.id)
+  const affs =
+    opts.hospitalId && nurseIds.length > 0
+      ? await db.nurseAffiliation.findMany({
+          where: { hospitalId: opts.hospitalId, nurseId: { in: nurseIds } },
+          select: { nurseId: true, status: true },
+        })
+      : []
+
+  const favSet = new Set(favorites.map((f) => f.nurseId))
+  const affMap = new Map(affs.map((a) => [a.nurseId, a.status as string]))
+
+  const dept = (opts.department ?? '').trim()
+  const deptMatch = (n: { specialty: string | null; qualification: string | null }): boolean => {
+    if (!dept) return false
+    const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`.trim()
+    if (!hay) return false
+    return hay.includes(dept) || dept.includes(hay)
+  }
+  const affIs = (nurseId: string, statuses: string[]): boolean =>
+    statuses.includes(affMap.get(nurseId) ?? '')
+
+  // التوزيع الهرمي حسب الأولوية — لعرض الشرائح
+  const breakdown = {
+    favorites: 0,
+    working: 0,
+    endorsed: 0,
+    interviewed: 0,
+    external: 0,
+    former: 0,
+    basic: 0,
+  }
+  for (const n of nurses) {
+    if (favSet.has(n.id)) breakdown.favorites++
+    const st = affMap.get(n.id)
+    if (st === 'WORKING') breakdown.working++
+    else if (st === 'ENDORSED') breakdown.endorsed++
+    else if (st === 'INTERVIEWED') breakdown.interviewed++
+    else if (st === 'EXTERNAL') breakdown.external++
+    else if (st === 'FORMER') breakdown.former++
+    else breakdown.basic++
+  }
+
+  const distribution = opts.distribution ?? 'ALL_MATCHING'
+  let total = 0
+  let progressive: AudiencePreviewResult['progressive'] | undefined
+
+  switch (distribution) {
+    case 'FAVORITES':
+      total = breakdown.favorites
+      break
+    case 'SAME_ORG':
+      total = nurses.filter((n) => affIs(n.id, ['WORKING', 'ENDORSED', 'INTERVIEWED', 'EXTERNAL'])).length
+      break
+    case 'ENDORSED':
+      total = nurses.filter((n) => affIs(n.id, ['ENDORSED', 'WORKING'])).length
+      break
+    case 'INTERVIEWED':
+      total = nurses.filter((n) => affIs(n.id, ['INTERVIEWED', 'ENDORSED'])).length
+      break
+    case 'AUTO_MATCH':
+      total = nurses.filter(
+        (n) =>
+          affIs(n.id, ['WORKING', 'ENDORSED', 'INTERVIEWED', 'EXTERNAL', 'FORMER']) || deptMatch(n)
+      ).length
+      break
+    case 'INVITE_SELECTED':
+      // الاستدعاء المحدد: الاختبار الفعلي يتم من قائمة الاختيار — العدد هنا حجم الجمهور المؤهل
+      total = nurses.length
+      break
+    case 'PROGRESSIVE': {
+      // مرآة canNurseSeePost: من يرى التكليف في كل مرحلة فعلاً
+      const stage0 = nurses.filter(
+        (n) => favSet.has(n.id) || affIs(n.id, ['WORKING', 'ENDORSED'])
+      ).length
+      const stage1 = nurses.filter((n) => affIs(n.id, ['WORKING', 'ENDORSED'])).length
+      const stage2 = nurses.filter((n) =>
+        affIs(n.id, ['WORKING', 'ENDORSED', 'INTERVIEWED', 'EXTERNAL'])
+      ).length
+      progressive = { stage0, stage1, stage2, stage3: nurses.length }
+      total = stage0
+      break
+    }
+    default:
+      // ALL_MATCHING
+      total = nurses.length
+  }
+
+  return { distribution, total, breakdown, progressive }
+}
+
 // ---------- جمهور التوزيع ----------
 
 /** الحالات المقبولة ضمن جمهور الارتباط بجهة ما */

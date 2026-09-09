@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -8,8 +8,10 @@ import {
   Banknote,
   CalendarDays,
   Clock,
+  History,
   Inbox,
   MapPin,
+  MessageCircle,
   PackageCheck,
   Plus,
   ShieldAlert,
@@ -30,6 +32,8 @@ import {
   ASSIGNMENT_STATUS_LABELS,
   POST_STATUS_LABELS,
   POST_GENDER_LABELS,
+  whatsappLink,
+  buildPostShareMessage,
 } from '@/lib/utils'
 import {
   createPostSchema,
@@ -39,6 +43,8 @@ import {
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant-cv'
+import { AudiencePreviewCard } from '@/components/shared/audience-preview-card'
+import type { RepostSource } from '@/components/shared/create-post-dialog'
 import { Stars, StarRatingInput } from '@/components/shared/star-rating'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -82,6 +88,8 @@ interface ReceiverPost {
   value: number
   status: string
   createdAt: string
+  hospitalId: string
+  distribution?: string | null
   _count: { applications: number }
   assignments?: Array<{ id: string; nurse: { id: string; name: string } }>
 }
@@ -101,7 +109,7 @@ interface ReceiverAssignment {
   nurseConfirmedReceipt: boolean
   receiverDoneAt: string | null
   nursePaid: boolean | null
-  nurse: { id: string; name: string; specialty: string | null }
+  nurse: { id: string; name: string; specialty: string | null; phone: string }
   rating?: { overall: number; comment: string | null; createdAt: string } | null
   earning?: { amount: number; percent: number } | null
 }
@@ -134,6 +142,7 @@ export default function ReceiverAssignmentsPage() {
   const { data: session } = useSession()
   const [tab, setTab] = useState('posts')
   const [createOpen, setCreateOpen] = useState(false)
+  const [repostMode, setRepostMode] = useState(false)
   const [applicationsPost, setApplicationsPost] = useState<ReceiverPost | null>(null)
 
   // لا إنشاء تكليفات إلا بعد اعتماد الحساب من الإدارة
@@ -172,15 +181,37 @@ export default function ReceiverAssignmentsPage() {
             أعلن عن تكليفاتك، راجع سير الكادر المتقدم، واعتمد الأنسب — أو تأكّد من التكليفات المؤكدة
           </p>
         </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          disabled={notApproved}
-          title={notApproved ? 'لا يمكن إنشاء تكليف حتى اعتماد حسابك من الإدارة' : undefined}
-          className="shrink-0 gap-2"
-        >
-          <Plus className="size-4" />
-          إنشاء تكليف جديد
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setRepostMode(true)
+              setCreateOpen(true)
+            }}
+            disabled={notApproved || posts.length === 0}
+            title={
+              posts.length === 0
+                ? 'لا يوجد تكليف سابق لإعادة نشره'
+                : 'أنشئ تكليفاً جديداً بنفس بيانات آخر تكليف — عدّل التاريخ فقط وانشر'
+            }
+            className="gap-2"
+          >
+            <History className="size-4" />
+            أعد نشر آخر تكليف
+          </Button>
+          <Button
+            onClick={() => {
+              setRepostMode(false)
+              setCreateOpen(true)
+            }}
+            disabled={notApproved}
+            title={notApproved ? 'لا يمكن إنشاء تكليف حتى اعتماد حسابك من الإدارة' : undefined}
+            className="gap-2"
+          >
+            <Plus className="size-4" />
+            إنشاء تكليف جديد
+          </Button>
+        </div>
       </div>
 
       {notApproved && (
@@ -217,7 +248,15 @@ export default function ReceiverAssignmentsPage() {
 
       {tab === 'confirmed' && <ConfirmedAssignments assignments={assignments} />}
 
-      <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} nextNumber={nextNumber} />
+      <CreatePostDialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          if (!open) setRepostMode(false)
+        }}
+        nextNumber={nextNumber}
+        repostSource={repostMode ? posts[0] ?? null : null}
+      />
 
       {/* حوار مراجعة التقديمات */}
       <Dialog
@@ -235,6 +274,7 @@ export default function ReceiverAssignmentsPage() {
             <ApplicationsReview
               postId={applicationsPost.id}
               nursesNeeded={applicationsPost.nursesNeeded}
+              postTitle={applicationsPost.title}
             />
           )}
         </DialogContent>
@@ -346,16 +386,31 @@ function MyPosts({
               )}
 
               {post.status === 'OPEN' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-muted-foreground hover:text-destructive"
-                  disabled={cancelMutation.isPending}
-                  onClick={() => cancelMutation.mutate(post.id)}
-                >
-                  <XCircle className="size-3.5" />
-                  إلغاء الإعلان
-                </Button>
+                <div className="flex gap-2">
+                  <a
+                    href={whatsappLink(
+                      null,
+                      buildPostShareMessage(post, (g) => POST_GENDER_LABELS[g] ?? g, window.location.origin)
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    title="أرسل تفاصيل التكليف عبر واتساب"
+                  >
+                    <MessageCircle className="size-3.5" />
+                    مشاركة عبر واتساب
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 text-muted-foreground hover:text-destructive"
+                    disabled={cancelMutation.isPending}
+                    onClick={() => cancelMutation.mutate(post.id)}
+                  >
+                    <XCircle className="size-3.5" />
+                    إلغاء الإعلان
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -367,7 +422,15 @@ function MyPosts({
 
 // ---------- مراجعة التقديمات ----------
 
-function ApplicationsReview({ postId, nursesNeeded }: { postId: string; nursesNeeded: number }) {
+function ApplicationsReview({
+  postId,
+  nursesNeeded,
+  postTitle,
+}: {
+  postId: string
+  nursesNeeded: number
+  postTitle?: string
+}) {
   const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -408,6 +471,7 @@ function ApplicationsReview({ postId, nursesNeeded }: { postId: string; nursesNe
         <ApplicantCV
           key={applicant.applicationId}
           applicant={applicant}
+          postTitle={postTitle}
           reviewing={reviewMutation.isPending}
           onReview={(id, action, note) => reviewMutation.mutate({ id, action, note })}
         />
@@ -417,6 +481,22 @@ function ApplicationsReview({ postId, nursesNeeded }: { postId: string; nursesNe
 }
 
 // ---------- التكليفات المؤكدة ----------
+
+// ---------- مراسلة الكادر عبر واتساب (الجولة العاشرة) ----------
+
+function assignmentWhatsappUrl(a: ReceiverAssignment): string {
+  return whatsappLink(
+    a.nurse.phone,
+    [
+      `مرحباً ${a.nurse.name}،`,
+      `بخصوص التكليف: ${a.title} — ${a.facility}${a.department ? ` (${a.department})` : ''}`,
+      a.startDate ? `تاريخ البدء: ${formatDate(a.startDate)}` : '',
+      'من منصة تكليفات | Takleefat',
+    ]
+      .filter(Boolean)
+      .join('\n')
+  )
+}
 
 function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment[] }) {
   const queryClient = useQueryClient()
@@ -481,6 +561,16 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                         {formatCurrency(a.value)}
                       </Badge>
                     )}
+                    <a
+                      href={assignmentWhatsappUrl(a)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`مراسلة ${a.nurse.name} عبر واتساب`}
+                      className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    >
+                      <MessageCircle className="size-3" />
+                      واتساب
+                    </a>
                   </div>
 
                   <p className="text-xs text-muted-foreground">
@@ -814,10 +904,12 @@ function CreatePostDialog({
   open,
   onOpenChange,
   nextNumber,
+  repostSource,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   nextNumber: number
+  repostSource?: RepostSource | null
 }) {
   const queryClient = useQueryClient()
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null)
@@ -851,6 +943,26 @@ function CreatePostDialog({
   })
   const hospitals = hospitalsData?.hospitals ?? []
   const departments = departmentsData?.departments ?? []
+
+  // إعادة نشر: ملء النموذج من آخر تكليف — العنوان يُترك فارغاً ليأخذ الرقم الجديد تلقائياً
+  useEffect(() => {
+    if (open && repostSource) {
+      const hospital = hospitals.find((h) => h.id === repostSource.hospitalId) ?? null
+      setSelectedHospital(hospital)
+      form.reset({
+        title: '',
+        description: repostSource.description ?? '',
+        hospitalId: repostSource.hospitalId ?? '',
+        department: repostSource.department ?? '',
+        location: hospital?.location ?? '',
+        startDate: new Date().toISOString().slice(0, 10),
+        nursesNeeded: repostSource.nursesNeeded != null ? String(repostSource.nursesNeeded) : '1',
+        hours: repostSource.hours != null ? String(repostSource.hours) : '',
+        gender: (repostSource.gender as 'MALE' | 'FEMALE' | 'ANY') ?? 'ANY',
+        value: repostSource.value != null ? String(repostSource.value) : '',
+      })
+    }
+  }, [open, repostSource, hospitals.length])
 
   const createMutation = useMutation({
     mutationFn: (values: CreatePostInput) => apiPost<{ message: string }>('/api/posts', values),
@@ -1030,6 +1142,15 @@ function CreatePostDialog({
               {...form.register('description')}
             />
           </div>
+
+          {/* المعاينة الحية لجمهور التكليف قبل النشر (الجولة العاشرة) */}
+          <AudiencePreviewCard
+            hospitalId={form.watch('hospitalId')}
+            gender={form.watch('gender') || 'ANY'}
+            department={form.watch('department') || ''}
+            distribution="ALL_MATCHING"
+            enabled={open}
+          />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

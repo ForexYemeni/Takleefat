@@ -4,20 +4,23 @@ import { requireRole, handleApiError } from '@/lib/api-helpers'
 import type { DocumentStatus } from '@prisma/client'
 
 /**
- * GET /api/admin/documents?status=PENDING
+ * GET /api/admin/documents?status=PENDING&userId=...
  * قائمة المستندات مع بيانات أصحابها — لمراجعة المستندات
+ * userId (اختياري، الجولة العاشرة): مستندات كادر محدد — لبطاقة «كل مستندات الكادر»
  */
 export async function GET(req: NextRequest) {
   try {
     await requireRole('ADMIN')
 
     const status = req.nextUrl.searchParams.get('status')
+    const userId = req.nextUrl.searchParams.get('userId')
 
     const documents = await db.document.findMany({
       where: {
         ...(status && ['PENDING', 'APPROVED', 'REJECTED'].includes(status)
           ? { status: status as DocumentStatus }
           : {}),
+        ...(userId ? { userId } : {}),
       },
       orderBy: { createdAt: 'desc' },
       include: {

@@ -15,10 +15,12 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { useSession } from 'next-auth/react'
 import { apiFetcher, apiPost } from '@/lib/api-client'
-import { formatDate, ASSIGNMENT_STATUS_LABELS } from '@/lib/utils'
+import { formatDate, formatCurrency, ASSIGNMENT_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
+import { AssignmentAlertCard } from '@/components/shared/assignment-alert-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -40,6 +42,15 @@ interface MyAssignment {
   receiver: { name: string }
 }
 
+interface OpenPost {
+  id: string
+  title: string
+  facility: string
+  department: string | null
+  status: string
+  value: number
+}
+
 export default function NurseOverviewPage() {
   const { data: session } = useSession()
   const [resubmitting, setResubmitting] = useState(false)
@@ -52,6 +63,12 @@ export default function NurseOverviewPage() {
   const assignments = useQuery({
     queryKey: ['my-assignments'],
     queryFn: () => apiFetcher<{ assignments: MyAssignment[] }>('/api/me/assignments'),
+  })
+
+  // تكليفات مفتوحة قد تناسب الكادر — لبطاقة التكليف أعلى الصفحة
+  const openPosts = useQuery({
+    queryKey: ['open-posts'],
+    queryFn: () => apiFetcher<{ posts: OpenPost[] }>('/api/posts'),
   })
 
   const resubmit = async () => {
@@ -72,6 +89,8 @@ export default function NurseOverviewPage() {
 
   const status = session?.user?.status
   const recentAssignments = (assignments.data?.assignments ?? []).slice(0, 5)
+  const activeAssignment = (assignments.data?.assignments ?? []).find((a) => a.status === 'ACTIVE')
+  const suggestedPost = (openPosts.data?.posts ?? []).find((p) => p.status === 'OPEN')
 
   const cards = [
     {
@@ -109,6 +128,47 @@ export default function NurseOverviewPage() {
           مرحباً {session?.user?.name} — هذه ملخص حسابك في منصة تكليفات
         </p>
       </div>
+
+      {/* بطاقة وجود تكليف — أعلى النظرة العامة */}
+      {activeAssignment ? (
+        <AssignmentAlertCard
+          tone="active"
+          eyebrow="لديك تكليف جارٍ الآن"
+          title={activeAssignment.title}
+          subtitle={`${activeAssignment.facility}${activeAssignment.department ? ` — ${activeAssignment.department}` : ''} • الجهة: ${activeAssignment.receiver.name}`}
+          chips={
+            <>
+              <StatusBadge status={activeAssignment.status} labels={ASSIGNMENT_STATUS_LABELS} />
+              <span className="text-xs text-muted-foreground">البدء: {formatDate(activeAssignment.startDate)}</span>
+            </>
+          }
+          href="/nurse/assignments"
+          ctaLabel="متابعة التكليف"
+        />
+      ) : suggestedPost ? (
+        <AssignmentAlertCard
+          tone="open"
+          eyebrow="تكليف جديد قد يناسبك"
+          title={suggestedPost.title}
+          subtitle={`${suggestedPost.facility}${suggestedPost.department ? ` — ${suggestedPost.department}` : ''}`}
+          chips={
+            <Badge variant="outline" className="gap-1">
+              {formatCurrency(suggestedPost.value)}
+            </Badge>
+          }
+          href="/nurse/assignments"
+          ctaLabel="استعرض وتقدّم"
+        />
+      ) : (
+        <AssignmentAlertCard
+          tone="empty"
+          eyebrow="التكليفات"
+          title="لا توجد تكليفات متاحة حالياً"
+          subtitle="سيصلك إشعار فور نشر تكليف جديد مطابق لمجالك"
+          href="/nurse/assignments"
+          ctaLabel="تكليفاتي"
+        />
+      )}
 
       {/* حالة الحساب */}
       {status === 'PENDING' && (

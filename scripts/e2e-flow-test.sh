@@ -961,6 +961,63 @@ check "الطلب المرفوض اختفى من لوحة الجهة" "0" "$R9_G
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R9_N_ID -o /dev/null
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R9_ORG2_ID -o /dev/null
 
+# ============================================================
+# القسم 24 — الجولة العاشرة: معاينة الجمهور الحية + عقد إعادة النشر + المستندات المجمعة
+# ============================================================
+echo "=========== 24) معاينة الجمهور + إعادة النشر + المستندات المجمعة ==========="
+
+# معاينة الجمهور الحية — ALL_MATCHING: total + التوزيع الهرمي
+R10_P1=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/posts/audience-preview?gender=ANY&distribution=ALL_MATCHING" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d['total']>=0, 'breakdown' in d, 'favorites' in d['breakdown'], 'basic' in d['breakdown'])" 2>/dev/null)
+check "معاينة الجمهور ALL_MATCHING: total + breakdown هرمي" "True True True True" "$R10_P1"
+
+# معاينة الجمهور — AUTO_MATCH بجهة صحية وقسم
+R10_P2=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/posts/audience-preview?hospitalId=$SEED_ORG_ID&gender=ANY&department=%D8%B7%D9%88%D8%A7%D8%B1%D8%A6&distribution=AUTO_MATCH" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d['distribution'], d['total']>=0)" 2>/dev/null)
+check "معاينة الجمهور AUTO_MATCH بجهة وقسم" "AUTO_MATCH True" "$R10_P2"
+
+# معاينة الجمهور — PROGRESSIVE: عدادات المراحل الأربع + الوصول الإداري
+R10_P3=$(curl -s -b "$DIR/admin.jar" "$BASE/api/posts/audience-preview?hospitalId=$SEED_ORG_ID&gender=ANY&distribution=PROGRESSIVE" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+p=d.get('progressive') or {}
+print(all(k in p for k in ('stage0','stage1','stage2','stage3')))" 2>/dev/null)
+check "معاينة الجمهور PROGRESSIVE: عدادات المراحل الأربع (صلاحية الإدارة)" "True" "$R10_P3"
+
+# منع الكادر من معاينة الجمهور (RECEIVER/ADMIN فقط)
+R10_P4=$(code -b "$DIR/nurse.jar" "$BASE/api/posts/audience-preview?gender=ANY")
+check "منع الكادر من معاينة الجمهور → 403" "403" "$R10_P4"
+
+# عقد إعادة النشر: posts[0] للمستلم يحمل كل حقول الملء التلقائي
+R10_REPOST=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/posts" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+p=d['posts'][0] if d['posts'] else {}
+print(bool(p), all(k in p for k in ('hospitalId','value','gender','hours','nursesNeeded','description')))" 2>/dev/null)
+check "عقد إعادة نشر آخر تكليف: posts[0] يحمل كل حقول الملء" "True True" "$R10_REPOST"
+
+# المستندات المجمعة: ?userId يعيد مستندات كادر محدد حصراً
+R10_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"مستندات مجمعة","phone":"788880501","password":"Round10@12","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE"}')
+R10_N2_ID=$(echo "$R10_N2" | jget "['user']['id']")
+[ -n "$R10_N2_ID" ] && check "تسجيل كادر قسم المستندات → 201" "ok" "ok" || check "تسجيل كادر المستندات" "id" "null"
+login "$DIR/r10nurse.jar" "788880501" "Round10@12"
+UP_R10=$(code -b "$DIR/r10nurse.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "الكادر يرفع مستنده → 201" "201" "$UP_R10"
+R10_DOCS=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/documents?userId=$R10_N2_ID" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+docs=d['documents']
+print(len(docs), all(x['userId']=='$R10_N2_ID' for x in docs))" 2>/dev/null)
+check "المستندات المجمعة: userId يعيد مستندات الكادر حصراً" "1 True" "$R10_DOCS"
+
+# --- تنظيف القسم ---
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R10_N2_ID -o /dev/null
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

@@ -8,6 +8,7 @@ import {
   FileText,
   GraduationCap,
   IdCard,
+  MessageCircle,
   Phone as PhoneIcon,
   Stethoscope,
   UserRound,
@@ -27,6 +28,7 @@ import {
   DOCUMENT_TYPE_LABELS,
   GENDER_LABELS,
   formatDate,
+  whatsappLink,
 } from '@/lib/utils'
 
 export interface ApplicantDocument {
@@ -92,10 +94,13 @@ export function ApplicantCV({
   applicant,
   onReview,
   reviewing,
+  postTitle,
 }: {
   applicant: ApplicantData
   onReview?: (applicationId: string, action: 'APPROVE' | 'REJECT', note?: string) => void
   reviewing?: boolean
+  /** عنوان التكليف المُقدَّم عليه — يُستخدم في رسالة واتساب الجاهزة */
+  postTitle?: string
 }) {
   const [viewerDoc, setViewerDoc] = useState<ViewableDocument | null>(null)
   const [rejecting, setRejecting] = useState(false)
@@ -127,6 +132,28 @@ export function ApplicantCV({
       {/* البيانات الأساسية */}
       <div className="grid gap-2 sm:grid-cols-2">
         <CVRow icon={PhoneIcon} label="رقم الهاتف (للتواصل)" value={nurse.phone} ltr />
+        <div className="flex items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2.5">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+            <MessageCircle className="size-3.5" />
+            تواصل سريع
+          </span>
+          <a
+            href={whatsappLink(
+              nurse.phone,
+              [
+                `مرحباً ${nurse.name}،`,
+                postTitle ? `بخصوص تقديمك على التكليف (${postTitle})` : 'بخصوص تقديمك على التكليف',
+                'من منصة تكليفات | Takleefat',
+              ].join('\n')
+            )}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+          >
+            <MessageCircle className="size-3" />
+            مراسلة واتساب
+          </a>
+        </div>
         <CVRow
           icon={UserRound}
           label="الجنس"

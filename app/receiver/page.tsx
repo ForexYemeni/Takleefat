@@ -3,17 +3,41 @@
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
-import { BadgeCheck, CheckCircle2, Inbox, ClipboardList, ShieldAlert } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, Inbox, ClipboardList, ShieldAlert, Users } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
+import { formatDate, formatCurrency, POST_STATUS_LABELS } from '@/lib/utils'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
+import { AssignmentAlertCard } from '@/components/shared/assignment-alert-card'
+import { StatusBadge } from '@/components/shared/status-badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 interface ReceiverStats {
   myAssignments: number
   pendingReceipt: number
   completedAssignments: number
+}
+
+interface OverviewAssignment {
+  id: string
+  title: string
+  facility: string
+  department: string | null
+  startDate: string
+  status: string
+  nurse: { id: string; name: string; specialty: string | null; phone: string }
+}
+
+interface OverviewPost {
+  id: string
+  title: string
+  facility: string
+  department: string | null
+  status: string
+  value: number
+  _count: { applications: number }
 }
 
 export default function ReceiverOverviewPage() {
@@ -23,7 +47,22 @@ export default function ReceiverOverviewPage() {
     queryFn: () => apiFetcher<ReceiverStats>('/api/stats'),
   })
 
+  // بطاقة التكليف أعلى الصفحة: تكليف جارٍ (بانتظار الاستلام) أو أحدث تكليف مُعلن
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['my-assignments'],
+    queryFn: () =>
+      apiFetcher<{ assignments: OverviewAssignment[] }>('/api/me/assignments'),
+  })
+  const { data: postsData } = useQuery({
+    queryKey: ['my-posts'],
+    queryFn: () => apiFetcher<{ posts: OverviewPost[] }>('/api/posts'),
+  })
+
   if (isLoading) return <DashboardSkeleton />
+
+  const assignments = assignmentsData?.assignments ?? []
+  const activeAssignment = assignments.find((a) => a.status === 'ACTIVE')
+  const latestOpenPost = (postsData?.posts ?? []).find((p) => p.status === 'OPEN')
 
   const status = session?.user?.status
 
@@ -56,6 +95,57 @@ export default function ReceiverOverviewPage() {
           ملخص التكليفات الواردة إليك في منصة تكليفات | Takleefat
         </p>
       </div>
+
+      {/* بطاقة وجود تكليف — أعلى النظرة العامة */}
+      {activeAssignment ? (
+        <AssignmentAlertCard
+          tone="active"
+          eyebrow="تكليف جارٍ الآن"
+          title={activeAssignment.title}
+          subtitle={`${activeAssignment.facility}${activeAssignment.department ? ` — ${activeAssignment.department}` : ''} • الكادر: ${activeAssignment.nurse.name}`}
+          chips={
+            <>
+              <Badge variant="outline" className="gap-1">
+                <ClipboardList className="size-3" />
+                البدء: {formatDate(activeAssignment.startDate)}
+              </Badge>
+              <StatusBadge status={activeAssignment.status} labels={{ ACTIVE: 'بانتظار تأكيد استلامك', RECEIVED: 'تم الاستلام', COMPLETED: 'مكتمل', CANCELLED: 'ملغي' }} />
+            </>
+          }
+          href="/receiver/assignments"
+          ctaLabel="تأكيد الاستلام"
+        />
+      ) : latestOpenPost ? (
+        <AssignmentAlertCard
+          tone="open"
+          eyebrow="أحدث تكليف مُعلن منك"
+          title={latestOpenPost.title}
+          subtitle={`${latestOpenPost.facility}${latestOpenPost.department ? ` — ${latestOpenPost.department}` : ''}`}
+          chips={
+            <>
+              <StatusBadge status={latestOpenPost.status} labels={POST_STATUS_LABELS} />
+              <Badge variant="outline" className="gap-1">
+                {formatCurrency(latestOpenPost.value)}
+              </Badge>
+              <Badge variant="outline" className="gap-1">
+                <Users className="size-3" />
+                {latestOpenPost._count.applications} تقديم بانتظار المراجعة
+              </Badge>
+            </>
+          }
+          href="/receiver/assignments"
+          ctaLabel="مراجعة التقديمات"
+        />
+      ) : (
+        <AssignmentAlertCard
+          tone="empty"
+          eyebrow="التكليفات"
+          title="لا توجد تكليفات جارية أو مُعلنة حالياً"
+          subtitle="أنشئ تكليفاً جديداً ليصل للكادر التمريضي المؤهل فوراً"
+          href="/receiver/assignments"
+          ctaLabel="إنشاء تكليف"
+        />
+      )}
 
       {/* حالة الحساب */}
       {status === 'PENDING' && (
