@@ -1107,6 +1107,45 @@ curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/contact -H "Content-Type: a
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/assignments/$R11_A_ID -o /dev/null
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$R11_P_ID -o /dev/null
 
+# ============================================================
+# القسم 26 — الجولة الثانية عشرة: PWA (manifest + Service Worker + دون اتصال + الأيقونات)
+# ============================================================
+echo "=========== 26) PWA — manifest + sw.js + offline + الأيقونات ==========="
+
+R26_MANIFEST=$(curl -s $BASE/manifest.webmanifest)
+check "manifest.webmanifest متاح → 200" "200" "$(code $BASE/manifest.webmanifest)"
+check "manifest: الاسم يحوي تكليفات" "True" "$(echo "$R26_MANIFEST" | python3 -c "import json,sys;d=json.load(sys.stdin);print('تكليفات' in d.get('name',''))" 2>/dev/null)"
+check "manifest: standalone + rtl + ar + خلفية بيضاء" "standalone rtl ar #FFFFFF" "$(echo "$R26_MANIFEST" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('display'),d.get('dir'),d.get('lang'),d.get('background_color'))" 2>/dev/null)"
+check "manifest: أيقونات any 192/512 + maskable" "True True True True" "$(
+  echo "$R26_MANIFEST" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+icons=d.get('icons',[])
+sizes=' '.join(i.get('sizes','') for i in icons)
+purposes=' '.join(i.get('purpose','') for i in icons)
+print('192x192' in sizes,'512x512' in sizes,'any' in purposes,'maskable' in purposes)"
+)"
+
+check "sw.js متاح → 200" "200" "$(code $BASE/sw.js)"
+check "sw.js: ترويسة Service-Worker-Allowed = /" "/" "$(curl -s -D - -o /dev/null $BASE/sw.js | tr -d '\r' | grep -i '^service-worker-allowed:' | awk '{print $2}')"
+check "sw.js: يستثني api + تنقّل شبكة أولاً + offline + GET فقط" "True" "$(
+  curl -s $BASE/sw.js | python3 -c "
+import sys
+q=chr(39)
+needle='request.method !== '+q+'GET'+q
+s=sys.stdin.read()
+print('/api/' in s and 'navigate' in s and 'offline.html' in s and needle in s)"
+)"
+
+check "offline.html → 200 + رسالة عربية + زر إعادة المحاولة" "200 1 1" "$(code $BASE/offline.html) $(curl -s $BASE/offline.html | grep -c 'لا يوجد اتصال بالإنترنت') $(curl -s $BASE/offline.html | grep -c 'إعادة المحاولة')"
+
+for R26_IC in icon-192 icon-512 maskable-192 maskable-512 apple-touch-icon; do
+  R26_SIG=$(curl -s $BASE/icons/$R26_IC.png | head -c 4 | od -An -tx1 | tr -d ' \n')
+  check "أيقونة $R26_IC.png → 200 + توقيع PNG صالح" "200 89504e47" "$(code $BASE/icons/$R26_IC.png) $R26_SIG"
+done
+
+check "الصفحة الرئيسية تشير إلى manifest" "1" "$(curl -s $BASE/ | grep -o 'rel=\"manifest\"' | wc -l | tr -d ' ')"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

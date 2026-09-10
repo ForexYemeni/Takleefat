@@ -12,9 +12,19 @@ export const metadata: Metadata = {
   keywords: ['تكليفات', 'Takleefat', 'تكليفات طبية', 'تكليفات تمريضية', 'إدارة الكوادر الصحية'],
   applicationName: 'تكليفات | Takleefat',
   authors: [{ name: 'Takleefat' }],
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'تكليفات',
+  },
   icons: {
-    icon: '/logo.svg',
-    apple: '/logo.svg',
+    icon: [
+      { url: '/logo.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/icons/apple-touch-icon.png',
   },
   openGraph: {
     title: 'تكليفات | Takleefat',
@@ -29,6 +39,7 @@ export const viewport: Viewport = {
   themeColor: '#0F9BA8',
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

@@ -28,6 +28,7 @@ import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
 import { NotificationBell } from '@/components/shared/notification-bell'
+import { InstallAppButton } from '@/components/pwa/install-app-button'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import {
@@ -161,6 +162,10 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
           {roleLabel}
         </p>
         {renderNavLinks(onNavigate)}
+        {/* زر تثبيت التطبيق — PWA: يظهر فقط في المتصفحات الداعمة ويختفي بعد التثبيت */}
+        <div className="mt-3 px-3">
+          <InstallAppButton className="w-full" />
+        </div>
       </div>
       <div className="border-t p-4">
         <div className="flex items-center gap-3">

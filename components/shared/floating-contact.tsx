@@ -35,12 +35,14 @@ function waMeLink(phone: string, message: string): string {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
 }
 
-/** إزاحة يسار الشاشة داخل لوحات التحكم — الشريط الجانبي (16rem) على يسار الشاشات الكبيرة */
+/** إزاحة يسار الشاشة داخل لوحات التحكم — الشريط الجانبي (16rem) على يسار الشاشات الكبيرة
+ *  الأسفل يحترم منطقة الأمان في أجهزة iPhone (وضع PWA المثبت viewportFit: cover) */
 function positionClass(pathname: string): string {
+  const bottom = 'bottom-[calc(1.25rem+env(safe-area-inset-bottom))]'
   if (pathname.startsWith('/nurse') || pathname.startsWith('/receiver')) {
-    return 'bottom-5 left-5 lg:left-[calc(16rem+1.25rem)]'
+    return `${bottom} left-5 lg:left-[calc(16rem+1.25rem)]`
   }
-  return 'bottom-5 left-5'
+  return `${bottom} left-5`
 }
 
 const CONTACT_MESSAGE = 'مرحباً، أحتاج مساعدة بخصوص منصة تكليفات | Takleefat'

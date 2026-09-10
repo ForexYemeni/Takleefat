@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Logo } from '@/components/shared/logo'
+import { InstallAppButton } from '@/components/pwa/install-app-button'
 
 const FEATURES = [
   {
@@ -142,6 +143,7 @@ export default function HomePage() {
                 <Button size="lg" variant="outline" asChild>
                   <Link href="/login">تسجيل الدخول</Link>
                 </Button>
+                <InstallAppButton size="lg" />
               </div>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5">

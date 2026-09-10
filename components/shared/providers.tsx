@@ -6,6 +6,7 @@ import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
 import { FloatingContact } from '@/components/shared/floating-contact'
+import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register'
 
 /**
  * مزودات التطبيق — الجلسة، الثيم، إدارة الحالة، التنبيهات
@@ -31,6 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           {children}
           <Toaster position="top-center" richColors dir="rtl" />
           <FloatingContact />
+          <ServiceWorkerRegister />
         </ThemeProvider>
       </QueryClientProvider>
     </SessionProvider>

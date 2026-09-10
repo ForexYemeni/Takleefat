@@ -26,6 +26,19 @@ const nextConfig: NextConfig = {
     NEXTAUTH_URL: AUTH_URL_FALLBACK,
     NEXTAUTH_URL_INTERNAL: AUTH_URL_FALLBACK,
   },
+  async headers() {
+    return [
+      {
+        // ملف Service Worker يجب ألا يُخزَّن مؤقتاً حتى تصل التحديثات فوراً،
+        // والسماح له بالتحكم في كامل نطاق الموقع
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
