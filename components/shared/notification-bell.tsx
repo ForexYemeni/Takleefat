@@ -1,21 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useNotifications, type AppNotification } from '@/hooks/use-notifications'
 import {
   Bell,
-  BellRing,
   CheckCheck,
-  ClipboardList,
-  FileCheck2,
   Trash2,
-  UserCheck,
-  UserX,
-  Wallet,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import { timeAgo, cn } from '@/lib/utils'
+import { notificationVisuals } from '@/components/shared/notification-visuals'
+import {
+  isAlertSoundEnabled,
+  setAlertSoundEnabled,
+  subscribeAlertSound,
+  playAlertChime,
+} from '@/lib/alert-sound'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
@@ -24,31 +27,9 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 /**
  * جرس الإشعارات — درج احترافي ينزلق من جهة البداية (يمين الشاشة في RTL)
  * بعيد عن محتوى الصفحة، بكامل الارتفاع، وقابل للتمرير بسلاسة.
- * بطاقات ملونة بحسب النوع + تعليم كمقروء + حذف فردي + حذف الكل.
+ * بطاقات ملونة بحسب النوع + تعليم كمقروء + حذف فردي + حذف الكل
+ * + مفتاح كتم/تشغيل صوت التنبيه الفوري (الجولة السادسة عشرة).
  */
-
-const TYPE_STYLE: Record<string, { icon: React.ComponentType<{ className?: string }>; tint: string }> = {
-  ACCOUNT_APPROVED: { icon: UserCheck, tint: 'bg-emerald-500/10 text-emerald-600' },
-  ACCOUNT_REJECTED: { icon: UserX, tint: 'bg-red-500/10 text-red-600' },
-  DOCUMENT_UPLOADED: { icon: FileCheck2, tint: 'bg-sky-500/10 text-sky-600' },
-  DOCUMENT_REVIEWED: { icon: FileCheck2, tint: 'bg-sky-500/10 text-sky-600' },
-  ASSIGNMENT_CREATED: { icon: ClipboardList, tint: 'bg-violet-500/10 text-violet-600' },
-  ASSIGNMENT_RECEIVED: { icon: ClipboardList, tint: 'bg-violet-500/10 text-violet-600' },
-  ASSIGNMENT_COMPLETED: { icon: BadgeIcon, tint: 'bg-emerald-500/10 text-emerald-600' },
-  ASSIGNMENT_CANCELLED: { icon: UserX, tint: 'bg-amber-500/10 text-amber-600' },
-  POST_CREATED: { icon: ClipboardList, tint: 'bg-teal-500/10 text-teal-600' },
-  APPLICATION_SUBMITTED: { icon: BellRing, tint: 'bg-teal-500/10 text-teal-600' },
-  APPLICATION_APPROVED: { icon: BadgeIcon, tint: 'bg-emerald-500/10 text-emerald-600' },
-  APPLICATION_REJECTED: { icon: UserX, tint: 'bg-red-500/10 text-red-600' },
-}
-
-function BadgeIcon({ className }: { className?: string }) {
-  return <Wallet className={className} />
-}
-
-function iconFor(type: string) {
-  return TYPE_STYLE[type] ?? { icon: Bell, tint: 'bg-primary/10 text-primary' }
-}
 
 export function NotificationBell() {
   const { notifications, unreadCount, isLoading, markRead, deleteOne, deleteAll, isDeleting } =
@@ -56,6 +37,18 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<AppNotification | null>(null)
+  // تفضيل الصوت عبر useSyncExternalStore — بلا setState داخل تأثيرات، ومتزامن بين التبويبات
+  const soundOn = useSyncExternalStore(
+    subscribeAlertSound,
+    isAlertSoundEnabled,
+    () => true
+  )
+
+  const toggleSound = () => {
+    const next = !soundOn
+    setAlertSoundEnabled(next)
+    if (next) playAlertChime() // تأكيد مسموع فوري عند إعادة التفعيل
+  }
 
   return (
     <>
@@ -97,15 +90,27 @@ export function NotificationBell() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 rounded-xl"
-              aria-label="إغلاق الإشعارات"
-              onClick={() => setOpen(false)}
-            >
-              <X className="size-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-xl"
+                aria-label={soundOn ? 'كتم صوت التنبيه' : 'تشغيل صوت التنبيه'}
+                title={soundOn ? 'صوت التنبيه مفعّل — اضغط للكتم' : 'صوت التنبيه مكتوم — اضغط للتشغيل'}
+                onClick={toggleSound}
+              >
+                {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4 text-muted-foreground" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-xl"
+                aria-label="إغلاق الإشعارات"
+                onClick={() => setOpen(false)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
           </div>
 
           {/* شريط الأدوات */}
@@ -172,7 +177,7 @@ export function NotificationBell() {
             ) : (
               <ul className="divide-y">
                 {notifications.map((n: AppNotification) => {
-                  const { icon: Icon, tint } = iconFor(n.type)
+                  const { icon: Icon, tint } = notificationVisuals(n.type)
                   const inner = (
                     <>
                       <span

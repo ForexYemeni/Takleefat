@@ -108,6 +108,16 @@ export async function PATCH(
       })
       if (settlement) await notifyReceiverEarning(assignment.receiverId, assignment.title, settlement)
 
+      // الجولة السادسة عشرة: الكادر يُشعَر فوراً بحالة تأكيد الدفع — صوت + إشعار منبثق + Push
+      await notify(assignment.nurseId, {
+        title: isPaid ? 'تم تأكيد دفع الرسوم' : 'إلغاء تأكيد الدفع',
+        body: isPaid
+          ? `أكدت إدارة المنصة دفع رسوم التكليف (${assignment.title}) — يمكنك المتابعة بخطوات التكليف وستُبلَّغ بكل تحديث فوراً`
+          : `أُلغي تأكيد دفع رسوم التكليف (${assignment.title}) — يُرجى مراجعة إثبات الدفع والتواصل مع إدارة المنصة`,
+        type: 'DOCUMENT_REVIEWED',
+        link: '/nurse/assignments',
+      })
+
       const distributed = settlement && settlement.earningAmount > 0
       return NextResponse.json({
         message: isPaid

@@ -29,6 +29,7 @@ import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
 import { NotificationBell } from '@/components/shared/notification-bell'
+import { NotificationRealtime } from '@/components/shared/notification-realtime'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
 import { PushNotificationsToggle } from '@/components/pwa/push-notifications-toggle'
 import { PushBanner } from '@/components/pwa/push-banner'
@@ -227,6 +228,8 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
 
             <div className="flex items-center gap-1.5">
               <NotificationBell />
+              {/* الجولة السادسة عشرة: نغمة + إشعار منبثق فوري أثناء استخدام المنصة */}
+              <NotificationRealtime />
               <Button
                 variant="ghost"
                 size="icon"

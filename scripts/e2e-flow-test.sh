@@ -451,6 +451,14 @@ check "لقطة إثبات الدفع تظهر للإدارة (تكبير مثل
 CONFIRM_PAY=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A4_ID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
 check "الإدارة تؤكد دفع رسوم/نسبة الإدارة → 200" "200" "$CONFIRM_PAY"
 
+# 17-ج-2) الجولة السادسة عشرة: الكادر يُشعَر فوراً بتأكيد الدفع
+N_PAY_NOTIF=$(curl -s -b "$DIR/nurse.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'تأكيد دفع' in (n.get('title') or '')]
+print('yes' if ns else 'no')")
+check "إشعار فوري للكادر: تم تأكيد دفع الرسوم" "yes" "$N_PAY_NOTIF"
+
 UNBLOCKED=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P5_ID/apply -H "Content-Type: application/json" -d '{}')
 check "بعد تأكيد الدفع يستطيع الكادر التقديم → 201" "201" "$UNBLOCKED"
 
@@ -1222,6 +1230,38 @@ SW_HTML=$(curl -s $BASE/sw.js)
 check "sw.js: معالج push (عرض الإشعار)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('push'")"
 check "sw.js: معالج notificationclick (فتح الرابط)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('notificationclick'")"
 check "sw.js: تنبيه مستقل بوسم فريد (renotify + silent:false)" "2" "$(echo "$SW_HTML" | grep -cF -e "renotify: Boolean(notifTag)" -e "silent: false")"
+
+# ============================================================
+# القسم 28 — الجولة السادسة عشرة: التنبيه الصوتي والمنبثق داخل التطبيق + إشعار تأكيد الدفع
+# ============================================================
+echo "=========== 28) التنبيه الصوتي الفوري + إشعار تأكيد الدفع ==========="
+
+# --- إلغاء تأكيد الدفع يُشعر الكادر أيضاً (مسار حقيقي) ---
+UNPAY=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A4_ID -H "Content-Type: application/json" -d '{"paymentStatus":"UNPAID"}')
+check "الإدارة تُلغي تأكيد الدفع → 200" "200" "$UNPAY"
+N_UNPAY_NOTIF=$(curl -s -b "$DIR/nurse.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'إلغاء تأكيد الدفع' in (n.get('title') or '')]
+print('yes' if ns else 'no')")
+check "إشعار فوري للكادر: إلغاء تأكيد الدفع" "yes" "$N_UNPAY_NOTIF"
+# إعادة الحالة كما كانت: مدفوع
+REPAY=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A4_ID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "إعادة تأكيد الدفع (استعادة الحالة) → 200" "200" "$REPAY"
+
+# --- مكونات الطبقة الصوتية والمنبثقة داخل التطبيق (فحص حضور الأنماط) ---
+R28_SOUND=$(awk '/AudioContext/{p1=1} /playAlertChime/{p2=1} /takleefat-alert-sound-v1/{p3=1} END{print p1+p2+p3}' lib/alert-sound.ts)
+check "lib/alert-sound.ts: AudioContext + نغمة + تفضيل الصوت" "3" "$R28_SOUND"
+R28_RT=$(awk '/useNotifications/{p1=1} /playAlertChime/{p2=1} /toast\.custom/{p3=1} /router\.push/{p4=1} END{print p1+p2+p3+p4}' components/shared/notification-realtime.tsx)
+check "notification-realtime: رصد الجديد + نغمة + toast قابل للنقر" "4" "$R28_RT"
+check "لوحات التحكم الثلاث تركب الطبقة الفورية (dashboard-shell)" "1" "$(
+  grep -cF '<NotificationRealtime />' components/shared/dashboard-shell.tsx | tr -d ' '
+)"
+R28_BELL=$(awk '/Volume2/{p1=1} /VolumeX/{p2=1} END{print p1+p2}' components/shared/notification-bell.tsx)
+check "جرس الإشعارات: زر كتم/تشغيل الصوت (Volume2/VolumeX)" "2" "$R28_BELL"
+check "مسار تأكيد الدفع يُشعر الكادر (خادماً)" "1" "$(
+  grep -cF 'تم تأكيد دفع الرسوم' 'app/api/admin/assignments/[id]/route.ts' | awk '{print ($1>=1)?1:0}'
+)"
 
 echo ""
 echo "==========================================="
