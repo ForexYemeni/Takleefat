@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   ArrowLeft,
   BadgeCheck,
@@ -161,41 +162,39 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* معاينة مرئية للوحة التحكم */}
+            {/* بطاقة تعريف التطبيق — محتوى حقيقي دون أي بيانات وهمية */}
             <div className="relative mx-auto w-full max-w-md">
-              <div className="rounded-2xl border bg-white p-4 shadow-xl shadow-teal-900/10">
-                <div className="mb-4 flex items-center justify-between border-b pb-3">
-                  <Logo size="sm" />
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                    تكليف جاري
-                  </span>
+              <div className="rounded-3xl border bg-white p-6 shadow-xl shadow-teal-900/10 sm:p-8">
+                <div className="flex items-center gap-4 border-b pb-5">
+                  <Image
+                    src="/icons/icon-512.png"
+                    alt="أيقونة تطبيق تكليفات"
+                    width={64}
+                    height={64}
+                    className="rounded-2xl shadow-md shadow-teal-900/15"
+                  />
+                  <div>
+                    <h2 className="text-lg font-extrabold">تطبيق تكليفات</h2>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      إدارة التكليفات الطبية والتمريضية — من أي جهاز وفي أي وقت
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-3">
-                  <div className="rounded-xl border bg-teal-50/60 p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-bold">تكليف تمريضي — قسم الطوارئ</p>
-                      <ClipboardList className="size-4 text-teal-700" />
+                <div className="mt-5 space-y-2.5">
+                  {ROLES.map((role) => (
+                    <div
+                      key={role.title}
+                      className="flex items-center gap-3 rounded-xl border bg-muted/30 p-3 text-start"
+                    >
+                      <span className={`inline-flex shrink-0 rounded-xl border p-2.5 ${role.color}`}>
+                        <role.icon className="size-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold">{role.title}</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">{role.description}</p>
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">مستشفى الملكية — لمدة ٣ أشهر</p>
-                    <div className="mt-2 flex gap-2">
-                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-teal-700 border border-teal-200">جاري</span>
-                      <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-semibold text-cyan-700 border border-cyan-200">تم الاستلام</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-xl border p-2.5">
-                      <p className="text-lg font-extrabold text-teal-700">٨٤</p>
-                      <p className="text-[11px] text-muted-foreground">كادر معتمد</p>
-                    </div>
-                    <div className="rounded-xl border p-2.5">
-                      <p className="text-lg font-extrabold text-emerald-600">١٢</p>
-                      <p className="text-[11px] text-muted-foreground">تكليف نشط</p>
-                    </div>
-                    <div className="rounded-xl border p-2.5">
-                      <p className="text-lg font-extrabold text-amber-600">٥</p>
-                      <p className="text-[11px] text-muted-foreground">بانتظار الاعتماد</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
               <div className="absolute -bottom-4 -start-4 -z-10 size-24 rounded-2xl bg-teal-100/70 blur-2xl" aria-hidden="true" />

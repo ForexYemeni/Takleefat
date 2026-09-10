@@ -26,6 +26,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(ROLE_HOME[role] ?? '/', req.url))
   }
 
+  // صفحة البداية «/»: المستخدم المسجل يدخل لوحته مباشرة
+  // (خاصة عند فتح تطبيق PWA المثبّت — بلا صفحات تسويقية أو بيانات وهمية)
+  if (pathname === '/' && token && role && ROLE_HOME[role]) {
+    return NextResponse.redirect(new URL(ROLE_HOME[role], req.url))
+  }
+
   const rules: Array<{ prefix: string; allowedRole: string }> = [
     { prefix: '/admin', allowedRole: 'ADMIN' },
     { prefix: '/nurse', allowedRole: 'NURSE' },
@@ -49,5 +55,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/nurse/:path*', '/receiver/:path*', '/login', '/register'],
+  matcher: ['/', '/admin/:path*', '/nurse/:path*', '/receiver/:path*', '/login', '/register'],
 }
