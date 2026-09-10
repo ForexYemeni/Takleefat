@@ -10,6 +10,7 @@ import {
   Coins,
   FileCheck2,
   Headset,
+  IdCard,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -29,6 +30,7 @@ import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
 import { NotificationBell } from '@/components/shared/notification-bell'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
+import { PushNotificationsToggle } from '@/components/pwa/push-notifications-toggle'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import {
@@ -76,6 +78,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/nurse/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
       { href: '/nurse/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
       { href: '/nurse/documents', label: 'مستنداتي', icon: FileCheck2 },
+      { href: '/nurse/card', label: 'بطاقتي المهنية', icon: IdCard },
       { href: '/nurse/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
   },
@@ -163,8 +166,9 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
         </p>
         {renderNavLinks(onNavigate)}
         {/* زر تثبيت التطبيق — PWA: يظهر فقط في المتصفحات الداعمة ويختفي بعد التثبيت */}
-        <div className="mt-3 px-3">
+        <div className="mt-3 space-y-2 px-3">
           <InstallAppButton className="w-full" />
+          <PushNotificationsToggle />
         </div>
       </div>
       <div className="border-t p-4">

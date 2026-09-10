@@ -6,9 +6,10 @@
  *     (لا نخزّن صفحات محمية حتى لا تُعرض لجلسة قديمة أو لمستخدم آخر)
  *  3) الأصول الثابتة ذات البصمات (/_next/static) والأيقونات: الكاش أولاً
  *  4) تحديث تلقائي: إصدار جديد = حذف الكاش القديم + skipWaiting
+ *  5) الإشعارات الفورية (Web Push): عرض إشعار عربي + فتح الرابط عند النقر — الجولة الرابعة عشرة
  * ============================================================ */
 
-const VERSION = 'takleefat-v1'
+const VERSION = 'takleefat-v2'
 const OFFLINE_URL = '/offline.html'
 const PRECACHE_URLS = [
   OFFLINE_URL,
@@ -40,6 +41,52 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
+})
+
+// ---------- الإشعارات الفورية (Web Push) — الجولة الرابعة عشرة ----------
+
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = { title: 'تكليفات | Takleefat', body: event.data ? event.data.text() : '' }
+  }
+  const title = typeof data.title === 'string' && data.title ? data.title : 'تكليفات | Takleefat'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: typeof data.body === 'string' ? data.body : '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      dir: 'rtl',
+      lang: 'ar',
+      tag: typeof data.link === 'string' ? data.link : undefined,
+      data: { link: typeof data.link === 'string' ? data.link : '/' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const link = (event.notification.data && event.notification.data.link) || '/'
+  event.waitUntil(
+    (async () => {
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of clientList) {
+        if (client.url.startsWith(self.location.origin)) {
+          if ('navigate' in client) {
+            try {
+              await client.navigate(link)
+            } catch {
+              // بعض المتصفحات تمنع navigate — يكفي التركيز
+            }
+          }
+          return client.focus()
+        }
+      }
+      return self.clients.openWindow(link)
+    })()
+  )
 })
 
 self.addEventListener('fetch', (event) => {

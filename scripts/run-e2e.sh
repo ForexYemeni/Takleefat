@@ -31,6 +31,11 @@ grep -q "api/upload" /tmp/e2e-build.log || { echo "BUILD MISSING /api/upload!"; 
 cp -r .next/static .next/standalone/.next/ 2>/dev/null
 cp -r public .next/standalone/ 2>/dev/null
 cd /home/z/my-project
+# مفاتيح VAPID للإشعارات الفورية — تُولَّد عشوائياً كل تشغيل (لا أسرار في المستودع)
+VAPID_KEYS=$(node -e "const k=require('web-push').generateVAPIDKeys();console.log(k.publicKey+'|'+k.privateKey)")
+export NEXT_PUBLIC_VAPID_PUBLIC_KEY="${VAPID_KEYS%%|*}"
+export VAPID_PRIVATE_KEY="${VAPID_KEYS##*|}"
+export VAPID_SUBJECT="mailto:e2e@taklefat.local"
 # bun يحمّل .env تلقائياً (كما في npm start) — node لا يفعل فتفشل المصادقة 500
 # + سر المصادقة مطلوب في وضع الإنتاج (كما في Vercel عبر متغيرات البيئة)
 PORT=3111 HOSTNAME=127.0.0.1 NODE_ENV=production NEXTAUTH_SECRET=e2e-local-secret-takleefat AUTH_SECRET=e2e-local-secret-takleefat bun .next/standalone/server.js >/tmp/e2e-server.log 2>&1 &

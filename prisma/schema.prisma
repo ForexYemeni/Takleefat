@@ -211,6 +211,7 @@ model User {
   ratingsGiven        NurseRating[]      @relation("RatingReceiver")
   earnings            ReceiverEarning[]
   withdrawals         Withdrawal[]
+  pushSubscriptions   PushSubscription[]
 
   @@index([role, status])
   @@map("users")
@@ -510,6 +511,25 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+/// اشتراكات الإشعارات الفورية (Web Push) — جهاز أو أكثر لكل مستخدم عبر الـ PWA
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  /// رابط نقطة نهاية خدمة الدفع الفوري (endpoint من المتصفح) — فريد لكل جهاز
+  endpoint  String   @unique
+  /// مفاتيح التشفير من المتصفح (p256dh + auth) — لا تُقرأ إلا لخدمة الدفع
+  p256dh    String
+  auth      String
+  /// معرّف المتصفح/الجهاز لعرضه للإدارة وحذف القديم
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// الارتباط المهني — يربط الكادر التمريضي بجهة صحية مع تحديد طبيعة العلاقة

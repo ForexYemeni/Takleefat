@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Ban,
   Eye,
+  IdCard,
   KeyRound,
   MoreHorizontal,
   PlayCircle,
@@ -187,6 +188,14 @@ export function UserActionsMenu({
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
+          {user.role === 'NURSE' && user.status === 'APPROVED' && (
+            <DropdownMenuItem className="gap-2" asChild>
+              <a href={`/n/${user.id}`} target="_blank" rel="noopener noreferrer">
+                <IdCard className="size-4" />
+                عرض البطاقة العامة
+              </a>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={() => {
               setNewPassword('')

@@ -1158,6 +1158,58 @@ done
 
 check "الصفحة الرئيسية تشير إلى manifest" "1" "$(curl -s $BASE/ | grep -o 'rel=\"manifest\"' | wc -l | tr -d ' ')"
 
+# ============================================================
+# القسم 27 — الجولة الرابعة عشرة: البطاقة المهنية العامة + الإشعارات الفورية (Web Push)
+# ============================================================
+echo "=========== 27) البطاقة المهنية + الإشعارات الفورية ==========="
+
+# --- البطاقة المهنية العامة /n/[id] ---
+CARD_HTML=$(curl -s $BASE/n/$NURSE_ID)
+CARD_CODE=$(code $BASE/n/$NURSE_ID)
+check "البطاقة العامة للكادر المعتمد → 200" "200" "$CARD_CODE"
+check "البطاقة تعرض اسم الكادر (سارة أحمد)" "1" "$(echo "$CARD_HTML" | grep -c 'سارة أحمد' | tr -d ' ')"
+check "البطاقة تعرض التخصص (تمريض طوارئ)" "1" "$(echo "$CARD_HTML" | grep -c 'تمريض طوارئ' | tr -d ' ')"
+check "البطاقة تحمل شارة الموثوقية" "1" "$(echo "$CARD_HTML" | grep -c 'موثّق من منصة تكليفات' | tr -d ' ')"
+check "البطاقة تتضمن رمز QR مولَّداً محلياً" "1" "$(echo "$CARD_HTML" | grep -c '<svg' | head -1 | tr -d ' ')"
+check "خصوصية البطاقة: لا تكشف رقم هاتف الكادر" "0" "$(echo "$CARD_HTML" | grep -c '711111111' | tr -d ' ')"
+
+# كادر غير معتمد → 404 (لا تعداد ولا تسريب)
+REG_P14=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر بطاقة معلقة","phone":"788880601","password":"Round14@12","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"MALE","yearsOfExperience":2}')
+PND_ID=$(echo "$REG_P14" | jget "['user']['id']")
+PND_CARD=$(code $BASE/n/$PND_ID)
+check "بطاقة كادر غير معتمد → 404 (حماية التعداد)" "404" "$PND_CARD"
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$PND_ID -o /dev/null
+
+# --- الإشعارات الفورية: المفتاح العام والاشتراك ---
+PUB_KEY=$(curl -s -b "$DIR/nurse.jar" $BASE/api/push/public-key | jget "['publicKey']")
+[ -n "$PUB_KEY" ] && check "المفتاح العام VAPID متاح لجلسة صالحة" "ok" "ok" || check "المفتاح العام VAPID" "key" "null"
+PUB_KEY_ANON=$(code $BASE/api/push/public-key)
+check "المفتاح العام يرفض غير المسجل → 401" "401" "$PUB_KEY_ANON"
+
+SUB_BODY='{"endpoint":"https://fcm.googleapis.com/fcm/send/e2e-test-sub-1","keys":{"p256dh":"BPk2xQ0E2fXnNn3XExampleP256dhKeyStringBase64url0000","auth":"e2eAuthKeyString1234"}}'
+SUB=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/push/subscribe -H "Content-Type: application/json" -d "$SUB_BODY")
+check "اشتراك جهاز بالإشعارات الفورية → 201" "201" "$SUB"
+SUB2=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/push/subscribe -H "Content-Type: application/json" -d "$SUB_BODY")
+check "إعادة الاشتراك idempotent (upsert) → 201" "201" "$SUB2"
+SUB_BAD=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/push/subscribe -H "Content-Type: application/json" \
+  -d '{"endpoint":"http://insecure.example.com/x","keys":{"p256dh":"BPk2xQ0E2fXnNn3XExampleP256dhKeyStringBase64url0000","auth":"e2eAuthKeyString1234"}}')
+check "رفض اشتراك بلا https → 422" "422" "$SUB_BAD"
+SUB_OTHER=$(code -b "$DIR/receiver.jar" -X DELETE $BASE/api/push/subscribe -H "Content-Type: application/json" \
+  -d '{"endpoint":"https://fcm.googleapis.com/fcm/send/e2e-test-sub-1"}')
+check "مستلم إداري لا يحذف اشتراك الكادر → 404" "404" "$SUB_OTHER"
+UNSUB=$(code -b "$DIR/nurse.jar" -X DELETE $BASE/api/push/subscribe -H "Content-Type: application/json" \
+  -d '{"endpoint":"https://fcm.googleapis.com/fcm/send/e2e-test-sub-1"}')
+check "إلغاء الاشتراك من صاحبه → 200" "200" "$UNSUB"
+UNSUB2=$(code -b "$DIR/nurse.jar" -X DELETE $BASE/api/push/subscribe -H "Content-Type: application/json" \
+  -d '{"endpoint":"https://fcm.googleapis.com/fcm/send/e2e-test-sub-1"}')
+check "إلغاء اشتراك غير موجود → 404" "404" "$UNSUB2"
+
+# --- سكربت الخدمة: معالجات الإشعارات الفورية (v2) ---
+SW_HTML=$(curl -s $BASE/sw.js)
+check "sw.js: معالج push (عرض الإشعار)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('push')")"
+check "sw.js: معالج notificationclick (فتح الرابط)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('notificationclick')")"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
