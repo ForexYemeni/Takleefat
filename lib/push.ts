@@ -37,7 +37,7 @@ export const MAX_SUBSCRIPTIONS_PER_USER = 6
 async function sendToSubscription(
   sub: { id: string; endpoint: string; p256dh: string; auth: string },
   payload: PushPayload
-): Promise<void> {
+): Promise<boolean> {
   try {
     await webpush.sendNotification(
       {
@@ -47,6 +47,7 @@ async function sendToSubscription(
       JSON.stringify(payload),
       { TTL: 60 * 60 * 24 * 7 } // أسبوع — بعدها تفقد الرسالة قيمتها التشغيلية
     )
+    return true
   } catch (error) {
     const status = (error as { statusCode?: number }).statusCode
     // 404/410: الاشتراك انتهى أو أُلغي من المتصفح — يُحذف نهائياً
@@ -56,10 +57,11 @@ async function sendToSubscription(
       } catch {
         // تجاهل — قد يكون حُذف من مسار آخر
       }
-      return
+      return false
     }
     // بقية الأخطاء (شبكة/خدمة خارجية) — تُسجَّل ولا تُوقف شيئاً
     console.warn(`[push] delivery failed (${status ?? 'unknown'}): ${sub.endpoint.slice(0, 60)}`)
+    return false
   }
 }
 
@@ -82,4 +84,29 @@ export async function deliverPushToUser(userId: string, payload: PushPayload): P
 /** نسخة لا تنتظر النتيجة — تُستخدم داخل notify() حتى لا تلمس أي مسار حرج */
 export function deliverPushInBackground(userId: string, payload: PushPayload): void {
   void deliverPushToUser(userId, payload)
+}
+
+/**
+ * إشعار تجريبي مُعُدّ النتيجة — الجولة السابعة عشرة:
+ * يُرسل إشعاراً حقيقياً إلى كل أجهزة المستخدم ويعيد عدد الأجهزة التي
+ * وصلها الفعلياً — أداة تحقق فوري للمستخدم من أن التفعيل يعمل حقاً.
+ */
+export async function deliverTestToUser(
+  userId: string,
+  payload: PushPayload
+): Promise<{ total: number; delivered: number }> {
+  if (!isPushConfigured()) return { total: 0, delivered: 0 }
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY as string, VAPID_PRIVATE_KEY as string)
+    const subs = await db.pushSubscription.findMany({
+      where: { userId },
+      select: { id: true, endpoint: true, p256dh: true, auth: true },
+    })
+    const results = await Promise.allSettled(subs.map((sub) => sendToSubscription(sub, payload)))
+    const delivered = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
+    return { total: subs.length, delivered }
+  } catch (error) {
+    console.warn('[push] deliverTestToUser failed:', error)
+    return { total: 0, delivered: 0 }
+  }
 }

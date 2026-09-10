@@ -1264,6 +1264,41 @@ check "مسار تأكيد الدفع يُشعر الكادر (خادماً)" "1
 )"
 
 echo ""
+echo "=========== 29) الجولة 17 — الإشعارات الخارجية لكل جهاز (مؤشر + تداوي + تجريبي) ==========="
+# مسار الإشعار التجريبي: جلسة إلزامية + إرسال حقيقي مُعُدّ النتيجة
+TEST_ANON=$(code -X POST $BASE/api/push/test)
+check "POST /api/push/test بدون جلسة → 401" "401" "$TEST_ANON"
+TEST_AUTH=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/push/test)
+check "POST /api/push/test بجلسة صالحة → 200 (يعيد delivered)" "200" "$TEST_AUTH"
+check "استجابة الإشعار التجريبي تحمل حقل delivered" "1" "$(
+  curl -s -b "$DIR/nurse.jar" -X POST $BASE/api/push/test | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(1 if isinstance(d.get('delivered'), int) else 0)"
+)"
+check "lib/push.ts: deliverTestToUser تُرجع total+delivered" "1" "$(
+  grep -cF 'delivered: number' lib/push.ts | awk '{print ($1>=1)?1:0}'
+)"
+# مؤشر الحالة الدائم في رأس اللوحات: تفعيل بنقرة + إشعار تجريبي + إرشاد الحجب وiOS
+R17_CHIP=$(awk '/enablePushInteractive/{p1=1} /sendTestPush/{p2=1} /getPushState/{p3=1} END{print p1+p2+p3}' components/pwa/push-status-chip.tsx)
+check "push-status-chip: تفعيل + تجريبي + فحص حالة" "3" "$R17_CHIP"
+check "رأس اللوحات يعرض مؤشر الإشعارات الدائم" "1" "$(
+  grep -cF '<PushStatusChip />' components/shared/dashboard-shell.tsx | tr -d ' '
+)"
+# التداوي الذاتي الصامت + توجيه أول تفاعل + إرسال تجريبي من العميل
+R17_PC=$(awk '/silentSelfHeal/{p1=1} /maybeAutoPromptOnInteraction/{p2=1} /sendTestPush/{p3=1} /INTERACTION_PROMPT_FLAG/{p4=1} END{print p1+p2+p3+p4}' lib/push-client.ts)
+check "push-client: تداوي صامت + توجيه أول تفاعل + علم v2 + تجريبي" "4" "$R17_PC"
+check "اللوحات تستدعي maybeAutoPromptOnInteraction عند التحميل" "1" "$(
+  grep -cF 'maybeAutoPromptOnInteraction()' components/shared/dashboard-shell.tsx | awk '{print ($1>=1)?1:0}'
+)"
+# اللافتة: الإخفاء صار للجلسة فقط (sessionStorage بمفتاح v2)
+R17_BANNER=$(awk '/sessionStorage/{p1=1} /push-banner-dismissed-v2/{p2=1} END{print p1+p2}' components/pwa/push-banner.tsx)
+check "push-banner: إخفاء لكل جلسة (sessionStorage v2)" "2" "$R17_BANNER"
+# الطبقة الفورية: سلوك الاشتراك — نغمة خلفية للأجهزة غير المشتركة دون فقد إشعارات
+R17_RT=$(awk '/subscribedRef/{p1=1} /getPushState/{p2=1} END{print p1+p2}' components/shared/notification-realtime.tsx)
+check "notification-realtime: وعي بالاشتراك (نغمة خلفية + عرض عند العودة)" "2" "$R17_RT"
+
+echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
 if [ $FAIL -gt 0 ]; then printf 'فاشل: %s\n' "${FAILED_TESTS[@]}"; fi

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { useNotifications } from '@/hooks/use-notifications'
 import { notificationVisuals } from '@/components/shared/notification-visuals'
 import { isAlertSoundEnabled, playAlertChime, unlockAudio } from '@/lib/alert-sound'
+import { getPushState } from '@/lib/push-client'
 import { cn } from '@/lib/utils'
 
 /**
@@ -17,7 +18,9 @@ import { cn } from '@/lib/utils'
  * آلية العمل:
  * - يعيد استخدام نفس استعلام الإشعارات (polling كل 15 ثانية) — بلا أي حمل إضافي
  * - أول تحميل يسجّل الموجود دون تنبيهات بأثر رجعي، وما بعده يُرصد حصراً
- * - الصفحة مخفية → الإشعار يُترك لنظام التشغيل عبر Push (بلا ازدواجية)
+ * - الصفحة مخفية + الجهاز مشترك → العرض لنظام التشغيل عبر Web Push (بلا ازدواجية)
+ * - الصفحة مخفية + الجهاز غير مشترك → النغمة تُسمع فوراً من الخلفية، والبطاقات
+ *   تُعرض فور عودة المستخدم (لا يُفقد أي إشعار — الجولة السابعة عشرة)
  * - النغمة مرة واحدة كحد أدنى كل 3 ثوانٍ مهما تلاحق الإشعارات، والبطاقات 3 كحد أقصى لكل دفعة
  * - عودة المستخدم إلى التبويب = جلب فوري بدل انتظار الدورة التالية
  */
@@ -31,17 +34,32 @@ export function NotificationRealtime() {
   const queryClient = useQueryClient()
   const knownIds = useRef<Set<string> | null>(null)
   const lastChimeAt = useRef(0)
+  // حالة اشتراك هذا الجهاز — null قبل أول فحص (يُعامَل حينها كسلوك الجولة 16)
+  const subscribedRef = useRef<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void getPushState().then((s) => {
+      if (!cancelled) subscribedRef.current = s === 'on'
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // فتح سياق الصوت بأول تفاعل — مرة واحدة على مستوى التطبيق
   useEffect(() => {
     unlockAudio()
   }, [])
 
-  // عودة إلى التبويب = تحديث فوري للإشعارات
+  // عودة إلى التبويب = تحديث فوري للإشعارات + إعادة فحص حالة الاشتراك
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        void getPushState().then((s) => {
+          subscribedRef.current = s === 'on'
+        })
       }
     }
     document.addEventListener('visibilitychange', onVisible)
@@ -57,10 +75,27 @@ export function NotificationRealtime() {
 
     const fresh = notifications.filter((n) => !knownIds.current!.has(n.id))
     if (fresh.length === 0) return
-    for (const n of fresh) knownIds.current!.add(n.id)
 
-    // الصفحة مخفية → نظام التشغيل يتولى العرض عبر Web Push — لا ازدواجية
-    if (document.visibilityState !== 'visible') return
+    const pageHidden = document.visibilityState !== 'visible'
+
+    if (pageHidden) {
+      if (subscribedRef.current === false) {
+        // الجهاز غير مشترك بـ Web Push — لا شيء سيظهر من النظام:
+        // النغمة تُسمع فوراً حتى والتبويب بالخلفية (السياق مفتوح سابقاً)،
+        // والإشعارات لا تُسجّل كمعروفة فتُعرض بطاقاتها فور عودة المستخدم
+        const nowHidden = Date.now()
+        if (isAlertSoundEnabled() && nowHidden - lastChimeAt.current >= CHIME_MIN_GAP_MS) {
+          lastChimeAt.current = nowHidden
+          playAlertChime()
+        }
+        return
+      }
+      // الجهاز مشترك (أو الحالة غير معروفة بعد) — نظام التشغيل يتولى العرض
+      for (const n of fresh) knownIds.current!.add(n.id)
+      return
+    }
+
+    for (const n of fresh) knownIds.current!.add(n.id)
 
     const now = Date.now()
     if (isAlertSoundEnabled() && now - lastChimeAt.current >= CHIME_MIN_GAP_MS) {

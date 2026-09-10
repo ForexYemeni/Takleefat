@@ -10,8 +10,15 @@
 
 /** مفتاح localStorage لضمان طلب الصلاحية مرة واحدة فقط لكل جهاز */
 const AUTO_PROMPT_FLAG = 'takleefat-push-autoprompt-v1'
-/** مفتاح localStorage للاختفاء الاختياري للافتة التفعيل */
-export const PUSH_BANNER_DISMISS_KEY = 'takleefat-push-banner-dismissed-v1'
+/**
+ * مفتاح اختفاء لافتة التفعيل — الجولة السابعة عشرة:
+ * انتقل من localStorage إلى sessionStorage (إصدار v2) — الإخفاء صار
+ * للجلسة الحالية فقط، فتعود اللافتة في زيارة لاحقة إن لم يُفعّل الإشعارات.
+ * إصدار v2 يلغي أيضاً أي إخفاء دائم قديم من الجولات السابقة.
+ */
+export const PUSH_BANNER_DISMISS_KEY = 'takleefat-push-banner-dismissed-v2'
+/** مفتاح localStorage لتوجيه الصلاحية عند أول تفاعل داخل اللوحات — إصدار مستقل عن علم الدخول */
+const INTERACTION_PROMPT_FLAG = 'takleefat-push-interaction-prompt-v2'
 
 export type PushSupportState =
   | 'unconfigured' // الخادم بلا مفاتيح VAPID
@@ -200,5 +207,150 @@ export async function maybeAutoPromptAfterLogin(): Promise<void> {
     }
   } catch {
     // صمت تام — التوجيه التلقائي لا يجب أن يظهر بأي خطأ
+  }
+}
+
+/**
+ * تداوي ذاتي صامت — الجولة السابعة عشرة:
+ * الأجهزة التي مُنحت صلاحيتها سابقاً لكنها بلا اشتراك فعّال (فشل شبكة عابر،
+ * حذف سجل الخادم، متصفح أعاد توليد الاشتراك) تُشترَك وتُرفَع للخادم بصمت
+ * دون أي نوافذ — تعمل عند كل تحميل للوحات التحكم بلا علم مستخدم.
+ */
+async function silentSelfHeal(): Promise<void> {
+  try {
+    if (typeof window === 'undefined' || !isPushSupported()) return
+    if (isIOSDevice() && !isStandalone()) return
+    if (Notification.permission !== 'granted') return
+    const publicKey = await fetchPushPublicKey()
+    if (!publicKey) return
+    const registration = await navigator.serviceWorker.ready
+    const existing = await registration.pushManager.getSubscription()
+    if (existing) {
+      // مزامنة صامتة مع الخادم حتى لو فات الرفع سابقاً
+      const json = existing.toJSON() as { endpoint?: string; keys?: SubscribeBody['keys'] }
+      if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+        void postSubscription({
+          endpoint: json.endpoint,
+          keys: json.keys,
+          userAgent: navigator.userAgent.slice(0, 300),
+        })
+      }
+      return
+    }
+    // صلاحية ممنوحة بلا اشتراك — اشتراك مباشر بلا أي نوافذ
+    const sub = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+    })
+    const json = sub.toJSON() as { endpoint?: string; keys?: SubscribeBody['keys'] }
+    if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+      void postSubscription({
+        endpoint: json.endpoint,
+        keys: json.keys,
+        userAgent: navigator.userAgent.slice(0, 300),
+      })
+    }
+  } catch {
+    // صمت تام
+  }
+}
+
+/** يُستدعى عند كل تحميل للوحات التحكم — التداوي الصامت لا يحتاج تفاعلاً */
+export function autoHealPushOnLoad(): void {
+  void silentSelfHeal()
+}
+
+let interactionListenerAttached = false
+
+/**
+ * توجيه الصلاحية عند أول تفاعل داخل اللوحات — الجولة السابعة عشرة:
+ * معظم المستخدمين تبقى جلساتهم صالحة أسابيع فلا يمرّون بشاشة الدخول
+ * مجدداً، وكان طلب الصلاحية مرتبطاً بالدخول حصراً — هذه الدوال تسد الفجوة:
+ * - الصلاحية بلا قرار → نافذة الطلب عند أول نقرة/ضغطة (إيماءة حقيقية
+ *   تضمن قبول المتصفح للطلب) — مرة واحدة لكل جهاز بعلم مستقل (v2)
+ * - الصلاحية ممنوحة بلا اشتراك → تداوي صامت فوري
+ * - أي فشل → صمت تام لا يمس تجربة الاستخدام إطلاقاً
+ */
+export function maybeAutoPromptOnInteraction(): void {
+  try {
+    if (typeof window === 'undefined' || !isPushSupported()) return
+    if (isIOSDevice() && !isStandalone()) return
+    if (Notification.permission === 'denied') return
+
+    if (Notification.permission === 'granted') {
+      autoHealPushOnLoad()
+      return
+    }
+
+    // الصلاحية بلا قرار — انتظر أول تفاعل حقيقي ثم اطلب مرة واحدة لكل جهاز
+    if (window.localStorage.getItem(INTERACTION_PROMPT_FLAG)) return
+    if (interactionListenerAttached) return
+    interactionListenerAttached = true
+
+    const handler = () => {
+      window.removeEventListener('pointerdown', handler)
+      window.removeEventListener('keydown', handler)
+      void (async () => {
+        try {
+          window.localStorage.setItem(INTERACTION_PROMPT_FLAG, '1')
+          if (Notification.permission === 'denied') return
+          const publicKey = await fetchPushPublicKey()
+          if (!publicKey) return
+          if (Notification.permission === 'default') {
+            const permission = await Notification.requestPermission()
+            if (permission !== 'granted') return
+          }
+          const registration = await navigator.serviceWorker.ready
+          const existing = await registration.pushManager.getSubscription()
+          if (existing) {
+            const json = existing.toJSON() as {
+              endpoint?: string
+              keys?: SubscribeBody['keys']
+            }
+            if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+              void postSubscription({
+                endpoint: json.endpoint,
+                keys: json.keys,
+                userAgent: navigator.userAgent.slice(0, 300),
+              })
+            }
+            return
+          }
+          const sub = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+          })
+          const json = sub.toJSON() as { endpoint?: string; keys?: SubscribeBody['keys'] }
+          if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+            void postSubscription({
+              endpoint: json.endpoint,
+              keys: json.keys,
+              userAgent: navigator.userAgent.slice(0, 300),
+            })
+          }
+        } catch {
+          // صمت تام
+        }
+      })()
+    }
+    window.addEventListener('pointerdown', handler, { passive: true })
+    window.addEventListener('keydown', handler, { passive: true })
+  } catch {
+    // صمت تام
+  }
+}
+
+/**
+ * إرسال إشعار تجريبي حقيقي إلى كل أجهزة هذا الحساب — الجولة السابعة عشرة.
+ * يعيد عدد الأجهزة التي وصلها الإشعار فعلياً (null عند فشل الاتصال).
+ */
+export async function sendTestPush(): Promise<{ delivered: number } | null> {
+  try {
+    const res = await fetch('/api/push/test', { method: 'POST' })
+    if (!res.ok) return null
+    const json = (await res.json()) as { delivered?: number }
+    return { delivered: typeof json.delivered === 'number' ? json.delivered : 0 }
+  } catch {
+    return null
   }
 }

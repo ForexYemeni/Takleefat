@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -33,6 +33,8 @@ import { NotificationRealtime } from '@/components/shared/notification-realtime'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
 import { PushNotificationsToggle } from '@/components/pwa/push-notifications-toggle'
 import { PushBanner } from '@/components/pwa/push-banner'
+import { PushStatusChip } from '@/components/pwa/push-status-chip'
+import { maybeAutoPromptOnInteraction } from '@/lib/push-client'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import {
@@ -118,6 +120,12 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
   const [mobileOpen, setMobileOpen] = useState(false)
   const navItems = NAV_CONFIG[role].items
   const roleLabel = NAV_CONFIG[role].roleLabel
+
+  useEffect(() => {
+    // الجولة السابعة عشرة: طلب الصلاحية بأول تفاعل + تداوي صامت للاشتراكات —
+    // يغطي الأجهزة التي تبقى جلستها صالحة ولا تمرّ بشاشة الدخول مجدداً
+    maybeAutoPromptOnInteraction()
+  }, [])
 
   const initials = displayName
     .split(' ')
@@ -227,6 +235,8 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* الجولة السابعة عشرة: مؤشر دائم لحالة الإشعارات الخارجية — تفعيل بنقرة + إشعار تجريبي */}
+              <PushStatusChip />
               <NotificationBell />
               {/* الجولة السادسة عشرة: نغمة + إشعار منبثق فوري أثناء استخدام المنصة */}
               <NotificationRealtime />

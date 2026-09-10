@@ -12,12 +12,16 @@ import {
 } from '@/lib/push-client'
 
 /**
- * لافتة تفعيل الإشعارات الفورية — الجولة الخامسة عشرة
+ * لافتة تفعيل الإشعارات الفورية — الجولة الخامسة عشرة، محدّثة في السابعة عشرة
  *
  * الهدف: ألا يضيع على أي مستخدم أن الإشعارات الفورية متاحة — فالإشعارات
  * الداخلية تظهر في القائمة دائماً، لكن البث المنبثق خارج التطبيق يتطلب
- * تفعيلاً واعياً لكل جهاز. اللافتة تظهر أعلى لوحة التحكم فقط عندما يكون
- * التفعيل ممكناً ولم يُفعّل بعد، وتختفي نهائياً بعد التفعيل أو الإخفاء.
+ * تفعيلاً واعياً لكل جهاز.
+ *
+ * تغيير الجولة السابعة عشرة: الإخفاء صار للجلسة الحالية فقط (sessionStorage)
+ * — كان الإخفاء دائماً في localStorage فتوقفت اللافتة عن الأجهزة غير المفعّلة،
+ * وهو من أسباب بقاء أجهزة كثيرة بلا اشتراك. مع المؤشر الدائم في الرأس أصبح
+ * للتفعيل وجهان لا يختفيان.
  */
 export function PushBanner() {
   const [state, setState] = useState<PushSupportState | 'checking' | 'dismissed'>('checking')
@@ -26,7 +30,10 @@ export function PushBanner() {
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      if (typeof window !== 'undefined' && window.localStorage.getItem(PUSH_BANNER_DISMISS_KEY)) {
+      if (
+        typeof window !== 'undefined' &&
+        window.sessionStorage.getItem(PUSH_BANNER_DISMISS_KEY)
+      ) {
         if (!cancelled) setState('dismissed')
         return
       }
@@ -41,7 +48,7 @@ export function PushBanner() {
 
   const dismiss = () => {
     try {
-      window.localStorage.setItem(PUSH_BANNER_DISMISS_KEY, '1')
+      window.sessionStorage.setItem(PUSH_BANNER_DISMISS_KEY, '1')
     } catch {
       // تجاهل — الوضع الخاص في بعض المتصفحات
     }
