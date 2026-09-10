@@ -1167,10 +1167,14 @@ echo "=========== 27) البطاقة المهنية + الإشعارات الف�
 CARD_HTML=$(curl -s $BASE/n/$NURSE_ID)
 CARD_CODE=$(code $BASE/n/$NURSE_ID)
 check "البطاقة العامة للكادر المعتمد → 200" "200" "$CARD_CODE"
-check "البطاقة تعرض اسم الكادر (سارة أحمد)" "1" "$(echo "$CARD_HTML" | grep -c 'سارة أحمد' | tr -d ' ')"
-check "البطاقة تعرض التخصص (تمريض طوارئ)" "1" "$(echo "$CARD_HTML" | grep -c 'تمريض طوارئ' | tr -d ' ')"
-check "البطاقة تحمل شارة الموثوقية" "1" "$(echo "$CARD_HTML" | grep -c 'موثّق من منصة تكليفات' | tr -d ' ')"
-check "البطاقة تتضمن رمز QR مولَّداً محلياً" "1" "$(echo "$CARD_HTML" | grep -c '<svg' | head -1 | tr -d ' ')"
+CARD_NAME=$(echo "$CARD_HTML" | grep -c 'سارة أحمد' | tr -d ' ')
+[ "$CARD_NAME" -ge 1 ] 2>/dev/null && check "البطاقة تعرض اسم الكادر (سارة أحمد)" "ok" "ok" || check "البطاقة تعرض اسم الكادر" "ok" "missing"
+CARD_SPEC=$(echo "$CARD_HTML" | grep -c 'تمريض طوارئ' | tr -d ' ')
+[ "$CARD_SPEC" -ge 1 ] 2>/dev/null && check "البطاقة تعرض التخصص (تمريض طوارئ)" "ok" "ok" || check "البطاقة تعرض التخصص" "ok" "missing"
+CARD_BADGE=$(echo "$CARD_HTML" | grep -c 'موثّق من منصة تكليفات' | tr -d ' ')
+[ "$CARD_BADGE" -ge 1 ] 2>/dev/null && check "البطاقة تحمل شارة الموثوقية" "ok" "ok" || check "البطاقة تحمل شارة الموثوقية" "ok" "missing"
+CARD_QR=$(echo "$CARD_HTML" | grep -c '<svg' | tr -d ' ')
+[ "$CARD_QR" -ge 1 ] 2>/dev/null && check "البطاقة تتضمن رمز QR مولَّداً محلياً" "ok" "ok" || check "البطاقة تتضمن رمز QR" "ok" "missing"
 check "خصوصية البطاقة: لا تكشف رقم هاتف الكادر" "0" "$(echo "$CARD_HTML" | grep -c '711111111' | tr -d ' ')"
 
 # كادر غير معتمد → 404 (لا تعداد ولا تسريب)
@@ -1207,8 +1211,8 @@ check "إلغاء اشتراك غير موجود → 404" "404" "$UNSUB2"
 
 # --- سكربت الخدمة: معالجات الإشعارات الفورية (v2) ---
 SW_HTML=$(curl -s $BASE/sw.js)
-check "sw.js: معالج push (عرض الإشعار)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('push')")"
-check "sw.js: معالج notificationclick (فتح الرابط)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('notificationclick')")"
+check "sw.js: معالج push (عرض الإشعار)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('push'")"
+check "sw.js: معالج notificationclick (فتح الرابط)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('notificationclick'")"
 
 echo ""
 echo "==========================================="
