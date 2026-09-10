@@ -31,6 +31,7 @@ import { Logo } from '@/components/shared/logo'
 import { NotificationBell } from '@/components/shared/notification-bell'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
 import { PushNotificationsToggle } from '@/components/pwa/push-notifications-toggle'
+import { PushBanner } from '@/components/pwa/push-banner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import {
@@ -273,7 +274,10 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
         </header>
 
         <main className="flex-1 p-4 md:p-6">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+          <div className="mx-auto w-full max-w-6xl">
+            <PushBanner />
+            {children}
+          </div>
         </main>
 
         <footer className="mt-auto border-t py-3">

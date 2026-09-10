@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { reviewApplicationSchema } from '@/lib/validations/post'
 import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
-import { notify } from '@/lib/notifications'
+import { notify, notifyAdmins } from '@/lib/notifications'
 import { formatCurrency } from '@/lib/utils'
 
 /**
@@ -31,7 +31,7 @@ export async function PATCH(
 
     const application = await db.application.findUnique({
       where: { id },
-      include: { post: true },
+      include: { post: true, nurse: { select: { name: true } } },
     })
     if (!application) return jsonError('التقديم غير موجود', 404)
 
@@ -66,6 +66,17 @@ export async function PATCH(
         type: 'APPLICATION_REJECTED',
         link: '/nurse/assignments',
       })
+
+      // الجولة الخامسة عشرة: الإدارة ترى الرفض أيضاً (غير مُراجع التقديم نفسه)
+      await notifyAdmins(
+        {
+          title: 'رفض تقديم على تكليف',
+          body: `رُفض تقديم ${application.nurse.name} على التكليف (${application.post.title}) — السبب: ${note.trim()}`,
+          type: 'APPLICATION_REJECTED',
+          link: '/admin/assignments',
+        },
+        session.user.id
+      )
 
       return NextResponse.json({ message: 'تم رفض التقديم وإشعار الكادر بالسبب' })
     }
@@ -133,6 +144,17 @@ export async function PATCH(
       type: 'APPLICATION_APPROVED',
       link: '/nurse/assignments',
     })
+
+    // الجولة الخامسة عشرة: الإدارة ترى الاعتماد وإنشاء التكليف (غير المُعتمِد نفسه)
+    await notifyAdmins(
+      {
+        title: 'اعتماد تقديم وإنشاء تكليف',
+        body: `تم اعتماد تقديم ${application.nurse.name} على التكليف (${application.post.title}) بقيمة ${formatCurrency(application.post.value)}`,
+        type: 'APPLICATION_APPROVED',
+        link: '/admin/assignments',
+      },
+      session.user.id
+    )
 
     // إذا اكتمل العدد المطلوب: إغلاق التكليف ورفض بقية التقديمات
     const approvedCount = await db.application.count({

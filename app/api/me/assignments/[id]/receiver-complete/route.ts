@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { notify } from '@/lib/notifications'
+import { notify, notifyAdmins } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
 import { calcReceiverEarning } from '@/lib/fees'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
@@ -143,6 +143,16 @@ export async function POST(
         link: '/admin/assignments',
       }),
     ])
+    // الجولة الخامسة عشرة: بقية المديرين يرون الإنهاء (غير مُنشئ التكليف المُشعَر أعلاه)
+    await notifyAdmins(
+      {
+        title: 'إنهاء تكليف',
+        body: `أُنهي التكليف (${assignment.title}) بنجاح — تقييم الكادر ${rating.overall}/5`,
+        type: 'ASSIGNMENT_COMPLETED',
+        link: '/admin/assignments',
+      },
+      assignment.createdById
+    )
 
     return NextResponse.json({
       message: `تم إنهاء التكليف بنجاح${earningAmount > 0 ? ` — أُضيف ربح ${formatCurrency(earningAmount)} إلى قسم أرباحك بتاريخ ${formatDateTime(updated.receiverDoneAt!)}` : ''}`,

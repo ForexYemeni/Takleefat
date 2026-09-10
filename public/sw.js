@@ -7,9 +7,10 @@
  *  3) الأصول الثابتة ذات البصمات (/_next/static) والأيقونات: الكاش أولاً
  *  4) تحديث تلقائي: إصدار جديد = حذف الكاش القديم + skipWaiting
  *  5) الإشعارات الفورية (Web Push): عرض إشعار عربي + فتح الرابط عند النقر — الجولة الرابعة عشرة
+ *  6) الجولة الخامسة عشرة: اهتزاز + تنبيه مستقل لكل إشعار (renotify) — كل إشعار يصدر صوتاً وينبثق حتى بتكرار الرابط
  * ============================================================ */
 
-const VERSION = 'takleefat-v2'
+const VERSION = 'takleefat-v3'
 const OFFLINE_URL = '/offline.html'
 const PRECACHE_URLS = [
   OFFLINE_URL,
@@ -53,6 +54,13 @@ self.addEventListener('push', (event) => {
     data = { title: 'تكليفات | Takleefat', body: event.data ? event.data.text() : '' }
   }
   const title = typeof data.title === 'string' && data.title ? data.title : 'تكليفات | Takleefat'
+  // renotify يتطلب tag — يُضبط فقط عند توفر وسم فعلي
+  const notifTag =
+    typeof data.tag === 'string' && data.tag
+      ? data.tag
+      : typeof data.link === 'string' && data.link
+        ? data.link
+        : undefined
   event.waitUntil(
     self.registration.showNotification(title, {
       body: typeof data.body === 'string' ? data.body : '',
@@ -60,7 +68,14 @@ self.addEventListener('push', (event) => {
       badge: '/icons/icon-192.png',
       dir: 'rtl',
       lang: 'ar',
-      tag: typeof data.link === 'string' ? data.link : undefined,
+      // الجولة الخامسة عشرة: تنبيه كامل — صوت النظام + اهتزاز، وكل إشعار
+      // بوسمه الفريد ينبثق منفرداً حتى لو تكرر الرابط
+      silent: false,
+      vibrate: [100, 50, 100],
+      tag: notifTag,
+      renotify: Boolean(notifTag),
+      requireInteraction: false,
+      timestamp: Date.now(),
       data: { link: typeof data.link === 'string' ? data.link : '/' },
     })
   )

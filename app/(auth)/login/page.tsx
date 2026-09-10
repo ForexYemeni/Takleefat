@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { loginSchema, type LoginInput } from '@/lib/validations/auth'
 import { getServerIssueMessage } from '@/lib/client-diagnostics'
+import { maybeAutoPromptAfterLogin } from '@/lib/push-client'
 
 const ROLE_HOME: Record<string, string> = {
   ADMIN: '/admin',
@@ -80,6 +81,10 @@ function LoginForm() {
     }
 
     toast.success('تم تسجيل الدخول بنجاح — مرحباً بك في تكليفات')
+
+    // الجولة الخامسة عشرة: طلب إشعارات فورية مرة واحدة بعد أول دخول ناجح
+    // (نقرة زر الدخول إيماءة مستخدم تُمكّن نافذة الصلاحية) — صمت تام عند أي فشل
+    void maybeAutoPromptAfterLogin()
 
     const callbackUrl = searchParams.get('callbackUrl')
     const destination =

@@ -135,6 +135,10 @@ check "ظهور التكليف للكادر بقيمة 120000" "120000" "$SEEN"
 APPLY=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$POST_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"خبرة 5 سنوات"}')
 check "تقديم الكادر على التكليف → 201" "201" "$APPLY"
 
+# --- الجولة 15: الإدارة ترى التقديمات الجديدة (نسخة إشعار للمدير) ---
+ADMIN_NOTIF_APPLY=$(curl -s -b "$DIR/admin.jar" $BASE/api/notifications | grep -cF "تقديم جديد على تكليف")
+check "الإدارة تستلم إشعار التقديم الجديد (نسخة الإدارة)" "1" "$ADMIN_NOTIF_APPLY"
+
 DUP=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$POST_ID/apply -H "Content-Type: application/json" -d '{}')
 check "منع التقديم المكرر → 409" "409" "$DUP"
 
@@ -171,6 +175,10 @@ check "منع إعادة مراجعة تقديم مُراجع → 409" "409" "$R
 
 POST_STATUS=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$POST_ID | jget "['post']['status']")
 check "إغلاق التكليف بعد اكتمال العدد" "ASSIGNED" "$POST_STATUS"
+
+# --- الجولة 15: الإدارة ترى الاعتماد وإنشاء التكليف (المُعتمِد هنا مستلم) ---
+ADMIN_NOTIF_APPROVE=$(curl -s -b "$DIR/admin.jar" $BASE/api/notifications | grep -cF "اعتماد تقديم وإنشاء تكليف")
+check "الإدارة تستلم إشعار الاعتماد وإنشاء التكليف" "1" "$ADMIN_NOTIF_APPROVE"
 
 AFEE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | jget "['assignments'][0]['adminFee']")
 check "حصة الإدارة محسوبة (نمط ADMIN: 10٪ من 120000)" "12000" "$AFEE"
@@ -1209,10 +1217,11 @@ UNSUB2=$(code -b "$DIR/nurse.jar" -X DELETE $BASE/api/push/subscribe -H "Content
   -d '{"endpoint":"https://fcm.googleapis.com/fcm/send/e2e-test-sub-1"}')
 check "إلغاء اشتراك غير موجود → 404" "404" "$UNSUB2"
 
-# --- سكربت الخدمة: معالجات الإشعارات الفورية (v2) ---
+# --- سكربت الخدمة: معالجات الإشعارات الفورية (v3) ---
 SW_HTML=$(curl -s $BASE/sw.js)
 check "sw.js: معالج push (عرض الإشعار)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('push'")"
 check "sw.js: معالج notificationclick (فتح الرابط)" "1" "$(echo "$SW_HTML" | grep -cF "addEventListener('notificationclick'")"
+check "sw.js: تنبيه مستقل بوسم فريد (renotify + silent:false)" "2" "$(echo "$SW_HTML" | grep -cF -e "renotify: Boolean(notifTag)" -e "silent: false")"
 
 echo ""
 echo "==========================================="

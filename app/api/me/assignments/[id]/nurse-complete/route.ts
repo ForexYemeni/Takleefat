@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { notify } from '@/lib/notifications'
+import { notify, notifyAdmins } from '@/lib/notifications'
 import { formatDateTime } from '@/lib/utils'
 
 const nurseCompleteSchema = z.object({
@@ -75,6 +75,16 @@ export async function POST(
         link: '/admin/assignments',
       }),
     ])
+    // الجولة الخامسة عشرة: بقية المديرين يرون تأكيد الكادر (غير مُنشئ التكليف المُشعَر أعلاه)
+    await notifyAdmins(
+      {
+        title: 'الكادر أنهى تكليفاً',
+        body: `أكد ${session.user.name} انتهاء التكليف (${assignment.title}) واستلام المبلغ`,
+        type: 'ASSIGNMENT_COMPLETED',
+        link: '/admin/assignments',
+      },
+      assignment.createdById
+    )
 
     return NextResponse.json({
       message: 'تم تسجيل انتهاء التكليف واستلام المبلغ بنجاح — شكراً لك',

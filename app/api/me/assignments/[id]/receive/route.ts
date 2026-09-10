@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { notify } from '@/lib/notifications'
+import { notify, notifyAdmins } from '@/lib/notifications'
 import { ASSIGNMENT_STATUS_LABELS } from '@/lib/utils'
 
 /**
@@ -60,6 +60,16 @@ export async function POST(
       type: 'ASSIGNMENT_RECEIVED',
       link: '/admin/assignments',
     })
+    // الجولة الخامسة عشرة: بقية المديرين يرون الاستلام (غير مُنشئ التكليف المُشعَر أعلاه)
+    await notifyAdmins(
+      {
+        title: 'استلام تكليف',
+        body: `استلم المستلم الإداري تكليف "${assignment.title}" من الكادر`,
+        type: 'ASSIGNMENT_RECEIVED',
+        link: '/admin/assignments',
+      },
+      assignment.createdById
+    )
 
     return NextResponse.json({
       message: `تم تأكيد الاستلام — الحالة الآن: ${ASSIGNMENT_STATUS_LABELS[updated.status]}`,

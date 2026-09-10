@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
-import { notify } from '@/lib/notifications'
+import { notify, notifyAdmins } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
 import { canNurseSeePost } from '@/lib/network'
 
@@ -91,6 +91,14 @@ export async function POST(
       body: `${session.user.name} قدّم على التكليف (${post.title}) — راجع السيرة الذاتية واعتمد أو ارفض`,
       type: 'APPLICATION_SUBMITTED',
       link: '/receiver/assignments',
+    })
+
+    // الجولة الخامسة عشرة: الإدارة ترى كل التقديمات الجديدة أيضاً
+    await notifyAdmins({
+      title: 'تقديم جديد على تكليف',
+      body: `${session.user.name} قدّم على التكليف (${post.title}) لدى ${post.facility}`,
+      type: 'APPLICATION_SUBMITTED',
+      link: '/admin/assignments',
     })
 
     return NextResponse.json(
