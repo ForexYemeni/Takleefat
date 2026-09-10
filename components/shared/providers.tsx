@@ -5,6 +5,7 @@ import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
+import { FloatingContact } from '@/components/shared/floating-contact'
 
 /**
  * مزودات التطبيق — الجلسة، الثيم، إدارة الحالة، التنبيهات
@@ -29,6 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
           {children}
           <Toaster position="top-center" richColors dir="rtl" />
+          <FloatingContact />
         </ThemeProvider>
       </QueryClientProvider>
     </SessionProvider>

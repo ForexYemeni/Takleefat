@@ -469,11 +469,12 @@ a=[x for x in d.get('assignments',[]) if x.get('id')=='$A4_ID']
 print(a[0]['status'] if a else '?')")
 check "حالة التكليف بعد الإنهاء: COMPLETED" "COMPLETED" "$A4_STATUS"
 
-# 17-و) أرباح المستلم الإداري: 10٪ من 120000 = 12000
+# 17-و) أرباح المستلم الإداري — بعد الجولة 11 يُوزَّع الربح فوراً عند تأكيد دفع الإدارة:
+#   8000 من تأكيد دفع تكليف P3 (10٪ من 80000) + 12000 من إنهاء المستلم (10٪ من 120000) = 20000
 EARN_TOTAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
-check "ربح المستلم من التكليف (10٪ من 120000)" "12000" "$EARN_TOTAL"
+check "ربح المستلم الإجمالي (8000 توزيع تأكيد الدفع + 12000 إنهاء المستلم)" "20000" "$EARN_TOTAL"
 EARN_AVAIL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['available']")
-check "الرصيد المتاح للسحب" "12000" "$EARN_AVAIL"
+check "الرصيد المتاح للسحب" "20000" "$EARN_AVAIL"
 
 # 17-ز) طلب سحب: رفض تجاوز الرصيد + طلب صحيح بالبيانات
 W_OVER=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/withdrawals -H "Content-Type: application/json" \
@@ -485,7 +486,7 @@ W_OK=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/withdrawals -H 
 check "طلب سحب 5000 مع المحفظة والحساب → قيد المعالجة" "PENDING" "$W_OK"
 
 EARN_AVAIL2=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['available']")
-check "الرصيد بعد الطلب المعلق (12000-5000)" "7000" "$EARN_AVAIL2"
+check "الرصيد بعد الطلب المعلق (20000-5000)" "15000" "$EARN_AVAIL2"
 
 W_DATA=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/withdrawals | python3 -c "
 import json,sys
@@ -504,7 +505,7 @@ EARN_FINAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | python
 import json,sys
 d=json.load(sys.stdin)['summary']
 print(d['available'], d['withdrawn'])")
-check "الرصيد بعد الصرف (متاح 7000 | مسحوب 5000)" "7000 5000" "$EARN_FINAL"
+check "الرصيد بعد الصرف (متاح 15000 | مسحوب 5000)" "15000 5000" "$EARN_FINAL"
 
 # 17-ح) التقييم يُضاف للسيرة الذاتية عند التقديم لأي تكليف آخر
 P6=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
@@ -1017,6 +1018,94 @@ check "المستندات المجمعة: userId يعيد مستندات الك�
 
 # --- تنظيف القسم ---
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/users/$R10_N2_ID -o /dev/null
+
+# ============================================================
+# القسم 25 — الجولة الحادية عشرة: توزيع الرسوم عند تأكيد الدفع + قنوات التواصل + عقد الأقسام
+# ============================================================
+echo "=========== 25) توزيع الرسوم عند تأكيد الدفع + قسم التواصل + عقد الأقسام ==========="
+
+# --- أ) عقد الأقسام: /api/departments يعيد isActive صراحةً (إصلاح قائمة الأقسام الفارغة في تكليف معلن) ---
+R11_DEPTS=$(curl -s -b "$DIR/admin.jar" $BASE/api/departments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+deps=d['departments']
+print(len(deps) > 0 and all('isActive' in x for x in deps))" 2>/dev/null)
+check "عقد الأقسام: /api/departments يعيد isActive لكل قسم (القائمة تظهر في تكليف معلن)" "True" "$R11_DEPTS"
+
+# --- ب) توزيع الرسوم عند تأكيد الدفع مباشرة (دون إنهاء من الكادر أو المستلم) ---
+R11_P=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":3,\"gender\":\"ANY\",\"value\":60000}")
+R11_P_ID=$(echo "$R11_P" | jget "['post']['id']")
+R11_APPLY=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$R11_P_ID/apply -H "Content-Type: application/json" -d '{}')
+check "تقديم الكادر على تكليف قسم 25 → 201" "201" "$R11_APPLY"
+
+R11_APP_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$R11_P_ID/applications | jget "['applications'][0]['applicationId']")
+R11_A_ID=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$R11_APP_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' | jget "['assignment']['id']")
+[ -n "$R11_A_ID" ] && check "اعتماد التقديم → تكليف مؤكد (قسم 25)" "ok" "ok" || check "اعتماد التقديم قسم 25" "id" "null"
+
+R11_EARN_BEFORE=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
+
+# الإدارة تؤكد الدفع مباشرة — دون إنهاء من الكادر أو المستلم: يجب أن تُوزَّع الرسوم فوراً
+R11_PAY_MSG=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$R11_A_ID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}' | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+s=d.get('settlement') or {}
+print('distribute' if ('توزيع رسوم التكليف' in d.get('message','') and s.get('earningAmount')==6000 and s.get('earningCreated')==True) else 'no')" 2>/dev/null)
+check "تأكيد الدفع يوزع رسوم التكليف فوراً (ربح 6000 = 10٪ من 60000)" "distribute" "$R11_PAY_MSG"
+
+R11_EARN_AFTER=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
+check "ربح المستلم زاد بـ 6000 بعد تأكيد الدفع (قبل=$R11_EARN_BEFORE بعد=$R11_EARN_AFTER)" "6000" "$((R11_EARN_AFTER - R11_EARN_BEFORE))"
+
+R11_PS=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d.get('assignments',[]) if x.get('id')=='$R11_A_ID']
+print(a[0]['paymentStatus'] if a else '?')")
+check "حالة الدفع بعد التأكيد: PAID" "PAID" "$R11_PS"
+
+# إعادة الاحتساب آمنة للتكرار — لا ازدواج في الربح
+R11_REDIST=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$R11_A_ID -H "Content-Type: application/json" -d '{"redistributeFees":true}' | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+s=d.get('settlement') or {}
+print('ok' if s.get('earningAmount')==6000 and s.get('earningCreated')==False else 'no')" 2>/dev/null)
+check "إعادة احتساب الرسوم: idempotent بلا ازدواج (earningCreated=False)" "ok" "$R11_REDIST"
+
+R11_EARN_FINAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
+check "الربح الإجمالي لم يتغير بعد إعادة الاحتساب (لا ازدواج)" "$R11_EARN_AFTER" "$R11_EARN_FINAL"
+
+# --- ج) قنوات التواصل: قسم التواصل + الأيقونة العائمة ---
+R11_C0=$(curl -s $BASE/api/contact | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('channels' in d)" 2>/dev/null)
+check "GET /api/contact عام (بلا جلسة) — عقد القنوات موجود" "True" "$R11_C0"
+
+R11_CSET=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/contact -H "Content-Type: application/json" \
+  -d '{"whatsapp":"777000555","whatsappEnabled":true,"email":"admin@takleefat.ye","emailEnabled":true,"phone":"","phoneEnabled":true}')
+check "الإدارة تحفظ قنوات التواصل (واتساب + بريد + هاتف مفعّل بلا رقم) → 200" "200" "$R11_CSET"
+
+R11_C1=$(curl -s $BASE/api/contact | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['channels']
+print(sorted(d.keys()))" 2>/dev/null)
+check "القنوات النشطة فقط: واتساب + بريد (الهاتف مفعّل لكن بلا رقم — لا يظهر)" "['email', 'whatsapp']" "$R11_C1"
+
+R11_C2=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/contact -H "Content-Type: application/json" \
+  -d '{"whatsappEnabled":false}')
+R11_C3=$(curl -s $BASE/api/contact | python3 -c "
+import json,sys
+print(sorted(json.load(sys.stdin)['channels'].keys()))" 2>/dev/null)
+check "إيقاف واتساب (قناة لها رقم) يخفيه فوراً من الأيقونة العائمة → 200" "['email']" "$R11_C3"
+
+R11_CFORBID=$(code -b "$DIR/nurse.jar" -X PATCH $BASE/api/admin/contact -H "Content-Type: application/json" -d '{"whatsapp":"x"}')
+check "منع الكادر من إدارة قنوات التواصل → 403" "403" "$R11_CFORBID"
+
+# --- تنظيف القسم: تصفير قنوات التواصل + حذف تكليف القسم (الربح يُحذف بالتتالي) ---
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/contact -H "Content-Type: application/json" \
+  -d '{"whatsapp":"","whatsappEnabled":false,"phone":"","phoneEnabled":false,"sms":"","smsEnabled":false,"email":"","emailEnabled":false}' -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/assignments/$R11_A_ID -o /dev/null
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$R11_P_ID -o /dev/null
 
 echo ""
 echo "==========================================="

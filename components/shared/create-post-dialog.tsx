@@ -125,7 +125,8 @@ export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }
   })
 
   const hospitals = hospitalsData?.hospitals ?? []
-  const departments = (departmentsData?.departments ?? []).filter((d) => d.isActive)
+  // /api/departments يُعيد الأقسام النشطة فقط (فلتر isActive على الخادم) — لا فلترة إضافية هنا
+  const departments = departmentsData?.departments ?? []
 
   // إعادة نشر: ملء النموذج من آخر تكليف (العنوان يُترك فارغاً ليأخذ الرقم الجديد تلقائياً)
   useEffect(() => {

@@ -24,7 +24,7 @@ import {
   type SettingsFormValues,
 } from '@/lib/validations/post'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
-import { HospitalManager, DepartmentManager } from '@/components/admin/catalog-manager'
+import { DepartmentManager } from '@/components/admin/catalog-manager'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,7 +38,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface AdminStats {
   receivedAssignments: number
@@ -403,45 +402,20 @@ export default function AdminSettingsPage() {
         </div>
       </form>
 
-      {/* قوائم الجهات الصحية والأقسام — تظهر للمستلم الإداري عند إنشاء التكليف */}
-      <Tabs defaultValue="hospitals" className="mt-2">
-        <TabsList className="h-auto flex-wrap justify-start gap-1">
-          <TabsTrigger value="hospitals" className="gap-1.5">
-            الجهات الصحية (المستشفيات + الموقع)
-          </TabsTrigger>
-          <TabsTrigger value="departments" className="gap-1.5">
-            الأقسام الطبية
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="hospitals">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">إدارة الجهات الصحية</CardTitle>
-              <CardDescription>
-                تُختار الجهة الصحية من هذه القائمة عند إنشاء التكليف — والموقع الفعلي يُعبأ تلقائياً
-                بحسب الجهة المختارة
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <HospitalManager />
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="departments">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">إدارة الأقسام الطبية</CardTitle>
-              <CardDescription>
-                الأقسام التي يختار منها المستلم الإداري عند إنشاء التكليف — مثل: عناية، طوارئ،
-                رقود، حضانة، قبالة، مختبر
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DepartmentManager />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* الأقسام الطبية — تظهر للمستلم الإداري عند إنشاء التكليف
+          (الجهات الصحية تُدار من قسم «الجهات الصحية» المخصص — أُزيلت من هنا لتجنب الازدواج) */}
+      <Card className="mt-2">
+        <CardHeader>
+          <CardTitle className="text-lg">إدارة الأقسام الطبية</CardTitle>
+          <CardDescription>
+            الأقسام التي يختار منها المستلم الإداري والإدارة عند إنشاء التكليف — مثل: عناية،
+            طوارئ، رقود، حضانة، قبالة، مختبر
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DepartmentManager />
+        </CardContent>
+      </Card>
     </div>
   )
 }

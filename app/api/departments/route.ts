@@ -12,7 +12,8 @@ export async function GET() {
     const departments = await db.department.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true },
+      // isActive تُعاد صراحةً — بعض الواجهات تعتمد على وجودها في عقد البيانات
+      select: { id: true, name: true, isActive: true },
     })
     return NextResponse.json({ departments })
   } catch (error) {

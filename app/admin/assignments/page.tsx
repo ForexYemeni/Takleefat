@@ -13,6 +13,7 @@ import {
   Landmark,
   Pencil,
   Plus,
+  RefreshCw,
   Star,
   Trash2,
   UserRound,
@@ -207,7 +208,7 @@ export default function AdminAssignmentsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  // تأكيد/إلغاء دفع رسوم التكليف للإدارة — يفتح التقديم للكادر بعد التأكيد
+  // تأكيد/إلغاء دفع رسوم التكليف للإدارة — يوزع رسوم التكليف (ربح المستلم) فور التأكيد
   const paymentMutation = useMutation({
     mutationFn: ({ id, paymentStatus }: { id: string; paymentStatus: 'PAID' | 'UNPAID' }) =>
       apiPatch<{ message: string }>(`/api/admin/assignments/${id}`, { paymentStatus }),
@@ -215,6 +216,19 @@ export default function AdminAssignmentsPage() {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['admin-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['receiver-earnings'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // إعادة احتساب وتوزيع رسوم التكليف — لمعالجة التكليفات القديمة التي أُنهيت دون توزيع
+  const redistributeMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiPatch<{ message: string }>(`/api/admin/assignments/${id}`, { redistributeFees: true }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['admin-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['receiver-earnings'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -492,8 +506,21 @@ export default function AdminAssignmentsPage() {
                   )}
                   {details.paymentStatus === 'UNPAID' && (
                     <p className="text-[11px] leading-snug text-amber-700">
-                      لن يتمكن الكادر من التقديم على تكليفات جديدة قبل تأكيد الدفع
+                      لن يتمكن الكادر من التقديم على تكليفات جديدة قبل تأكيد الدفع — والتأكيد يوزع رسوم
+                      التكليف (ربح المستلم الإداري) فوراً حتى لو لم يُنهِ الكادر أو المستلم التكليف
                     </p>
+                  )}
+                  {details.status !== 'CANCELLED' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      disabled={redistributeMutation.isPending}
+                      onClick={() => redistributeMutation.mutate(details.id)}
+                    >
+                      <RefreshCw className="size-3.5" />
+                      إعادة احتساب وتوزيع الرسوم
+                    </Button>
                   )}
                 </div>
               </div>

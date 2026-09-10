@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
+import { calcReceiverEarning } from '@/lib/fees'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 
 const ratingAxis = z
@@ -63,12 +64,10 @@ export async function POST(
     const { nursePaid, rating } = parsed.data
 
     // نسبة المستلم الإداري — تُحتسب من قيمة التكليف وتُخصم من حساب الإدارة
+    // (نفس دالة الاحتساب الموحدة المستخدمة في مسارات توزيع الإدارة — lib/fees.ts)
     const settings = await getSettings()
     const sharePercent = settings.receiverSharePercent
-    const earningAmount =
-      sharePercent > 0 && assignment.value != null && assignment.value > 0
-        ? Math.round((assignment.value * sharePercent) / 100)
-        : 0
+    const earningAmount = calcReceiverEarning(assignment.value, sharePercent)
 
     const [updated] = await db.$transaction([
       db.assignment.update({

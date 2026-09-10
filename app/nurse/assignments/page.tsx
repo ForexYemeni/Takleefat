@@ -9,6 +9,7 @@ import {
   Briefcase,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Clock,
   FileWarning,
@@ -18,6 +19,7 @@ import {
   Send,
   UserRound,
   Users,
+  Wallet,
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -27,6 +29,7 @@ import {
   formatDate,
   formatDateTime,
   formatCurrency,
+  cn,
   ASSIGNMENT_STATUS_LABELS,
   APPLICATION_STATUS_LABELS,
   POST_GENDER_LABELS,
@@ -474,6 +477,36 @@ function FeeRow({ label, amount }: { label: string; amount: string }) {
   )
 }
 
+/** شريحة معلومات مصغّرة — تُستخدم داخل البطاقات المصغّرة */
+function MiniChip({
+  icon: Icon,
+  children,
+  tone = 'default',
+  ltr,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  children: React.ReactNode
+  tone?: 'default' | 'emerald' | 'primary'
+  ltr?: boolean
+}) {
+  return (
+    <span
+      className={cn(
+        'inline-flex max-w-full items-center gap-1 truncate rounded-lg px-2 py-1 font-bold',
+        tone === 'emerald'
+          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+          : tone === 'primary'
+            ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300'
+            : 'bg-secondary/70 text-secondary-foreground'
+      )}
+      dir={ltr ? 'ltr' : undefined}
+    >
+      <Icon className="size-3 shrink-0" />
+      <span className="truncate">{children}</span>
+    </span>
+  )
+}
+
 // ---------- حوار التقديم ----------
 
 function ApplyDialog({
@@ -595,74 +628,115 @@ function MyApplications({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {applications.map((app) => (
-        <Card key={app.id}>
-          <CardContent className="space-y-3 p-5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-bold">{app.post.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {app.post.facility}
-                  {app.post.department ? ` — ${app.post.department}` : ''}
-                </p>
-              </div>
-              <StatusBadge status={app.status} labels={APPLICATION_STATUS_LABELS} />
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              الجهة المُعلنة: <span className="font-bold text-foreground">{app.post.receiver.name}</span> —
-              قيمة التكليف: <span className="font-bold" dir="ltr">{formatCurrency(app.fees.value)}</span>
-            </p>
-
-            {app.status === 'PENDING' && (
-              <p className="flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
-                <Clock className="size-3.5" />
-                بانتظار مراجعة السيرة الذاتية من الجهة المُعلنة
-              </p>
-            )}
-
-            {app.status === 'APPROVED' && settings && (
-              <PaymentCard
-                settings={settings}
-                breakdown={[
-                  { label: 'قيمة التكليف', amount: app.fees.value },
-                  ...(settings.feeMode === 'ADMIN'
-                    ? [
-                        {
-                          label:
-                            settings.adminFeeType === 'FIXED'
-                              ? 'حصة الإدارة (مبلغ ثابت)'
-                              : `حصة الإدارة (${settings.adminPercentage}٪)`,
-                          amount: app.fees.adminFee,
-                          negative: true,
-                        },
-                      ]
-                    : [
-                        {
-                          label: 'رسوم التقديم',
-                          amount: app.fees.applicationFee,
-                          negative: true,
-                        },
-                      ]),
-                ]}
-                dueAmount={app.fees.dueToAdmin}
-              />
-            )}
-
-            {app.status === 'REJECTED' && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
-                {app.reviewNote ?? 'لم يتم اعتماد التقديم'}
-              </p>
-            )}
-
-            <p className="text-[11px] text-muted-foreground">
-              تاريخ التقديم: {formatDateTime(app.createdAt)}
-            </p>
-          </CardContent>
-        </Card>
+        <ApplicationCard key={app.id} app={app} settings={settings} />
       ))}
     </div>
+  )
+}
+
+/** بطاقة تقديم مصغّرة واحترافية — ملخص واضح فوق، وطرق الدفع قابلة للفتح */
+function ApplicationCard({
+  app,
+  settings,
+}: {
+  app: MyApplication
+  settings?: PlatformSettings
+}) {
+  const [showPayment, setShowPayment] = useState(false)
+
+  return (
+    <Card>
+      <CardContent className="space-y-2.5 p-4">
+        {/* العنوان والحالة */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-extrabold">{app.post.title}</p>
+            <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="size-3 shrink-0" />
+              <span className="truncate">
+                {app.post.facility}
+                {app.post.department ? ` — ${app.post.department}` : ''}
+              </span>
+            </p>
+          </div>
+          <StatusBadge status={app.status} labels={APPLICATION_STATUS_LABELS} />
+        </div>
+
+        {/* شرائح مصغّرة: الجهة + القيمة + التاريخ */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <MiniChip icon={UserRound}>{app.post.receiver.name}</MiniChip>
+          <MiniChip icon={Banknote} ltr>
+            {formatCurrency(app.fees.value)}
+          </MiniChip>
+          <MiniChip icon={CalendarDays}>{formatDate(app.createdAt)}</MiniChip>
+        </div>
+
+        {app.status === 'PENDING' && (
+          <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-700">
+            <Clock className="size-3 shrink-0" />
+            بانتظار مراجعة السيرة الذاتية من الجهة المُعلنة
+          </p>
+        )}
+
+        {app.status === 'APPROVED' && settings && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
+                <Wallet className="size-3.5 shrink-0" />
+                <span className="shrink-0">المبلغ الواجب:</span>
+                <span dir="ltr">{formatCurrency(app.fees.dueToAdmin)}</span>
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-emerald-800 hover:text-emerald-900 dark:text-emerald-300"
+                onClick={() => setShowPayment((v) => !v)}
+              >
+                {showPayment ? 'إخفاء' : 'طرق الدفع'}
+                <ChevronDown className={cn('size-3.5 transition-transform', showPayment && 'rotate-180')} />
+              </Button>
+            </div>
+            {showPayment && (
+              <div className="mt-2">
+                <PaymentCard
+                  settings={settings}
+                  breakdown={[
+                    { label: 'قيمة التكليف', amount: app.fees.value },
+                    ...(settings.feeMode === 'ADMIN'
+                      ? [
+                          {
+                            label:
+                              settings.adminFeeType === 'FIXED'
+                                ? 'حصة الإدارة (مبلغ ثابت)'
+                                : `حصة الإدارة (${settings.adminPercentage}٪)`,
+                            amount: app.fees.adminFee,
+                            negative: true,
+                          },
+                        ]
+                      : [
+                          {
+                            label: 'رسوم التقديم',
+                            amount: app.fees.applicationFee,
+                            negative: true,
+                          },
+                        ]),
+                  ]}
+                  dueAmount={app.fees.dueToAdmin}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {app.status === 'REJECTED' && (
+          <p className="rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">
+            {app.reviewNote ?? 'لم يتم اعتماد التقديم'}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -686,7 +760,7 @@ function ConfirmedAssignments({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {assignments.map((a) => (
         <NurseAssignmentCard key={a.id} a={a} settings={settings} />
       ))}
@@ -704,6 +778,7 @@ function NurseAssignmentCard({
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirmDone, setConfirmDone] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   const [viewScreenshot, setViewScreenshot] = useState<ViewableDocument | null>(null)
 
   // تأكيد إنهاء التكليف واستلام المبلغ
@@ -750,169 +825,194 @@ function NurseAssignmentCard({
     settings?.feeMode === 'APPLICATION' ? Math.max(0, settings.applicationFee) : 0
   const dueToAdmin = (a.adminFee ?? 0) + applicationFee
   const canConfirmDone = !a.nurseDoneAt && a.status !== 'CANCELLED' && a.status !== 'COMPLETED'
+  const hasFinanceSection = settings && a.status !== 'CANCELLED'
+  const hasDetails = !!hasFinanceSection || !!a.description
 
   return (
-    <Card className={a.paymentStatus === 'PAID' ? 'border-emerald-200' : undefined}>
-      <CardContent className="space-y-3 p-5">
+    <Card className={cn('overflow-hidden', a.paymentStatus === 'PAID' && 'border-emerald-200')}>
+      <CardContent className="space-y-2.5 p-4">
+        {/* العنوان والحالة */}
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-bold">{a.title}</p>
-            <p className="text-sm text-muted-foreground">
-              {a.facility}
-              {a.department ? ` — ${a.department}` : ''}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-extrabold">{a.title}</p>
+            <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="size-3 shrink-0" />
+              <span className="truncate">
+                {a.facility}
+                {a.department ? ` — ${a.department}` : ''}
+              </span>
             </p>
           </div>
           <StatusBadge status={a.status} labels={ASSIGNMENT_STATUS_LABELS} />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-lg bg-secondary/60 p-2.5">
-            <p className="text-muted-foreground">تاريخ البدء</p>
-            <p className="mt-0.5 font-bold">{formatDate(a.startDate)}</p>
-          </div>
+        {/* شرائح مصغّرة: التاريخ + القيمة + المستلم */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <MiniChip icon={CalendarDays}>{formatDate(a.startDate)}</MiniChip>
           {a.value != null && (
-            <div className="rounded-lg bg-secondary/60 p-2.5">
-              <p className="text-muted-foreground">قيمة التكليف</p>
-              <p className="mt-0.5 font-extrabold text-primary" dir="ltr">
-                {formatCurrency(a.value)}
-              </p>
-            </div>
+            <MiniChip icon={Banknote} tone="primary" ltr>
+              {formatCurrency(a.value)}
+            </MiniChip>
+          )}
+          <MiniChip icon={UserRound}>{a.receiver.name}</MiniChip>
+          {a.receivedAt && (
+            <MiniChip icon={BadgeCheck} tone="emerald">
+              تم الاستلام ✓
+            </MiniChip>
           )}
         </div>
 
-        <div className="text-xs text-muted-foreground">
-          <p>
-            المستلم الإداري: <span className="font-bold text-foreground">{a.receiver.name}</span>
-          </p>
-          {a.receivedAt && <p>تم الاستلام من الجهة المستقبِلة ✓</p>}
-        </div>
+        {/* ملخص الدفع المصغّر + حالة تأكيد الإدارة */}
+        {a.status !== 'CANCELLED' && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
+              <Wallet className="size-3.5 shrink-0" />
+              <span className="shrink-0">الواجب للإدارة:</span>
+              <span dir="ltr">{formatCurrency(dueToAdmin)}</span>
+            </p>
+            {a.paymentStatus === 'PAID' ? (
+              <Badge className="gap-1 bg-emerald-600 text-[10px]">
+                <BadgeCheck className="size-3" />
+                أكدت الإدارة الدفع
+              </Badge>
+            ) : a.paymentScreenshotUrl ? (
+              <Badge variant="secondary" className="text-[10px]">
+                بانتظار تأكيد الإدارة
+              </Badge>
+            ) : null}
+          </div>
+        )}
 
-        {/* حالة الإنهاء */}
-        {a.nurseDoneAt ? (
-          <p className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-            <BadgeCheck className="size-4" />
-            أكدت انتهاء التكليف واستلام المبلغ بتاريخ {formatDateTime(a.nurseDoneAt)}
+        {/* تأكيد الكادر للإنهاء */}
+        {a.nurseDoneAt && (
+          <p className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <BadgeCheck className="size-3.5 shrink-0" />
+            أكدت انتهاء التكليف واستلام المبلغ — {formatDateTime(a.nurseDoneAt)}
           </p>
-        ) : null}
+        )}
 
         {/* إنهاء التكليف واستلام المبلغ */}
         {canConfirmDone && (
-          <Button className="w-full gap-2" onClick={() => setConfirmDone(true)}>
+          <Button size="sm" className="w-full gap-2" onClick={() => setConfirmDone(true)}>
             <CheckCircle2 className="size-4" />
             تم الانتهاء من التكليف واستلام مبلغ التكليف
           </Button>
         )}
 
-        {/* بطاقة طرق الدفع للإدارة — للكادر فقط */}
-        {settings && a.status !== 'CANCELLED' && (
-          <PaymentCard
-            settings={settings}
-            dueAmount={dueToAdmin}
-            breakdown={[
-              { label: 'قيمة التكليف', amount: a.value ?? 0 },
-              ...(settings.feeMode === 'ADMIN'
-                ? [
-                    {
-                      label:
-                        settings.adminFeeType === 'FIXED'
-                          ? 'حصة الإدارة (مبلغ ثابت)'
-                          : `حصة الإدارة (${settings.adminPercentage}٪)`,
-                      amount: a.adminFee ?? 0,
-                      negative: true,
-                    },
-                  ]
-                : [{ label: 'رسوم التقديم', amount: applicationFee, negative: true }]),
-            ]}
-          />
+        {/* فتح/إغلاق التفاصيل: طرق الدفع + إثبات الدفع + الوصف */}
+        {hasDetails && (
+          <button
+            type="button"
+            onClick={() => setShowDetails((v) => !v)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-1.5 text-[11px] font-bold text-muted-foreground transition-colors hover:bg-accent"
+          >
+            {showDetails ? 'إخفاء التفاصيل والدفع' : 'التفاصيل وطرق الدفع وإثبات الدفع'}
+            <ChevronDown className={cn('size-3.5 transition-transform', showDetails && 'rotate-180')} />
+          </button>
         )}
 
-        {/* إثبات دفع الرسوم — رفع لقطة الشاشة في نفس الصفحة */}
-        {a.status !== 'CANCELLED' && (
-          <div className="rounded-2xl border-2 border-dashed p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-xs font-extrabold">
-                <ImagePlus className="size-3.5 text-primary" />
-                إثبات دفع رسوم/نسبة الإدارة
-              </p>
-              {a.paymentStatus === 'PAID' ? (
-                <Badge className="gap-1 bg-emerald-600">
-                  <BadgeCheck className="size-3" />
-                  أكدت الإدارة الدفع
-                </Badge>
-              ) : a.paymentScreenshotUrl ? (
-                <Badge variant="secondary" className="text-[10px]">
-                  بانتظار تأكيد الإدارة
-                </Badge>
-              ) : null}
-            </div>
+        {showDetails && (
+          <div className="space-y-3">
+            {/* بطاقة طرق الدفع للإدارة — للكادر فقط */}
+            {hasFinanceSection && (
+              <PaymentCard
+                settings={settings!}
+                dueAmount={dueToAdmin}
+                breakdown={[
+                  { label: 'قيمة التكليف', amount: a.value ?? 0 },
+                  ...(settings!.feeMode === 'ADMIN'
+                    ? [
+                        {
+                          label:
+                            settings!.adminFeeType === 'FIXED'
+                              ? 'حصة الإدارة (مبلغ ثابت)'
+                              : `حصة الإدارة (${settings!.adminPercentage}٪)`,
+                          amount: a.adminFee ?? 0,
+                          negative: true,
+                        },
+                      ]
+                    : [{ label: 'رسوم التقديم', amount: applicationFee, negative: true }]),
+                ]}
+              />
+            )}
 
-            {a.paymentScreenshotUrl ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setViewScreenshot({
-                    fileUrl: a.paymentScreenshotUrl!,
-                    fileName: a.paymentScreenshotName ?? 'إثبات الدفع',
-                    title: 'لقطة شاشة إثبات الدفع',
-                    mimeType: 'image/*',
-                  })
-                }
-                className="mt-2.5 flex w-full items-center gap-3 rounded-xl border p-2.5 text-start transition-colors hover:bg-accent"
-              >
-                <img
-                  src={a.paymentScreenshotUrl}
-                  alt="إثبات الدفع"
-                  className="size-14 rounded-lg border object-cover"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-bold">
-                    {a.paymentScreenshotName ?? 'لقطة الشاشة'}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    اضغط لعرض الصورة وتكبيرها
-                  </span>
-                </span>
-              </button>
-            ) : a.paymentStatus === 'PAID' ? (
-              <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                تم تأكيد دفع الرسوم من الإدارة — يمكنك التقديم على تكليفات جديدة
-              </p>
-            ) : (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) uploadMutation.mutate(file)
-                    e.target.value = ''
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2.5 w-full gap-2 border-dashed"
-                  disabled={uploadMutation.isPending}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <ImagePlus className="size-4" />
-                  {uploadMutation.isPending ? 'جارٍ الرفع...' : 'رفع لقطة شاشة إثبات الدفع'}
-                </Button>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                  بعد دفع المبلغ للإدارة عبر {settings?.paymentMethod ?? 'طريقة الدفع'} ارفع لقطة
-                  شاشة هنا — تظهر للإدارة بشكل احترافي للتأكيد
+            {/* إثبات دفع الرسوم — رفع لقطة الشاشة في نفس الصفحة */}
+            {a.status !== 'CANCELLED' && (
+              <div className="rounded-2xl border-2 border-dashed p-3">
+                <p className="flex items-center gap-1.5 text-xs font-extrabold">
+                  <ImagePlus className="size-3.5 text-primary" />
+                  إثبات دفع رسوم/نسبة الإدارة
                 </p>
-              </>
+
+                {a.paymentScreenshotUrl ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setViewScreenshot({
+                        fileUrl: a.paymentScreenshotUrl!,
+                        fileName: a.paymentScreenshotName ?? 'إثبات الدفع',
+                        title: 'لقطة شاشة إثبات الدفع',
+                        mimeType: 'image/*',
+                      })
+                    }
+                    className="mt-2.5 flex w-full items-center gap-3 rounded-xl border p-2.5 text-start transition-colors hover:bg-accent"
+                  >
+                    <img
+                      src={a.paymentScreenshotUrl}
+                      alt="إثبات الدفع"
+                      className="size-14 rounded-lg border object-cover"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-bold">
+                        {a.paymentScreenshotName ?? 'لقطة الشاشة'}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        اضغط لعرض الصورة وتكبيرها
+                      </span>
+                    </span>
+                  </button>
+                ) : a.paymentStatus === 'PAID' ? (
+                  <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    تم تأكيد دفع الرسوم من الإدارة — يمكنك التقديم على تكليفات جديدة
+                  </p>
+                ) : (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) uploadMutation.mutate(file)
+                        e.target.value = ''
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2.5 w-full gap-2 border-dashed"
+                      disabled={uploadMutation.isPending}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <ImagePlus className="size-4" />
+                      {uploadMutation.isPending ? 'جارٍ الرفع...' : 'رفع لقطة شاشة إثبات الدفع'}
+                    </Button>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      بعد دفع المبلغ للإدارة عبر {settings?.paymentMethod ?? 'طريقة الدفع'} ارفع لقطة
+                      شاشة هنا — تظهر للإدارة بشكل احترافي للتأكيد
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {a.description && (
+              <p className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground">
+                {a.description}
+              </p>
             )}
           </div>
-        )}
-
-        {a.description && (
-          <p className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground">
-            {a.description}
-          </p>
         )}
       </CardContent>
 
