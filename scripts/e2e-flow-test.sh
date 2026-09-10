@@ -1291,9 +1291,9 @@ check "push-client: تداوي صامت + توجيه أول تفاعل + علم 
 check "اللوحات تستدعي maybeAutoPromptOnInteraction عند التحميل" "1" "$(
   grep -cF 'maybeAutoPromptOnInteraction()' components/shared/dashboard-shell.tsx | awk '{print ($1>=1)?1:0}'
 )"
-# اللافتة: الإخفاء صار للجلسة فقط (sessionStorage بمفتاح v2)
-R17_BANNER=$(awk '/sessionStorage/{p1=1} /push-banner-dismissed-v2/{p2=1} END{print p1+p2}' components/pwa/push-banner.tsx)
-check "push-banner: إخفاء لكل جلسة (sessionStorage v2)" "2" "$R17_BANNER"
+# اللافتة: الإخفاء صار للجلسة فقط — sessionStorage في اللافتة + مفتاح v2 في push-client
+R17_BANNER=$(( $(awk '/sessionStorage/{p=1} END{print p?1:0}' components/pwa/push-banner.tsx) + $(awk '/push-banner-dismissed-v2/{p=1} END{print p?1:0}' lib/push-client.ts) ))
+check "push-banner: إخفاء لكل جلسة (sessionStorage بمفتاح v2)" "2" "$R17_BANNER"
 # الطبقة الفورية: سلوك الاشتراك — نغمة خلفية للأجهزة غير المشتركة دون فقد إشعارات
 R17_RT=$(awk '/subscribedRef/{p1=1} /getPushState/{p2=1} END{print p1+p2}' components/shared/notification-realtime.tsx)
 check "notification-realtime: وعي بالاشتراك (نغمة خلفية + عرض عند العودة)" "2" "$R17_RT"
