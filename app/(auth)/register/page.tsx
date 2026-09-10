@@ -32,11 +32,11 @@ import { ORG_TYPE_LABELS } from '@/lib/network'
 import { getServerIssueMessage } from '@/lib/client-diagnostics'
 
 /**
- * صفحة التسجيل — الجولة الثامنة:
- * - الاسم مع اللقب فقط (حقلان: الاسم + اللقب) للكادر والمستلم
+ * صفحة التسجيل — الجولة الثالثة عشرة:
+ * - الاسم مع اللقب في حقل واحد (حقل واحد للكادر والمستلم)
  * - الهاتف 9 أرقام حصراً (maxLength=9)
  * - كلمة المرور مرة واحدة دون تأكيد
- * - الكادر: التخصص اختياري (أقسام الإدارة) + المؤهل من 3 خيارات + الجنس إجباري + خبرة بلا صفر افتراضي
+ * - الكادر: التخصص إجباري (أقسام الإدارة) + سنوات الخبرة إجبارية + المؤهل من 3 خيارات + الجنس إجباري
  * - المستلم: الجهة من جهات الإدارة أو جهة جديدة مع بقية بياناتها تُرفع للاعتماد
  */
 
@@ -61,15 +61,14 @@ export default function RegisterPage() {
 
   // حقول مشتركة
   const [role, setRole] = useState<'NURSE' | 'RECEIVER'>('NURSE')
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
+  const [name, setName] = useState('') // حقل واحد: الاسم مع اللقب
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
 
   // حقول الكادر التمريضي
-  const [specialty, setSpecialty] = useState('') // اختياري
+  const [specialty, setSpecialty] = useState('') // إجباري — من أقسام الإدارة
   const [qualification, setQualification] = useState('')
-  const [yearsOfExperience, setYearsOfExperience] = useState('') // فارغ بدل 0
+  const [yearsOfExperience, setYearsOfExperience] = useState('') // إجباري — يبدأ فارغاً
   const [gender, setGender] = useState('')
 
   // الجهة الصحية للمستلم الإداري
@@ -93,19 +92,32 @@ export default function RegisterPage() {
     setError(null)
 
     // ---------- تحقق العميل (نفس قواعد الخادم) ----------
-    if (firstName.trim().length < 2) return setError('أدخل الاسم الأول')
-    if (lastName.trim().length < 2) return setError('أدخل اللقب — الاسم مع اللقب فقط')
+    const nameWords = name.trim().split(/\s+/).filter(Boolean)
+    if (name.trim().length < 3 || nameWords.length < 2) {
+      return setError('أدخل الاسم مع اللقب في حقل واحد — مثال: أحمد صالح')
+    }
     if (!/^7\d{8}$/.test(phone)) {
       return setError('رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام فقط — مثال: 773178684')
     }
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
       return setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي حروفاً وأرقاماً')
     }
-    if (role === 'NURSE' && !qualification) {
-      return setError('المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)')
-    }
-    if (role === 'NURSE' && !gender) {
-      return setError('الجنس مطلوب — اختر ذكر أو أنثى')
+    if (role === 'NURSE') {
+      if (specialty.trim().length === 0) {
+        return setError('التخصص مطلوب — اختر القسم من القائمة')
+      }
+      if (yearsOfExperience === '') {
+        return setError('سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)')
+      }
+      if (!/^\d+$/.test(yearsOfExperience) || Number(yearsOfExperience) > 50) {
+        return setError('سنوات الخبرة يجب أن تكون رقماً صحيحاً بين 0 و 50')
+      }
+      if (!qualification) {
+        return setError('المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)')
+      }
+      if (!gender) {
+        return setError('الجنس مطلوب — اختر ذكر أو أنثى')
+      }
     }
     if (role === 'RECEIVER') {
       if (orgMode === 'existing' && !orgId) {
@@ -116,13 +128,12 @@ export default function RegisterPage() {
       }
     }
 
-    const name = `${firstName.trim()} ${lastName.trim()}`
-    const payload: Record<string, unknown> = { role, name, phone, password }
+    const payload: Record<string, unknown> = { role, name: name.trim(), phone, password }
 
     if (role === 'NURSE') {
-      payload.specialty = specialty || undefined
+      payload.specialty = specialty.trim() // إجباري
       payload.qualification = qualification
-      payload.yearsOfExperience = yearsOfExperience === '' ? 0 : Number(yearsOfExperience)
+      payload.yearsOfExperience = Number(yearsOfExperience) // إجباري (0 للمتخرج الجديد)
       payload.gender = gender
     } else if (orgMode === 'existing') {
       const org = orgs.find((o) => o.id === orgId)
@@ -211,29 +222,18 @@ export default function RegisterPage() {
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        {/* الاسم مع اللقب فقط */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="firstName">الاسم *</Label>
-            <Input
-              id="firstName"
-              placeholder="مثال: أحمد"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="lastName">اللقب *</Label>
-            <Input
-              id="lastName"
-              placeholder="مثال: صالح"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              الاسم مع اللقب فقط — دون الأسماء الوسطى
-            </p>
-          </div>
+        {/* الاسم مع اللقب — حقل واحد */}
+        <div className="space-y-2">
+          <Label htmlFor="name">الاسم مع اللقب *</Label>
+          <Input
+            id="name"
+            placeholder="مثال: أحمد صالح"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            حقل واحد يحوي الاسم مع اللقب فقط — دون الأسماء الوسطى
+          </p>
         </div>
 
         {/* الهاتف — 9 أرقام حصراً */}
@@ -260,39 +260,57 @@ export default function RegisterPage() {
         {role === 'NURSE' && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* التخصص — اختياري من أقسام الإدارة */}
+              {/* التخصص — إجباري من أقسام الإدارة */}
               <div className="space-y-2">
-                <Label htmlFor="specialty">التخصص (اختياري)</Label>
-                <Select value={specialty} onValueChange={setSpecialty}>
-                  <SelectTrigger id="specialty">
-                    <SelectValue placeholder="اختر القسم إن وجد" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value=" ">بلا تخصص محدد</SelectItem>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.name}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground">
-                  نفس الأقسام التي تُعمل بها التكليفات — تُدار من حساب الإدارة
-                </p>
+                <Label htmlFor="specialty">التخصص *</Label>
+                {departments.length === 0 ? (
+                  <>
+                    <Input
+                      id="specialty"
+                      placeholder="مثال: تمريض طوارئ"
+                      value={specialty}
+                      onChange={(e) => setSpecialty(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      قائمة الأقسام غير متوفرة حالياً — اكتب تخصصك يدوياً
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Select value={specialty} onValueChange={setSpecialty}>
+                      <SelectTrigger id="specialty">
+                        <SelectValue placeholder="اختر القسم / التخصص" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((d) => (
+                          <SelectItem key={d.id} value={d.name}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      إجباري — نفس الأقسام التي تُعمل بها التكليفات وتُدار من حساب الإدارة
+                    </p>
+                  </>
+                )}
               </div>
-              {/* سنوات الخبرة — بلا صفر افتراضي */}
+              {/* سنوات الخبرة — إجبارية */}
               <div className="space-y-2">
-                <Label htmlFor="yearsOfExperience">سنوات الخبرة (اختياري)</Label>
+                <Label htmlFor="yearsOfExperience">سنوات الخبرة *</Label>
                 <Input
                   id="yearsOfExperience"
                   type="number"
                   inputMode="numeric"
                   min={0}
                   max={50}
-                  placeholder="أدخل عدد السنوات"
+                  placeholder="مثال: 5 — أو 0 للمتخرج الجديد"
                   value={yearsOfExperience}
                   onChange={(e) => setYearsOfExperience(e.target.value)}
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  إجباري — أدخل 0 إذا كنت متخرجاً جديداً بلا خبرة
+                </p>
               </div>
             </div>
 

@@ -189,7 +189,7 @@ check "منع المستلم من تعديل الإعدادات → 403" "403" "
 
 echo "=========== 10) سياسة الاعتماد الصارمة + الجهة الصحية للإدارة ==========="
 REG2=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر بلا مستندات","phone":"744444460","password":"NoDocs@1234","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE"}')
+  -d '{"role":"NURSE","name":"كادر بلا مستندات","phone":"744444460","password":"NoDocs@1234","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":6}')
 check "تسجيل كادر ثانٍ (بلا مستندات) → 201" "201" "$REG2"
 
 STRICT_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | jget "['users'][0]['id']")
@@ -264,7 +264,7 @@ echo "=========== 14) الملف الشخصي وكلمات المرور واله
 # حساب مؤقت لإجراءات الحساب
 TMP_PHONE="744444455"
 TMP_CREATE=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d "{\"name\":\"كادر مؤقت\",\"phone\":\"$TMP_PHONE\",\"password\":\"Temp@12345\",\"role\":\"NURSE\",\"qualification\":\"بكالوريوس أربع سنوات\",\"gender\":\"MALE\",\"yearsOfExperience\":3}")
+  -d "{\"name\":\"كادر مؤقت\",\"phone\":\"$TMP_PHONE\",\"password\":\"Temp@12345\",\"role\":\"NURSE\",\"specialty\":\"تمريض عام\",\"qualification\":\"بكالوريوس أربع سنوات\",\"gender\":\"MALE\",\"yearsOfExperience\":3}")
 TMP_ID=$(echo "$TMP_CREATE" | jget "['user']['id']")
 [ -n "$TMP_ID" ] && check "الإدارة تنشئ حساب كادر مؤقت للاختبار" "ok" "ok" || check "حساب مؤقت" "id" "null"
 
@@ -769,11 +769,23 @@ BAD_QUAL=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/js
   -d '{"role":"NURSE","name":"نورا سالم","phone":"744440312","password":"Round8@123","qualification":"دكتوراه","gender":"FEMALE"}')
 check "رفض مؤهل خارج الخيارات الثلاثة → 422" "422" "$BAD_QUAL"
 
-# --- كادر جديد بقواعد الجولة الثامنة (التخصص اختياري) ---
+# --- قواعد الجولة الثالثة عشرة: التخصص وسنوات الخبرة إجبارية للكادر ---
+R8_NO_SPEC=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"نورا بلا تخصص","phone":"788880391","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":2}')
+check "رفض تسجيل كادر بلا تخصص (إجباري) → 422" "422" "$R8_NO_SPEC"
+
+R8_NO_YEARS=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"نورا بلا خبرة","phone":"788880392","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","specialty":"عناية مركزة"}')
+check "رفض تسجيل كادر بسنوات خبرة مفقودة (إجباري) → 422" "422" "$R8_NO_YEARS"
+
+R8_EMPTY_YEARS=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"نورا خبرة فارغة","phone":"788880393","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","specialty":"عناية مركزة","yearsOfExperience":""}')
+check "رفض سنوات خبرة فارغة (سلسلة فارغة) → 422" "422" "$R8_EMPTY_YEARS"
+
 R8_N=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"نورا الشبكي","phone":"788880301","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE"}')
+  -d '{"role":"NURSE","name":"نورا الشبكي","phone":"788880301","password":"Round8@123","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":2}')
 R8_N_ID=$(echo "$R8_N" | jget "['user']['id']")
-[ -n "$R8_N_ID" ] && check "تسجيل كادر بلا تخصص (اختياري) → 201" "ok" "ok" || check "تسجيل كادر الجولة الثامنة" "id" "null"
+[ -n "$R8_N_ID" ] && check "تسجيل كادر بالتخصص والخبرة (إجبارية) → 201" "ok" "ok" || check "تسجيل كادر الجولة الثالثة عشرة" "id" "null"
 
 # --- مستلم جديد بجهة صحية جديدة مع بقية بياناتها → تُرفع للاعتماد ---
 R8_R=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
@@ -865,7 +877,7 @@ check "الإدارة تعتمد جهة العمل بعد المستندات →
 # --- كوادر الجهة: المستلم يضيف ممرض لجهته ---
 login "$DIR/r8receiver.jar" "788880302" "Round8@123"
 R8_STAFF=$(curl -s -b "$DIR/r8receiver.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
-  -d '{"name":"هند عبده","phone":"788880303","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","yearsOfExperience":0}')
+  -d '{"name":"هند عبده","phone":"788880303","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","specialty":"تمريض عام","yearsOfExperience":0}')
 R8_STAFF_ID=$(echo "$R8_STAFF" | jget "['nurse']['id']")
 [ -n "$R8_STAFF_ID" ] && check "المستلم يضيف ممرضة لجهته النشطة → 201 (ارتباط WORKING مباشرة)" "ok" "ok" || check "إضافة ممرض للجهة" "id" "null"
 
@@ -906,7 +918,7 @@ curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R8_ORG2_ID -o /
 echo "=========== 23) مراجعة طلبات الارتباط المعلقة من لوحة الجهة ==========="
 
 R9_N=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"طلاب المراجعة","phone":"788880401","password":"Round9@1234","qualification":"بكالوريوس أربع سنوات","gender":"MALE"}')
+  -d '{"role":"NURSE","name":"طلاب المراجعة","phone":"788880401","password":"Round9@1234","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","gender":"MALE","yearsOfExperience":1}')
 R9_N_ID=$(echo "$R9_N" | jget "['user']['id']")
 [ -n "$R9_N_ID" ] && check "تسجيل كادر قسم المراجعة → 201" "ok" "ok" || check "تسجيل كادر قسم المراجعة" "id" "null"
 
@@ -1003,7 +1015,7 @@ check "عقد إعادة نشر آخر تكليف: posts[0] يحمل كل حقو
 
 # المستندات المجمعة: ?userId يعيد مستندات كادر محدد حصراً
 R10_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"مستندات مجمعة","phone":"788880501","password":"Round10@12","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE"}')
+  -d '{"role":"NURSE","name":"مستندات مجمعة","phone":"788880501","password":"Round10@12","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":4}')
 R10_N2_ID=$(echo "$R10_N2" | jget "['user']['id']")
 [ -n "$R10_N2_ID" ] && check "تسجيل كادر قسم المستندات → 201" "ok" "ok" || check "تسجيل كادر المستندات" "id" "null"
 login "$DIR/r10nurse.jar" "788880501" "Round10@12"

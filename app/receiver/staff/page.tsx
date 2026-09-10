@@ -330,18 +330,18 @@ export default function ReceiverStaffPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>التخصص (اختياري)</Label>
+                <Label>التخصص *</Label>
                 <Input placeholder="مثال: تمريض طوارئ" {...createForm.register('specialty')} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="staff-exp">سنوات الخبرة (اختياري)</Label>
+                <Label htmlFor="staff-exp">سنوات الخبرة *</Label>
                 <Input
                   id="staff-exp"
                   type="number"
                   inputMode="numeric"
                   min={0}
                   max={50}
-                  placeholder="أدخل عدد السنوات"
+                  placeholder="مثال: 5 — أو 0 للمتخرج الجديد"
                   {...createForm.register('yearsOfExperience')}
                 />
               </div>

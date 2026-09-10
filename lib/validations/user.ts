@@ -3,8 +3,9 @@ import { PHONE_REGEX, PHONE_MESSAGE, QUALIFICATION_VALUES } from '@/lib/validati
 
 /**
  * حسابات يُنشئها مدير النظام (مستلم إداري / كادر تمريضي) ومستلم الجهة لكوادر جهته.
- * نفس قواعد التسجيل الذاتي — الجولة الثامنة:
- * الاسم مع اللقب فقط + هاتف 9 أرقام + مؤهل من 3 خيارات + جنس إجباري للكادر.
+ * نفس قواعد التسجيل الذاتي — الجولة الثالثة عشرة:
+ * الاسم في حقل واحد (الاسم مع اللقب) + هاتف 9 أرقام + مؤهل من 3 خيارات
+ * + جنس إجباري للكادر + التخصص وسنوات الخبرة إجبارية للكادر.
  */
 
 const adminPhoneSchema = z
@@ -39,20 +40,27 @@ export const createNurseSchema = z.object({
   name: fullNameSchema,
   phone: adminPhoneSchema,
   password: adminPasswordSchema,
-  // التخصص اختياري — يُختار من الأقسام المُدارة في حساب الإدارة
-  specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
+  // التخصص إجباري — يُختار من الأقسام المُدارة في حساب الإدارة
+  specialty: z
+    .string({ error: 'التخصص مطلوب — اختر القسم من القائمة' })
+    .trim()
+    .min(1, 'التخصص مطلوب — اختر القسم من القائمة')
+    .max(80, 'التخصص طويل جداً'),
   qualification: z
     .enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
   gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
-  yearsOfExperience: z.coerce
-    .number({ error: 'سنوات الخبرة غير صحيحة' })
-    .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
-    .min(0, 'سنوات الخبرة غير صحيحة')
-    .max(50, 'سنوات الخبرة غير صحيحة')
-    .optional(),
+  // سنوات الخبرة إجبارية — الفراغ يُعامل كحقل مفقود (0 للمتخرج الجديد)
+  yearsOfExperience: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.coerce
+      .number({ error: 'سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)' })
+      .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
+      .min(0, 'سنوات الخبرة غير صحيحة')
+      .max(50, 'سنوات الخبرة غير صحيحة')
+  ),
 })
 
-/** إضافة ممرض لجهة المستلم الإداري — الجولة الثامنة */
+/** إضافة ممرض لجهة المستلم الإداري — الجولة الثامنة (التخصص والخبرة إجبارية من الجولة الثالثة عشرة) */
 export const receiverCreateNurseSchema = z.object({
   name: fullNameSchema,
   phone: adminPhoneSchema,
@@ -60,13 +68,19 @@ export const receiverCreateNurseSchema = z.object({
   gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
   qualification: z
     .enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
-  specialty: z.string().max(80, 'التخصص طويل جداً').optional(),
-  yearsOfExperience: z.coerce
-    .number({ error: 'سنوات الخبرة غير صحيحة' })
-    .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
-    .min(0, 'سنوات الخبرة غير صحيحة')
-    .max(50, 'سنوات الخبرة غير صحيحة')
-    .optional(),
+  specialty: z
+    .string({ error: 'التخصص مطلوب — أدخل التخصص' })
+    .trim()
+    .min(1, 'التخصص مطلوب — أدخل التخصص')
+    .max(80, 'التخصص طويل جداً'),
+  yearsOfExperience: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.coerce
+      .number({ error: 'سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)' })
+      .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
+      .min(0, 'سنوات الخبرة غير صحيحة')
+      .max(50, 'سنوات الخبرة غير صحيحة')
+  ),
 })
 
 export const reviewUserSchema = z.object({

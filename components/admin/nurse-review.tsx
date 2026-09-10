@@ -323,7 +323,7 @@ export function NurseReview() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="nurse-specialty">التخصص (اختياري)</Label>
+                <Label htmlFor="nurse-specialty">التخصص *</Label>
                 <Input
                   id="nurse-specialty"
                   placeholder="مثال: تمريض طوارئ"
@@ -336,7 +336,7 @@ export function NurseReview() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nurse-experience">سنوات الخبرة (اختياري)</Label>
+                <Label htmlFor="nurse-experience">سنوات الخبرة *</Label>
                 <Input
                   id="nurse-experience"
                   type="number"
