@@ -42,7 +42,7 @@ export function ProfessionalCard({
   return (
     <div className="overflow-hidden rounded-3xl border shadow-lg">
       {/* رأس البطاقة — التدرج الرسمي للمنصة */}
-      <div className="relative bg-gradient-to-bl from-[#0F9BA8] to-[#1FA97A] p-5 text-white">
+      <div className="relative bg-gradient-to-bl from-[#2563EB] to-[#8B5CF6] p-5 text-white">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">

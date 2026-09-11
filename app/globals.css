@@ -48,74 +48,75 @@
   --radius: 0.625rem;
   --font-cairo: 'Cairo Variable', 'Cairo', 'Segoe UI', Tahoma, sans-serif;
 
-  /* الهوية الطبية — تكليفات: أخضر طبي (Teal/Emerald) */
-  --background: oklch(0.99 0.003 180);
-  --foreground: oklch(0.2 0.02 220);
+  /* هوية تكليفات — من الأيقونة الجديدة: كحلي داكن + أزرق ملكي + سماوي + بنفسجي */
+  --background: oklch(0.988 0.004 250);
+  --foreground: oklch(0.27 0.06 265);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 220);
+  --card-foreground: oklch(0.27 0.06 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 220);
-  --primary: oklch(0.58 0.11 185);
-  --primary-foreground: oklch(0.99 0.005 180);
-  --secondary: oklch(0.96 0.012 180);
-  --secondary-foreground: oklch(0.35 0.06 190);
-  --muted: oklch(0.965 0.008 180);
-  --muted-foreground: oklch(0.5 0.02 210);
-  --accent: oklch(0.94 0.03 180);
-  --accent-foreground: oklch(0.35 0.06 190);
+  --popover-foreground: oklch(0.27 0.06 265);
+  --primary: oklch(0.546 0.215 262);
+  --primary-foreground: oklch(0.99 0.005 250);
+  --secondary: oklch(0.955 0.02 250);
+  --secondary-foreground: oklch(0.35 0.09 262);
+  --muted: oklch(0.965 0.01 250);
+  --muted-foreground: oklch(0.5 0.035 260);
+  --accent: oklch(0.94 0.03 232);
+  --accent-foreground: oklch(0.35 0.09 250);
   --destructive: oklch(0.58 0.22 27);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.91 0.01 190);
-  --input: oklch(0.91 0.01 190);
-  --ring: oklch(0.58 0.11 185);
-  --chart-1: oklch(0.58 0.11 185);
-  --chart-2: oklch(0.65 0.14 155);
-  --chart-3: oklch(0.75 0.13 90);
-  --chart-4: oklch(0.62 0.16 250);
-  --chart-5: oklch(0.6 0.2 20);
-  --sidebar: oklch(0.985 0.006 185);
-  --sidebar-foreground: oklch(0.25 0.02 210);
-  --sidebar-primary: oklch(0.58 0.11 185);
-  --sidebar-primary-foreground: oklch(0.99 0.005 180);
-  --sidebar-accent: oklch(0.94 0.03 180);
-  --sidebar-accent-foreground: oklch(0.35 0.06 190);
-  --sidebar-border: oklch(0.91 0.01 190);
-  --sidebar-ring: oklch(0.58 0.11 185);
+  --border: oklch(0.91 0.015 255);
+  --input: oklch(0.91 0.015 255);
+  --ring: oklch(0.546 0.215 262);
+  --chart-1: oklch(0.546 0.215 262);
+  --chart-2: oklch(0.746 0.14 232);
+  --chart-3: oklch(0.606 0.25 293);
+  --chart-4: oklch(0.42 0.14 265);
+  --chart-5: oklch(0.78 0.14 85);
+  --sidebar: oklch(0.975 0.008 255);
+  --sidebar-foreground: oklch(0.3 0.05 262);
+  --sidebar-primary: oklch(0.546 0.215 262);
+  --sidebar-primary-foreground: oklch(0.99 0.005 250);
+  --sidebar-accent: oklch(0.94 0.03 232);
+  --sidebar-accent-foreground: oklch(0.35 0.09 250);
+  --sidebar-border: oklch(0.91 0.015 255);
+  --sidebar-ring: oklch(0.546 0.215 262);
 }
 
 .dark {
-  --background: oklch(0.17 0.015 220);
-  --foreground: oklch(0.96 0.005 180);
-  --card: oklch(0.21 0.018 220);
-  --card-foreground: oklch(0.96 0.005 180);
-  --popover: oklch(0.21 0.018 220);
-  --popover-foreground: oklch(0.96 0.005 180);
-  --primary: oklch(0.7 0.12 180);
-  --primary-foreground: oklch(0.16 0.02 210);
-  --secondary: oklch(0.27 0.02 215);
-  --secondary-foreground: oklch(0.96 0.005 180);
-  --muted: oklch(0.27 0.02 215);
-  --muted-foreground: oklch(0.68 0.015 200);
-  --accent: oklch(0.3 0.03 190);
-  --accent-foreground: oklch(0.96 0.005 180);
+  /* الوضع الداكن — كحلي الأيقونة العميق مع سماوي لامع */
+  --background: oklch(0.24 0.07 270);
+  --foreground: oklch(0.95 0.01 240);
+  --card: oklch(0.28 0.075 267);
+  --card-foreground: oklch(0.95 0.01 240);
+  --popover: oklch(0.28 0.075 267);
+  --popover-foreground: oklch(0.95 0.01 240);
+  --primary: oklch(0.78 0.115 232);
+  --primary-foreground: oklch(0.22 0.07 268);
+  --secondary: oklch(0.33 0.07 265);
+  --secondary-foreground: oklch(0.93 0.02 240);
+  --muted: oklch(0.32 0.065 264);
+  --muted-foreground: oklch(0.72 0.03 250);
+  --accent: oklch(0.35 0.07 262);
+  --accent-foreground: oklch(0.95 0.01 240);
   --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: oklch(0.97 0 0);
-  --border: oklch(0.3 0.02 215);
-  --input: oklch(0.32 0.02 215);
-  --ring: oklch(0.7 0.12 180);
-  --chart-1: oklch(0.7 0.12 180);
-  --chart-2: oklch(0.7 0.14 155);
-  --chart-3: oklch(0.78 0.13 90);
-  --chart-4: oklch(0.68 0.15 250);
-  --chart-5: oklch(0.65 0.2 20);
-  --sidebar: oklch(0.19 0.016 220);
-  --sidebar-foreground: oklch(0.94 0.005 180);
-  --sidebar-primary: oklch(0.7 0.12 180);
-  --sidebar-primary-foreground: oklch(0.16 0.02 210);
-  --sidebar-accent: oklch(0.3 0.03 190);
-  --sidebar-accent-foreground: oklch(0.94 0.005 180);
-  --sidebar-border: oklch(0.3 0.02 215);
-  --sidebar-ring: oklch(0.7 0.12 180);
+  --border: oklch(0.36 0.06 264);
+  --input: oklch(0.38 0.06 263);
+  --ring: oklch(0.78 0.115 232);
+  --chart-1: oklch(0.78 0.115 232);
+  --chart-2: oklch(0.62 0.19 262);
+  --chart-3: oklch(0.65 0.22 293);
+  --chart-4: oklch(0.5 0.12 268);
+  --chart-5: oklch(0.8 0.13 85);
+  --sidebar: oklch(0.26 0.07 269);
+  --sidebar-foreground: oklch(0.93 0.012 245);
+  --sidebar-primary: oklch(0.78 0.115 232);
+  --sidebar-primary-foreground: oklch(0.22 0.07 268);
+  --sidebar-accent: oklch(0.35 0.07 262);
+  --sidebar-accent-foreground: oklch(0.95 0.01 240);
+  --sidebar-border: oklch(0.36 0.06 264);
+  --sidebar-ring: oklch(0.78 0.115 232);
 }
 
 @layer base {
@@ -140,19 +141,19 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.8 0.02 190);
+  background: oklch(0.8 0.05 255);
   border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.65 0.05 190);
+  background: oklch(0.65 0.1 262);
 }
 
-/* تدرجات الهوية */
+/* تدرجات الهوية — سماوي ← أزرق ملكي ← بنفسجي (كما في حافة الأيقونة) */
 .brand-gradient {
-  background: linear-gradient(135deg, oklch(0.52 0.1 190) 0%, oklch(0.6 0.13 170) 55%, oklch(0.65 0.14 155) 100%);
+  background: linear-gradient(135deg, oklch(0.746 0.14 232) 0%, oklch(0.546 0.215 262) 52%, oklch(0.606 0.25 293) 100%);
 }
 .brand-gradient-soft {
-  background: linear-gradient(135deg, oklch(0.96 0.025 185) 0%, oklch(0.97 0.02 160) 100%);
+  background: linear-gradient(135deg, oklch(0.96 0.02 232) 0%, oklch(0.96 0.02 280) 100%);
 }
 
 /* أيقونة التواصل العائمة — نبض ظهور القنوات */

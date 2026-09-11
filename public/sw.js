@@ -10,7 +10,7 @@
  *  6) الجولة الخامسة عشرة: اهتزاز + تنبيه مستقل لكل إشعار (renotify) — كل إشعار يصدر صوتاً وينبثق حتى بتكرار الرابط
  * ============================================================ */
 
-const VERSION = 'takleefat-v3'
+const VERSION = 'takleefat-v4'
 const OFFLINE_URL = '/offline.html'
 const PRECACHE_URLS = [
   OFFLINE_URL,

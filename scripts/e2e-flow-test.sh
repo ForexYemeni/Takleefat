@@ -1143,7 +1143,7 @@ echo "=========== 26) PWA — manifest + sw.js + offline + الأيقونات ==
 R26_MANIFEST=$(curl -s $BASE/manifest.webmanifest)
 check "manifest.webmanifest متاح → 200" "200" "$(code $BASE/manifest.webmanifest)"
 check "manifest: الاسم يحوي تكليفات" "True" "$(echo "$R26_MANIFEST" | python3 -c "import json,sys;d=json.load(sys.stdin);print('تكليفات' in d.get('name',''))" 2>/dev/null)"
-check "manifest: standalone + rtl + ar + خلفية بيضاء" "standalone rtl ar #FFFFFF" "$(echo "$R26_MANIFEST" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('display'),d.get('dir'),d.get('lang'),d.get('background_color'))" 2>/dev/null)"
+check "manifest: standalone + rtl + ar + هوية كحلية (background/theme)" "standalone rtl ar #0E1B4E #0E1B4E" "$(echo "$R26_MANIFEST" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('display'),d.get('dir'),d.get('lang'),d.get('background_color'),d.get('theme_color'))" 2>/dev/null)"
 check "manifest: أيقونات any 192/512 + maskable" "True True True True" "$(
   echo "$R26_MANIFEST" | python3 -c "
 import json,sys
@@ -1304,7 +1304,6 @@ check "notification-realtime: isLoading ضمن معتمدات الأثر" "1" "$
   grep -cF 'notifications, markRead, router, isLoading' components/shared/notification-realtime.tsx | awk '{print ($1>=1)?1:0}'
 )"
 
-# ─────────────────────────────────────────────────────────────────────────────
 # القسم 30 — الجولة 19: الإرسال الفوري الحقيقي عبر after()
 # الجذر: fire-and-forget كان يموت على السيرفرلس فور إرجاع الاستجابة — الإشعار
 # التجريبي (المُنتظَر) يصل والحقيقي لا يصل. الآن الإرسال مُجدول بـ after().
@@ -1331,6 +1330,20 @@ check "subscribe: upsert بمركب userId_endpoint (كل حساب يملك جه
 check "push: سجل تشخيصي لعدد الأجهزة التي وصلها الإشعار" "1" "$(
   grep -cF '[push] delivered' lib/push.ts | awk '{print ($1>=1)?1:0}'
 )"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 32 — الجولة 21: الهوية البصرية الجديدة (أيقونة + ألوان من الصورة الرسمية)
+# كحلي #0E1B4E + أزرق ملكي #2563EB + سماوي #38BDF8/4FC3F7 + بنفسجي #8B5CF6
+# ─────────────────────────────────────────────────────────────────────────────
+R21_THEME=$(grep -cF "theme_color: '#0E1B4E'" app/manifest.ts)
+check "manifest: theme_color كحلي الأيقونة #0E1B4E" "1" "$R21_THEME"
+R21_PALETTE=$(( $(grep -cF 'oklch(0.546 0.215 262)' app/globals.css) >= 4 ? 1 : 0 ))
+R21_DARK=$(( $(grep -cF 'oklch(0.78 0.115 232)' app/globals.css) >= 3 ? 1 : 0 ))
+check "globals: الهوية الجديدة (أزرق ملكي فاتح + سماوي داكن)" "2" "$((R21_PALETTE + R21_DARK))"
+R21_GRAD=$(( $(grep -cF 'oklch(0.606 0.25 293)' app/globals.css) >= 2 ? 1 : 0 ))
+check "globals: تدرج الهوية ينتهي بالبنفسجي" "1" "$R21_GRAD"
+check "logo.svg: تدرج أزرق ملكي ← بنفسجي" "2" "$(grep -cE '#2563EB|#8B5CF6' public/logo.svg | awk '{print ($1>=2)?2:0}')"
+check "sw.js: إصدار v4 (إبطال كاش الأيقونات القديمة)" "1" "$(grep -cF "takleefat-v4" public/sw.js)"
 
 echo ""
 echo "==========================================="

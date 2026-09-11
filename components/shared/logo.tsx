@@ -32,13 +32,13 @@ export function Logo({ size = 'md', showText = true, className, textClassName }:
       >
         <defs>
           <linearGradient id="tkf-logo-g" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#0F9BA8" />
-            <stop offset="1" stopColor="#1FA97A" />
+            <stop stopColor="#2563EB" />
+            <stop offset="1" stopColor="#8B5CF6" />
           </linearGradient>
         </defs>
         <rect width="48" height="48" rx="12" fill="url(#tkf-logo-g)" />
         <rect x="13.5" y="11.5" width="21" height="25" rx="4" stroke="white" strokeWidth="2.4" fill="none" />
-        <rect x="19" y="8.2" width="10" height="6.4" rx="2.2" fill="white" stroke="#0F9BA8" strokeWidth="1.2" />
+        <rect x="19" y="8.2" width="10" height="6.4" rx="2.2" fill="white" stroke="#2563EB" strokeWidth="1.2" />
         <path d="M24 18.6v7.2M20.4 22.2h7.2" stroke="white" strokeWidth="2.6" strokeLinecap="round" />
         <path d="M19.6 30.4l2.9 2.9 5.9-5.9" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

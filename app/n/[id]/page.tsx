@@ -105,7 +105,7 @@ export default async function PublicNurseCardPage({
     margin: 0,
     width: 96,
     errorCorrectionLevel: 'M',
-    color: { dark: '#0F9BA8', light: '#FFFFFF' },
+    color: { dark: '#0E1B4E', light: '#FFFFFF' },
   })
 
   const cardProps: ProfessionalCardProps = {
@@ -129,7 +129,7 @@ export default async function PublicNurseCardPage({
           <Link href="/" aria-label="منصة تكليفات">
             <Logo size="md" />
           </Link>
-          <span className="flex items-center gap-1.5 rounded-full border border-[#1FA97A]/30 bg-[#1FA97A]/10 px-3 py-1 text-xs font-bold text-[#1FA97A]">
+          <span className="flex items-center gap-1.5 rounded-full border border-[#2563EB]/30 bg-[#2563EB]/10 px-3 py-1 text-xs font-bold text-[#2563EB]">
             <ShieldCheck className="size-4" />
             بطاقة موثقة
           </span>

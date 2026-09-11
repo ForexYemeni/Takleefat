@@ -63,7 +63,7 @@ export default function NurseCardPage() {
       margin: 0,
       width: 96,
       errorCorrectionLevel: 'M',
-      color: { dark: '#0F9BA8', light: '#FFFFFF' },
+      color: { dark: '#0E1B4E', light: '#FFFFFF' },
     })
       .then((svg) => {
         if (cancelled) return
