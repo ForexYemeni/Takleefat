@@ -1876,9 +1876,11 @@ FAV_PATCH=$(code -b "$DIR/supervisor.jar" -X PATCH "$BASE/api/receiver/favorites
 check "المشرف يحدّث ملاحظة الطبيب المفضل → 200" "200" "$FAV_PATCH"
 
 # --- فحص حي: صفحة أطباء جهتي تعكس نجمة المفضلة ---
+# الجهة قد تُنشأ تلقائياً عند إنشاء المشرف في القسم 38 → 409 = موجودة مسبقاً (مقبول)
 SUP_ORG=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
   -d '{"name":"مستشفى E2E الأساس","type":"HOSPITAL"}')
-check "إنشاء جهة المشرف الصحية (ربط بالاسم) → 201" "201" "$SUP_ORG"
+case "$SUP_ORG" in 201|409) SUP_ORG_OK="ok";; *) SUP_ORG_OK="$SUP_ORG";; esac
+check "جهة المشرف الصحية متاحة للربط بالاسم (201 أو 409 موجودة مسبقاً)" "ok" "$SUP_ORG_OK"
 
 R30_NEWDOC=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r30_newdoc.json" -w "%{http_code}" -X POST $BASE/api/receiver/staff \
   -H "Content-Type: application/json" \
