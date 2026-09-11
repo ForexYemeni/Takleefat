@@ -36,6 +36,22 @@ export const createReceiverSchema = z.object({
   hospitalName: z.string().max(120, 'اسم الجهة الصحية طويل جداً').optional(),
 })
 
+/**
+ * إنشاء مشرف أطباء من الإدارة — الجولة 31:
+ * الجهة الصحية إجبارية ويجب أن تكون من جهات الإدارة المسجلة (كتالوج الجهات الصحية)
+ * — المشرف يرتبط بجهته رسمياً فيُحل الارتباط تلقائياً في كل مسارات المنصة.
+ */
+export const createSupervisorSchema = z.object({
+  name: fullNameSchema,
+  phone: adminPhoneSchema,
+  password: adminPasswordSchema,
+  hospitalName: z
+    .string({ error: 'الجهة الصحية مطلوبة — اخترها من جهات الإدارة المسجلة' })
+    .trim()
+    .min(1, 'الجهة الصحية مطلوبة — اخترها من جهات الإدارة المسجلة')
+    .max(120, 'اسم الجهة الصحية طويل جداً'),
+})
+
 export const createNurseSchema = z.object({
   name: fullNameSchema,
   phone: adminPhoneSchema,
@@ -105,9 +121,6 @@ export const createDoctorSchema = z.object({
   ),
 })
 
-/** إنشاء حساب مشرف أطباء من الإدارة — نفس شكل المستلم الإداري (منظومة الأطباء) */
-export const createSupervisorSchema = createReceiverSchema
-
 export const reviewUserSchema = z.object({
   status: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING'], {
     error: 'الحالة غير صحيحة',
@@ -121,6 +134,20 @@ export type CreateNurseFormValues = z.input<typeof createNurseSchema>
 export type CreateDoctorInput = z.infer<typeof createDoctorSchema>
 export type CreateDoctorFormValues = z.input<typeof createDoctorSchema>
 export type CreateSupervisorInput = z.infer<typeof createSupervisorSchema>
+
+// ---------- المؤهلات العلمية — تعديل مؤهل كادر/طبيب من الإدارة (الجولة 31) ----------
+
+export const updateQualificationSchema = z.object({
+  userId: z.string({ error: 'معرّف الحساب مطلوب' }).min(1, 'معرّف الحساب مطلوب'),
+  // المؤهل يُتحقق منه على الخادم من قائمة الدور (كادر: 3 خيارات / طبيب: 4 خيارات)
+  qualification: z
+    .string({ error: 'المؤهل العلمي مطلوب — اختره من القائمة' })
+    .trim()
+    .min(1, 'المؤهل العلمي مطلوب — اختره من القائمة')
+    .max(80, 'المؤهل طويل جداً'),
+})
+
+export type UpdateQualificationInput = z.infer<typeof updateQualificationSchema>
 export type ReceiverCreateNurseInput = z.infer<typeof receiverCreateNurseSchema>
 export type ReceiverCreateNurseFormValues = z.input<typeof receiverCreateNurseSchema>
 

@@ -206,6 +206,9 @@ export function ReceiverProfileDialog({
 
   const user = data?.user
   const receiver = data?.receiver
+  // الجولة 31: النافذة واعية بالدور — مشرف الأطباء يرى نفس الملف التفصيلي الكامل بنصوصه هو
+  // (كانت تُعرض فارغة تماماً لأن المحتوى مرتبط بوجود مفتاح receiver الذي كان للمستلم حصراً)
+  const isSupervisor = user?.role === 'DOCTOR_SUPERVISOR'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -213,7 +216,7 @@ export function ReceiverProfileDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserRound className="size-4 text-primary" />
-            الملف التفصيلي للمستلم الإداري
+            {isSupervisor ? 'الملف التفصيلي لمشرف الأطباء' : 'الملف التفصيلي للمستلم الإداري'}
           </DialogTitle>
           <DialogDescription>
             بيانات الحساب كاملة — متاحة قبل الاعتماد وبعده في منصة تكليفات
@@ -253,7 +256,7 @@ export function ReceiverProfileDialog({
                 </div>
                 <Badge variant="outline" className="gap-1.5">
                   <Briefcase className="size-3" />
-                  مستلم إداري
+                  {isSupervisor ? 'مشرف أطباء' : 'مستلم إداري'}
                 </Badge>
               </div>
 
@@ -298,7 +301,9 @@ export function ReceiverProfileDialog({
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-sm font-bold">
                   <Coins className="size-4 text-primary" />
-                  الأرباح المتراكمة (نسبة المستلم الإداري)
+                  {isSupervisor
+                    ? 'الأرباح المتراكمة (نسبة مشرف الأطباء)'
+                    : 'الأرباح المتراكمة (نسبة المستلم الإداري)'}
                 </p>
                 <Badge variant="secondary">
                   النسبة الحالية: {receiver.earnings.summary.sharePercent}%
@@ -328,7 +333,7 @@ export function ReceiverProfileDialog({
             <Tabs defaultValue="posts" dir="rtl">
               <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
                 <TabsTrigger value="posts" className="gap-1.5">
-                  التكليفات المُعلنة
+                  {isSupervisor ? 'تكليفات الأطباء المُعلنة' : 'التكليفات المُعلنة'}
                   <span className="text-xs text-muted-foreground">{receiver.totals.posts}</span>
                 </TabsTrigger>
                 <TabsTrigger value="assignments" className="gap-1.5">
@@ -358,7 +363,14 @@ export function ReceiverProfileDialog({
                     </TableHeader>
                     <TableBody>
                       {receiver.posts.length === 0 ? (
-                        <EmptyRows colSpan={7} text="لم يُنشئ هذا المستلم أي تكليف مُعلن بعد" />
+                        <EmptyRows
+                          colSpan={7}
+                          text={
+                            isSupervisor
+                              ? 'لم يُنشئ هذا المشرف أي تكليف أطباء مُعلن بعد'
+                              : 'لم يُنشئ هذا المستلم أي تكليف مُعلن بعد'
+                          }
+                        />
                       ) : (
                         receiver.posts.map((post) => (
                           <TableRow key={post.id}>
@@ -401,7 +413,14 @@ export function ReceiverProfileDialog({
                     </TableHeader>
                     <TableBody>
                       {receiver.assignments.length === 0 ? (
-                        <EmptyRows colSpan={6} text="لا توجد تكليفات مسندة لهذا المستلم بعد" />
+                        <EmptyRows
+                          colSpan={6}
+                          text={
+                            isSupervisor
+                              ? 'لا توجد تكليفات أطباء مسندة لهذا المشرف بعد'
+                              : 'لا توجد تكليفات مسندة لهذا المستلم بعد'
+                          }
+                        />
                       ) : (
                         receiver.assignments.map((a) => (
                           <TableRow key={a.id}>
@@ -440,7 +459,14 @@ export function ReceiverProfileDialog({
                     </TableHeader>
                     <TableBody>
                       {receiver.withdrawals.length === 0 ? (
-                        <EmptyRows colSpan={5} text="لا توجد طلبات سحب لهذا المستلم بعد" />
+                        <EmptyRows
+                          colSpan={5}
+                          text={
+                            isSupervisor
+                              ? 'لا توجد طلبات سحب لهذا المشرف بعد'
+                              : 'لا توجد طلبات سحب لهذا المستلم بعد'
+                          }
+                        />
                       ) : (
                         receiver.withdrawals.map((w) => (
                           <TableRow key={w.id}>

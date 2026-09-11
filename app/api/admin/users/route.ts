@@ -140,6 +140,19 @@ export async function POST(req: NextRequest) {
       }
       const { name, phone, password, specialty, qualification, gender, yearsOfExperience } = parsed.data
 
+      // الجولة 31: التخصص الطبي إجباري من كتالوج التخصصات المُدار من حساب الإدارة
+      // — لا يُقبل تخصص حر خارج الكتالوج في أي مسار إنشاء للطبيب
+      const catalogSpecialty = await db.specialty.findUnique({
+        where: { name: specialty.trim() },
+        select: { id: true, isActive: true },
+      })
+      if (!catalogSpecialty || !catalogSpecialty.isActive) {
+        return jsonError(
+          'التخصص الطبي يجب أن يكون من كتالوج التخصصات المُدار من حساب الإدارة — أضف التخصص أولاً من قسم «التخصصات الطبية»',
+          422
+        )
+      }
+
       const existing = await db.user.findUnique({ where: { phone } })
       if (existing) {
         return jsonError('رقم الهاتف مسجل مسبقاً في المنصة', 409)
@@ -174,13 +187,26 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // مشرف الأطباء — نفس شكل المستلم الإداري (منظومة الأطباء)
+    // مشرف الأطباء — جهة صحية إجبارية من كتالوج الإدارة (الجولة 31)
     if (role === 'DOCTOR_SUPERVISOR') {
       const parsed = createSupervisorSchema.safeParse(body)
       if (!parsed.success) {
         return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
       }
       const { name, phone, password, hospitalName } = parsed.data
+
+      // الجولة 31: الجهة الصحية يجب أن تكون من جهات الإدارة المسجلة — لا جهات حرة
+      // (نفس شرط resolveReceiverOrg: جهة موجودة وغير موقوفة ليرتبط المشرف رسمياً بجهته)
+      const hospital = await db.hospital.findFirst({
+        where: { name: hospitalName.trim(), status: { not: 'INACTIVE' } },
+        select: { id: true, name: true, status: true },
+      })
+      if (!hospital) {
+        return jsonError(
+          'الجهة الصحية يجب أن تكون من جهات الإدارة المسجلة — أضف الجهة أولاً من قسم «الجهات الصحية» ثم اخترها',
+          422
+        )
+      }
 
       const existing = await db.user.findUnique({ where: { phone } })
       if (existing) {
@@ -195,7 +221,7 @@ export async function POST(req: NextRequest) {
           password: hashed,
           role: 'DOCTOR_SUPERVISOR',
           status: 'APPROVED', // حسابات يُنشئها المدير تكون معتمدة تلقائياً
-          ...(hospitalName ? { hospitalName: hospitalName.trim() } : {}),
+          hospitalName: hospital.name, // الاسم الرسمي من كتالوج الإدارة (مطابق لشرط الربط)
         },
         select: { id: true, name: true, phone: true, role: true, status: true },
       })

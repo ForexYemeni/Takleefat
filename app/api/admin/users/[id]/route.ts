@@ -9,8 +9,9 @@ import { USER_STATUS_LABELS } from '@/lib/utils'
 
 /**
  * GET /api/admin/users/[id] — الملف التفصيلي الكامل للحساب (قبل الاعتماد وبعده)
- * - المستلم الإداري: بياناته + تكليفاته المُعلنة + تكليفاته + أرباحه + طلبات سحبه + محفظته
- * - الكادر التمريضي: بياناته + مستنداته + تكليفاته + تقييماته
+ * - المستلم الإداري ومشرف الأطباء: بياناتهما + التكليفات المُعلنة + التكليفات + الأرباح + طلبات السحب
+ *   (نسبة الحصة حسب الدور: supervisorSharePercent للمشرف / receiverSharePercent للمستلم)
+ * - الكادر التمريضي والطبيب: بياناته + مستنداته + تكليفاته + تقييماته
  * لا تُرجع كلمة المرور إطلاقاً، ولا ينطبق على حسابات المديرين.
  */
 export async function GET(
@@ -44,8 +45,11 @@ export async function GET(
     if (!user) return jsonError('الحساب غير موجود', 404)
     if (user.role === 'ADMIN') return jsonError('لا يمكن عرض ملفات مديري النظام', 403)
 
-    // ---------- المستلم الإداري: تكليفات مُعلنة + تكليفات + أرباح + سحوبات ----------
-    if (user.role === 'RECEIVER') {
+    // ---------- المستلم الإداري ومشرف الأطباء: تكليفات مُعلنة + تكليفات + أرباح + سحوبات ----------
+    // الجولة 31: مشرف الأطباء كان يفتح «البيانات الكاملة» بلا أي محتوى لأن النافذة
+    // تتطلب مفتاح receiver الذي كان يُعاد للمستلم حصراً — الآن نفس الحزمة الكاملة
+    // تُعاد للمشرف بنسبة حصته الخاصة (supervisorSharePercent).
+    if (user.role === 'RECEIVER' || user.role === 'DOCTOR_SUPERVISOR') {
       const [posts, assignments, earningRecords, recentWithdrawals, allWithdrawals, earnedAgg, settings] =
         await Promise.all([
           db.post.findMany({
@@ -92,6 +96,12 @@ export async function GET(
       const pending = allWithdrawals.filter((w) => w.status === 'PENDING').reduce((s, w) => s + w.amount, 0)
       const available = Math.max(0, totalEarned - withdrawn - pending)
 
+      // نسبة الحصة حسب الدور: مشرف الأطباء → نسبة المشرف | مستلم إداري → نسبة المستلم
+      const sharePercent =
+        user.role === 'DOCTOR_SUPERVISOR'
+          ? settings.supervisorSharePercent
+          : settings.receiverSharePercent
+
       return NextResponse.json({
         user,
         receiver: {
@@ -103,7 +113,7 @@ export async function GET(
               withdrawn,
               pending,
               available,
-              sharePercent: settings.receiverSharePercent,
+              sharePercent,
             },
             records: earningRecords,
           },

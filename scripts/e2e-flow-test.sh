@@ -1694,6 +1694,9 @@ SPEC_DUP=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/specialties -H "Cont
 check "رفض تكرار التخصص → 409" "409" "$SPEC_DUP"
 SPEC_PUB=$(curl -s $BASE/api/specialties/public | jget "['specialties'][0]['name']")
 check "التخصصات متاحة للعامة في التسجيل (/api/specialties/public)" "$SPEC_NAME" "$SPEC_PUB"
+R31_SPEC2=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X POST $BASE/api/admin/specialties -H "Content-Type: application/json" \
+  -d '{"name":"مخاطية E2E"}')
+check "الإدارة تضيف تخصصاً ثانياً (مخاطية E2E) لفحوص المطابقة → 201" "201" "$R31_SPEC2"
 
 # --- فحوص حية: إنشاء مشرف الأطباء من الإدارة ---
 R29_SUP=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_sup.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
@@ -1793,9 +1796,10 @@ print('ok' if len(d['assignments'])>=1 else 'empty')" 2>/dev/null)
 check "تكليف مؤكد ظهر لدى الطبيب بعد الاعتماد" "ok" "$DOC_ASSGN"
 
 # مطابقة AUTO_MATCH العلائقية: طبيب بلا تخصص مصرّح لا يرى تكليف التخصص
+# (الجولة 31: التخصص من كتالوج التخصصات — ولا يطابق نصياً «قلبية E2E» ليبقى عزل المطابقة سليماً)
 R29_DOC2=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_doc2.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. بلا تخصص","phone":"791110904","password":"Doctor@123","specialty":"مخاطية","qualification":"ماجستير","yearsOfExperience":3,"gender":"FEMALE"}')
-check "إنشاء طبيب ثانٍ بلا تخصص مصرّح → 201" "201" "$R29_DOC2"
+  -d '{"role":"DOCTOR","name":"د. بلا تخصص مصرّح","phone":"791110904","password":"Doctor@123","specialty":"مخاطية E2E","qualification":"ماجستير","yearsOfExperience":3,"gender":"FEMALE"}')
+check "إنشاء طبيب ثانٍ بتخصص من الكتالوج (بلا تخصص عمل مصرّح) → 201" "201" "$R29_DOC2"
 login "$DIR/doctor2.jar" "791110904" "Doctor@123"
 R29_AM=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r29_am.json" -w "%{http_code}" -X POST $BASE/api/posts -H "Content-Type: application/json" \
   -d "{\"title\":\"\",\"hospitalId\":\"$HOSP\",\"department\":\"قلبية E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"value\":20000,\"distribution\":\"AUTO_MATCH\",\"audience\":\"DOCTOR\"}")
@@ -1913,6 +1917,124 @@ check "المشرف يزيل طبيب جهته من المفضلة → 200" "200
 FAV_NURSE_BACK=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
   -d "{\"nurseId\":\"$NURSE_ID\"}")
 check "استمرار سلوك المستلم: إضافة كادر لمفضلته → 409 (مفضل مسبقاً من القسم 21)" "409" "$FAV_NURSE_BACK"
+
+# ============================================================
+# القسم 40 — الجولة 31: ملف مشرف الأطباء الكامل + الجهة والتخصص من الكتالوج + المؤهلات العلمية
+# ============================================================
+echo "=========== 40) الجولة 31: ملف المشرف الكامل + قيود الكتالوج + المؤهلات العلمية ==========="
+
+# --- فحوص ساكنة: البنية الجديدة ---
+R31_API=$( [ -f app/api/admin/qualifications/route.ts ] && echo 1 || echo 0 )
+check "api: قسم المؤهلات العلمية له مسار GET/PATCH مستقل" "1" "$R31_API"
+
+R31_PAGE=$( [ -f app/admin/qualifications/page.tsx ] && [ -f components/admin/qualifications-manager.tsx ] && echo 1 || echo 0 )
+check "ui: صفحة «المؤهلات العلمية» ومكوّنها موجودان" "1" "$R31_PAGE"
+
+R31_NAV=$(grep -c "admin/qualifications" components/shared/dashboard-shell.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: «المؤهلات العلمية» في قائمة تنقل الإدارة" "1" "$R31_NAV"
+
+R31_PROF=$(grep -c "DOCTOR_SUPERVISOR" components/admin/receiver-profile.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: نافذة الملف التفصيلي واعية بدور مشرف الأطباء" "1" "$R31_PROF"
+
+R31_SUPHOSP=$(grep -c "api/admin/hospitals" app/admin/supervisors/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: إنشاء المشرف ينتقي الجهة الصحية من كتالوج الإدارة" "1" "$R31_SUPHOSP"
+
+R31_DOCSPEC=$(grep -c "api/admin/specialties" components/admin/nurse-review.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: إنشاء الطبيب من الإدارة ينتقي التخصص من الكتالوج" "1" "$R31_DOCSPEC"
+
+R31_STAFFSPEC=$(grep -c "api/specialties/public" app/supervisor/staff/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: إضافة الطبيب من جهة المشرف تنتقي التخصص من الكتالوج" "1" "$R31_STAFFSPEC"
+
+R31_USRHOSP=$(grep -c "db.hospital.findFirst" app/api/admin/users/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: الخادم يفرض أن جهة المشرف من كتالوج الإدارة" "1" "$R31_USRHOSP"
+
+R31_SPECVAL=$(grep -c "db.specialty.findUnique" app/api/admin/users/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: الخادم يفرض تخصص الطبيب من الكتالوج (مسار الإدارة)" "1" "$R31_SPECVAL"
+
+R31_SPECVAL2=$(grep -c "db.specialty.findUnique" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: الخادم يفرض تخصص الطبيب من الكتالوج (مسار الجهات)" "1" "$R31_SPECVAL2"
+
+# --- فحوص حية: الملف التفصيلي الكامل لمشرف الأطباء (إصلاح «لا توجد بيانات لعرضها») ---
+SUP_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=DOCTOR_SUPERVISOR" | jget "['users'][0]['id']")
+R31_SUPDETAIL=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/users/$SUP_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+r=d.get('receiver') or {}
+print('ok' if d['user']['role']=='DOCTOR_SUPERVISOR' and len(r.get('posts') or [])>=1 and len(r.get('assignments') or [])>=1 and 'summary' in (r.get('earnings') or {}) else 'bad')" 2>/dev/null)
+check "البيانات الكاملة لمشرف الأطباء تعيد تكليفاته المعلنة وتكليفاته وأرباحه — إصلاح العطل" "ok" "$R31_SUPDETAIL"
+
+# --- الجهة الصحية للمشرف من كتالوج الإدارة حصراً ---
+R31_BADHOSP=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR_SUPERVISOR","name":"مشرف بلا جهة مسجلة","phone":"791110911","password":"Super@1234","hospitalName":"جهة غير موجودة إطلاقاً"}')
+check "رفض مشرف بجهة خارج كتالوج الإدارة → 422" "422" "$R31_BADHOSP"
+
+R31_SUP2=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR_SUPERVISOR","name":"مشرف الأطباء الثاني","phone":"791110912","password":"Super@1234","hospitalName":"مستشفى E2E الأساس"}')
+check "إنشاء مشرف بجهة من كتالوج الإدارة → 201" "201" "$R31_SUP2"
+
+# --- التخصص الطبي من كتالوج الإدارة حصراً — المسارات الثلاثة ---
+R31_BADSPEC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"د. تخصص حر","phone":"791110913","password":"Doctor@123","specialty":"تخصص حر غير مسجل","qualification":"ماجستير","yearsOfExperience":2,"gender":"MALE"}')
+check "رفض طبيب بتخصص خارج كتالوج الإدارة (مسار الإدارة) → 422" "422" "$R31_BADSPEC"
+
+R31_BADSPEC_REG=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"د. تسجيل حر","phone":"791110914","password":"Doctor@123","specialty":"تخصص حر غير مسجل","qualification":"دكتوراه","yearsOfExperience":2,"gender":"MALE"}')
+check "رفض تسجيل ذاتي بتخصص خارج الكتالوج → 422" "422" "$R31_BADSPEC_REG"
+
+R31_BADSPEC_STAFF=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
+  -d '{"name":"د. جهة حر","phone":"791110915","password":"Doctor@123","gender":"MALE","qualification":"بكالوريوس طب وجراحة","specialty":"تخصص حر غير مسجل","yearsOfExperience":1}')
+check "رفض إضافة طبيب بتخصص خارج الكتالوج (مسار الجهة) → 422" "422" "$R31_BADSPEC_STAFF"
+
+# --- المؤهلات العلمية: القسم الجديد في حساب الإدارة ---
+R31_QUAL403=$(code -b "$DIR/receiver.jar" $BASE/api/admin/qualifications)
+check "حماية الدور: المستلم ممنوع من قسم المؤهلات → 403" "403" "$R31_QUAL403"
+
+R31_QLIST=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+n=[u for u in d if u['role']=='NURSE']
+doc=[u for u in d if u['role']=='DOCTOR']
+print('ok' if len(n)>=1 and len(doc)>=1 else 'bad')" 2>/dev/null)
+check "قائمة المؤهلات تعيد الكوادر والأطباء معاً" "ok" "$R31_QLIST"
+
+NURSE_QID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+n=[u for u in d if u['role']=='NURSE' and u['phone']=='711111111']
+print(n[0]['id'] if n else '')" 2>/dev/null)
+
+R31_QPATCH=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$NURSE_QID\",\"qualification\":\"دبلوم ثلاث سنوات\"}")
+check "الإدارة تعدل مؤهل كادر من القسم الجديد → 200" "200" "$R31_QPATCH"
+
+R31_QVERIFIED=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+n=[u for u in d if u['id']=='$NURSE_QID']
+print(n[0]['qualification'] if n else '-')" 2>/dev/null)
+check "المؤهل المعدل محفوظ فعلياً" "دبلوم ثلاث سنوات" "$R31_QVERIFIED"
+
+DOC_QID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+doc=[u for u in d if u['role']=='DOCTOR' and u['phone']=='791110902']
+print(doc[0]['id'] if doc else '')" 2>/dev/null)
+
+R31_QDOC=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$DOC_QID\",\"qualification\":\"شهادة زمالة\"}")
+check "الإدارة تعدل مؤهل طبيب (شهادة زمالة) → 200" "200" "$R31_QDOC"
+
+R31_QBAD=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$NURSE_QID\",\"qualification\":\"بكالوريوس طب وجراحة\"}")
+check "رفض مؤهل قائمة الأطباء لحساب كادر → 422" "422" "$R31_QBAD"
+
+R31_QSUP=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$SUP_ID\",\"qualification\":\"بكالوريوس أربع سنوات\"}")
+check "رفض تعديل مؤهل مشرف (خارج نطاق القسم) → 422" "422" "$R31_QSUP"
+
+R31_QNOAUTH=$(code -b "$DIR/nurse.jar" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$NURSE_QID\",\"qualification\":\"أورديلي سنة\"}")
+check "حماية الدور: الكادر ممنوع من تعديل المؤهلات → 403" "403" "$R31_QNOAUTH"
 
 echo ""
 echo "==========================================="

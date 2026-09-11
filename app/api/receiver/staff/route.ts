@@ -29,6 +29,20 @@ export async function POST(req: NextRequest) {
 
     const { name, phone, password, gender, qualification, specialty, yearsOfExperience } = parsed.data
 
+    // الجولة 31: التخصص الطبي للطبيب إجباري من كتالوج التخصصات المُدار من حساب الإدارة
+    if (isSupervisor) {
+      const catalogSpecialty = await db.specialty.findUnique({
+        where: { name: specialty.trim() },
+        select: { id: true, isActive: true },
+      })
+      if (!catalogSpecialty || !catalogSpecialty.isActive) {
+        return jsonError(
+          'التخصص الطبي يجب أن يكون من كتالوج التخصصات المُدار من حساب الإدارة — راجع الإدارة لإضافة التخصص',
+          422
+        )
+      }
+    }
+
     // الجهة الصحية للمستلم — لا يمكن إضافة كوادر بلا جهة مصرّح بها
     const org = await resolveReceiverOrg(session.user.id)
     if (!org) {

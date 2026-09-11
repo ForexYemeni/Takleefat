@@ -92,6 +92,14 @@ export default function ReceiverStaffPage() {
     queryFn: () => apiFetcher<{ org: { id: string; name: string; city: string | null; status: string } | null; nurses: StaffNurse[] }>('/api/receiver/staff'),
   })
 
+  // الجولة 31: التخصص الطبي للطبيب يُختار حصراً من كتالوج التخصصات المُدار من الإدارة
+  const { data: specialtiesData } = useQuery({
+    queryKey: ['specialties-public'],
+    queryFn: () =>
+      apiFetcher<{ specialties: Array<{ id: string; name: string }> }>('/api/specialties/public'),
+  })
+  const catalogSpecialties = specialtiesData?.specialties ?? []
+
   const createForm = useForm<CreateDoctorFormValues, unknown, CreateDoctorInput>({
     resolver: zodResolver(createDoctorSchema),
     defaultValues: {
@@ -338,8 +346,32 @@ export default function ReceiverStaffPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>التخصص *</Label>
-                <Input placeholder="مثال: تمريض طوارئ" {...createForm.register('specialty')} />
+                <Label>التخصص الطبي — من كتالوج الإدارة *</Label>
+                {/* الجولة 31: منتقي التخصص من كتالوج التخصصات الطبية — لا تخصصات حرة */}
+                <Select
+                  value={createForm.watch('specialty') || ''}
+                  onValueChange={(v) => createForm.setValue('specialty', v, { shouldValidate: true })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر التخصص الطبي من القائمة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {catalogSpecialties.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        لا توجد تخصصات في الكتالوج — راجع الإدارة
+                      </div>
+                    ) : (
+                      catalogSpecialties.map((s) => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {createForm.formState.errors.specialty && (
+                  <p className="text-xs text-destructive">
+                    {createForm.formState.errors.specialty.message}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="staff-exp">سنوات الخبرة *</Label>

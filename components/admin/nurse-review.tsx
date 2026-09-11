@@ -151,6 +151,17 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
     queryFn: () => apiFetcher<{ users: AdminUser[] }>(`/api/admin/users?role=${role}`),
   })
 
+  // الجولة 31: التخصص الطبي للطبيب يُختار حصراً من كتالوج التخصصات المُدار من الإدارة
+  const { data: specialtiesData } = useQuery({
+    queryKey: ['admin-specialties', 'options'],
+    queryFn: () =>
+      apiFetcher<{ specialties: Array<{ id: string; name: string; isActive: boolean }> }>(
+        '/api/admin/specialties'
+      ),
+    enabled: isDoctor,
+  })
+  const activeSpecialties = (specialtiesData?.specialties ?? []).filter((s) => s.isActive)
+
   const users = (data?.users ?? []).filter((u) => {
     const matchesStatus = status === 'ALL' || u.status === status
     const matchesSearch =
@@ -301,7 +312,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
             <DialogTitle>{isDoctor ? 'إضافة طبيب جديد' : 'إضافة كادر تمريضي جديد'}</DialogTitle>
             <DialogDescription>
               {isDoctor
-                ? 'يُنشأ الحساب معتمداً تلقائياً — المؤهل من خيارات الأطباء والتخصص الطبي حقل حر.'
+                ? 'يُنشأ الحساب معتمداً تلقائياً — المؤهل من خيارات الأطباء والتخصص الطبي من كتالوج التخصصات المُدار من الإدارة.'
                 : 'يُنشأ الحساب معتمداً تلقائياً ويمكن للكادر تسجيل الدخول فوراً في منصة تكليفات.'}
             </DialogDescription>
           </DialogHeader>
@@ -341,12 +352,35 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="nurse-specialty">{isDoctor ? 'التخصص الطبي *' : 'التخصص *'}</Label>
-                <Input
-                  id="nurse-specialty"
-                  placeholder={isDoctor ? 'مثال: باطنية' : 'مثال: تمريض طوارئ'}
-                  {...createForm.register('specialty')}
-                />
+                <Label htmlFor="nurse-specialty">{isDoctor ? 'التخصص الطبي — من كتالوج الإدارة *' : 'التخصص *'}</Label>
+                {isDoctor ? (
+                  // الجولة 31: منتقي التخصص الطبي من كتالوج الإدارة — لا تخصصات حرة
+                  <Select
+                    value={createForm.watch('specialty') || ''}
+                    onValueChange={(v) => createForm.setValue('specialty', v, { shouldValidate: true })}
+                  >
+                    <SelectTrigger id="nurse-specialty">
+                      <SelectValue placeholder="اختر التخصص الطبي من القائمة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeSpecialties.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          لا توجد تخصصات — أضف التخصص أولاً من قسم «التخصصات الطبية»
+                        </div>
+                      ) : (
+                        activeSpecialties.map((s) => (
+                          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="nurse-specialty"
+                    placeholder="مثال: تمريض طوارئ"
+                    {...createForm.register('specialty')}
+                  />
+                )}
                 {createForm.formState.errors.specialty && (
                   <p className="text-xs text-destructive">
                     {createForm.formState.errors.specialty.message}

@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, MoreHorizontal, PhoneIcon, Search, UserPlus, UserCog } from 'lucide-react'
+import { Lock, MapPin, MoreHorizontal, PhoneIcon, Search, UserPlus, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS } from '@/lib/utils'
-import { createReceiverSchema, type CreateReceiverInput } from '@/lib/validations/user'
+import { createSupervisorSchema, type CreateSupervisorInput } from '@/lib/validations/user'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { UserActionsMenu } from '@/components/admin/user-actions'
 import { ReceiverProfileDialog } from '@/components/admin/receiver-profile'
@@ -36,6 +36,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Eye, EyeOff, Hospital } from 'lucide-react'
 
 interface ReceiverUser {
@@ -63,13 +70,23 @@ export default function AdminReceiversPage() {
       apiFetcher<{ users: ReceiverUser[] }>('/api/admin/users?role=DOCTOR_SUPERVISOR'),
   })
 
-  const form = useForm<CreateReceiverInput>({
-    resolver: zodResolver(createReceiverSchema),
+  // الجولة 31: الجهة الصحية للمشرف تُختار حصراً من كتالوج جهات الإدارة النشطة
+  const { data: hospitalsData } = useQuery({
+    queryKey: ['admin-hospitals', 'options'],
+    queryFn: () =>
+      apiFetcher<{
+        hospitals: Array<{ id: string; name: string; location: string | null; city: string | null; status: string }>
+      }>('/api/admin/hospitals'),
+  })
+  const activeHospitals = (hospitalsData?.hospitals ?? []).filter((h) => h.status !== 'INACTIVE')
+
+  const form = useForm<CreateSupervisorInput>({
+    resolver: zodResolver(createSupervisorSchema),
     defaultValues: { name: '', phone: '', password: '', hospitalName: '' },
   })
 
   const createMutation = useMutation({
-    mutationFn: (values: CreateReceiverInput) =>
+    mutationFn: (values: CreateSupervisorInput) =>
       apiPost<{ message: string }>('/api/admin/users', {
         ...values,
         role: 'DOCTOR_SUPERVISOR',
@@ -208,9 +225,10 @@ export default function AdminReceiversPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>إضافة مستلم إداري جديد</DialogTitle>
+            <DialogTitle>إضافة مشرف أطباء جديد</DialogTitle>
             <DialogDescription>
-              يُنشأ الحساب معتمداً تلقائياً ويمكن للمستلم تسجيل الدخول فوراً في منصة تكليفات.
+              يُنشأ الحساب معتمداً تلقائياً — والجهة الصحية إجبارية من جهات الإدارة المسجلة ليرتبط
+              المشرف بجهته رسمياً في منصة تكليفات.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
@@ -241,13 +259,38 @@ export default function AdminReceiversPage() {
             <div className="space-y-2">
               <Label htmlFor="receiver-hospital" className="flex items-center gap-2">
                 <Hospital className="size-4 text-primary" />
-                اسم الجهة الصحية (المستشفى) — اختياري
+                الجهة الصحية — من جهات الإدارة المسجلة *
               </Label>
-              <Input
-                id="receiver-hospital"
-                placeholder="مثال: مستشفى الملكية"
-                {...form.register('hospitalName')}
-              />
+              {/* الجولة 31: منتقي الجهة من كتالوج الإدارة — لا جهات حرة، الارتباط الرسمي مضمون */}
+              <Select
+                value={form.watch('hospitalName') || ''}
+                onValueChange={(v) => form.setValue('hospitalName', v, { shouldValidate: true })}
+              >
+                <SelectTrigger id="receiver-hospital">
+                  <SelectValue placeholder="اختر الجهة الصحية من القائمة" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeHospitals.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      لا توجد جهات صحية مسجلة — أضف الجهة أولاً من قسم «الجهات الصحية»
+                    </div>
+                  ) : (
+                    activeHospitals.map((h) => (
+                      <SelectItem key={h.id} value={h.name}>
+                        <span className="flex items-center gap-2">
+                          {h.name}
+                          {(h.location || h.city) && (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="size-3" />
+                              {h.location || h.city}
+                            </span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
               {form.formState.errors.hospitalName && (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.hospitalName.message}

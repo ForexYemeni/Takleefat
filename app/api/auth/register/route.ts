@@ -41,6 +41,21 @@ export async function POST(req: NextRequest) {
       return jsonError('رقم الهاتف مسجل مسبقاً في المنصة', 409)
     }
 
+    // الجولة 31: تخصص الطبيب إجباري من كتالوج التخصصات المُدار من حساب الإدارة
+    // — نفس شرط الإنشاء من الإدارة ومسار الجهات (واجهة التسجيل تختار من الكتالوج أصلاً)
+    if (role === 'DOCTOR') {
+      const catalogSpecialty = await db.specialty.findUnique({
+        where: { name: (specialty ?? '').trim() },
+        select: { id: true, isActive: true },
+      })
+      if (!catalogSpecialty || !catalogSpecialty.isActive) {
+        return jsonError(
+          'التخصص الطبي يجب أن يكون من كتالوج التخصصات المُدار من حساب الإدارة — تواصل مع الإدارة لإضافة تخصصك',
+          422
+        )
+      }
+    }
+
     const hashedPassword = await hash(password, 12)
 
     // ---------- المستلم الإداري: جهة جديدة؟ تُنشأ بحالة PENDING للاعتماد من الإدارة ----------
