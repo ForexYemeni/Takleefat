@@ -1411,6 +1411,69 @@ check "حذف جهة مرتبطة بتكليف مُعلن → 200 (بلا حاج
 check "التكليف السابق باقٍ بعد حذف جهته (سجل نصي محفوظ)" "200" "$(code -b "$DIR/receiver.jar" $BASE/api/posts/$RHP_ID)"
 check "الجهة المحذوفة اختفت تماماً من القوائم" "404" "$(code -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$RH_ID)"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 34 — الجولة 23: الإسناد المباشر للمستلم — توزيع التكليف تماماً مثل حساب الإدارة
+# المستلم يختار الكادر المعتمد مباشرة فيُنشأ التكليف فوراً ACTIVE ويصله إشعار — بلا تقديمات
+# ─────────────────────────────────────────────────────────────────────────────
+R23_GUARD=$(grep -cF "requireRole('RECEIVER')" app/api/receiver/assignments/route.ts)
+check "receiver-assignments: المسار محصور بالمستلم الإداري" "1" "$R23_GUARD"
+check "receiver-assignments: منع المستلم غير المعتمد من الإسناد المباشر" "1" "$(
+  grep -cF 'قبل اعتماد حسابك' app/api/receiver/assignments/route.ts | awk '{print ($1>=1)?1:0}'
+)"
+check "receiver-assignments: المستلم هو الطرف المستقبِل تلقائياً (receiverId من الجلسة)" "1" "$(
+  grep -cF 'receiverId: session.user.id' app/api/receiver/assignments/route.ts | awk '{print ($1>=1)?1:0}'
+)"
+check "receiver-assignments: إشعار الكادر فور الإسناد (نفس رسالة مسار الإدارة)" "1" "$(
+  grep -cF 'تم إسناد تكليف جديد إليك' app/api/receiver/assignments/route.ts | awk '{print ($1>=1)?1:0}'
+)"
+R23_UI=$(( $(grep -c 'DirectAssignmentDialog' app/receiver/assignments/page.tsx) >= 2 ? 1 : 0 ))
+check "receiver UI: حوار الإسناد المباشر معرّف ومستخدم" "1" "$R23_UI"
+check "receiver UI: إنشاء تكليف جديد يستدعي مسار الإسناد المباشر" "1" "$(
+  grep -cF '/api/receiver/assignments' app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+)"
+R23_SEG=0
+for v in 'ALL' 'FAVORITES' 'SAME_ORG' 'ENDORSED' 'INTERVIEWED'; do
+  grep -qF "value: '$v'" app/receiver/assignments/page.tsx && R23_SEG=$((R23_SEG+1))
+done
+check "receiver UI: شرائح اختيار الكوادر الخمس في الإسناد المباشر" "5" "$R23_SEG"
+
+# --- فحوص حية على مسار الإسناد المباشر ---
+R23_ANON=$(code -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" -d '{}')
+check "الإسناد المباشر بدون جلسة → 401" "401" "$R23_ANON"
+R23_NURSE_ROLE=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" -d '{}')
+check "الإسناد المباشر بجلسة الكادر → 403" "403" "$R23_NURSE_ROLE"
+R23_ADMIN_ROLE=$(code -b "$DIR/admin.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" -d '{}')
+check "الإسناد المباشر بجلسة الإدارة → 403" "403" "$R23_ADMIN_ROLE"
+R23_BAD=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" \
+  -d "{\"title\":\"تكليف إسناد مباشر\",\"facility\":\"مستشفى الاختبار\",\"startDate\":\"$TODAY\",\"nurseId\":\"INVALID\"}")
+check "الإسناد المباشر لكادر غير موجود → 422" "422" "$R23_BAD"
+
+R23_OK=$(curl -s -w '\n%{http_code}' -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" \
+  -d "{\"title\":\"تكليف إسناد مباشر جولة 23\",\"description\":\"إنشاء مباشر بلا تقديمات\",\"facility\":\"مستشفى الاختبار التخصصي\",\"department\":\"الطوارئ\",\"startDate\":\"$TODAY\",\"nurseId\":\"$NURSE_ID\"}")
+R23_CODE=$(echo "$R23_OK" | tail -1)
+R23_ID=$(echo "$R23_OK" | head -n -1 | jget "['assignment']['id']")
+check "المستلم يُنشئ تكليفاً مباشراً لكادر معتمد → 201" "201" "$R23_CODE"
+
+R23_RCV=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=next((x for x in d.get('assignments',[]) if x['id']=='$R23_ID'),None)
+print('yes' if a and a['status']=='ACTIVE' and a.get('post') is None else 'no')")
+check "التكليف المباشر يظهر للمستلم: ACTIVE وبدون تكليف مُعلن" "yes" "$R23_RCV"
+
+R23_N=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+ids=[a['id'] for a in json.load(sys.stdin).get('assignments',[])]
+print('yes' if '$R23_ID' in ids else 'no')")
+check "التكليف المباشر يظهر عند الكادل المُسند إليه" "yes" "$R23_N"
+
+R23_NOTIF=$(curl -s -b "$DIR/nurse.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'تكليف إسناد مباشر جولة 23' in (n.get('body') or '')]
+print('yes' if ns else 'no')")
+check "إشعار فوري للكادر بنص مسار الإدارة نفسه" "yes" "$R23_NOTIF"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
