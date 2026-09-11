@@ -80,8 +80,15 @@ check "المستلم الجديد يدخل فور التسجيل قبل الا�
 
 # المستلم PENDING لا ينشئ تكليفاً (قيد الاعتماد) — الخادم والواجهة
 TODAY=$(date -u +%Y-%m-%d)
-HOSP=$(curl -s -b "$DIR/receiver.jar" $BASE/api/hospitals | python3 -c "import json,sys;h=json.load(sys.stdin)['hospitals'];print(h[0]['id'] if h else '')")
-[ -n "$HOSP" ] || { echo "لا توجد مستشفيات في البذرة!"; exit 1; }
+# الجهات والأقسام لا تُبذر أبداً (قاعدة الإدارة) — E2E ينشئ أساسه من حساب الإدارة مباشرة
+E2E_HOSP=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى E2E الأساس","location":"صنعاء — حدة","status":"ACTIVE"}')
+HOSP=$(echo "$E2E_HOSP" | jget "['hospital']['id']")
+[ -n "$HOSP" ] || { echo "فشل إنشاء جهة E2E الأساس من حساب الإدارة!"; exit 1; }
+E2E_DEPT=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/departments -H "Content-Type: application/json" \
+  -d '{"name":"طوارئ E2E"}')
+[ -n "$(echo "$E2E_DEPT" | jget "['department']['id']")" ] || { echo "فشل إنشاء قسم E2E الأساس!"; exit 1; }
+check "لا بذر جهات/أقسام: الأساس أُنشئ من حساب الإدارة فقط" "ok" "ok"
 RCV_BLOCK=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
   -d "{\"hospitalId\":\"$HOSP\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"value\":100}")
 check "منع المستلم غير المعتمد من إنشاء تكليف → 403" "403" "$RCV_BLOCK"
@@ -1412,67 +1419,41 @@ check "التكليف السابق باقٍ بعد حذف جهته (سجل نص�
 check "الجهة المحذوفة اختفت تماماً من القوائم" "404" "$(code -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$RH_ID)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# القسم 34 — الجولة 23: الإسناد المباشر للمستلم — توزيع التكليف تماماً مثل حساب الإدارة
-# المستلم يختار الكادر المعتمد مباشرة فيُنشأ التكليف فوراً ACTIVE ويصله إشعار — بلا تقديمات
 # ─────────────────────────────────────────────────────────────────────────────
-R23_GUARD=$(grep -cF "requireRole('RECEIVER')" app/api/receiver/assignments/route.ts)
-check "receiver-assignments: المسار محصور بالمستلم الإداري" "1" "$R23_GUARD"
-check "receiver-assignments: منع المستلم غير المعتمد من الإسناد المباشر" "1" "$(
-  grep -cF 'قبل اعتماد حسابك' app/api/receiver/assignments/route.ts | awk '{print ($1>=1)?1:0}'
+# القسم 34 — الجولة 24: مسار واحد لإنشاء التكليف عند المستلم + لا بذر جهات/أقسام أبداً
+# أُلغي الإسناد المباشر (DirectAssignmentDialog ومساره) — بقي المسار الاحترافي الواحد:
+# إعلان التكليف واستقبال التقديمات. والجهات والأقسام لا تُبذر في البذرة أو النشر إطلاقاً.
+# ─────────────────────────────────────────────────────────────────────────────
+check "receiver: حوار الإسناد المباشر مُزال كلياً من الصفحة" "0" "$(
+  grep -c 'DirectAssignmentDialog' app/receiver/assignments/page.tsx | awk '{print $1+0}'
 )"
-check "receiver-assignments: المستلم هو الطرف المستقبِل تلقائياً (receiverId من الجلسة)" "1" "$(
-  grep -cF 'receiverId: session.user.id' app/api/receiver/assignments/route.ts | awk '{print ($1>=1)?1:0}'
+check "receiver: زر إنشاء تكليف واحد فقط (بلا ازدواج المسارات)" "1" "$(
+  grep -c '<Plus className="size-4" />' app/receiver/assignments/page.tsx | awk '{print $1+0}'
 )"
-check "receiver-assignments: إشعار الكادر فور الإسناد (نفس رسالة مسار الإدارة)" "1" "$(
-  grep -cF 'تم إسناد تكليف جديد إليك' app/api/receiver/assignments/route.ts | awk '{print ($1>=1)?1:0}'
+check "receiver: زر الإعلان الثانوي المزدوج أُزيل (لا Megaphone)" "0" "$(
+  grep -c 'Megaphone' app/receiver/assignments/page.tsx | awk '{print $1+0}'
 )"
-R23_UI=$(( $(grep -c 'DirectAssignmentDialog' app/receiver/assignments/page.tsx) >= 2 ? 1 : 0 ))
-check "receiver UI: حوار الإسناد المباشر معرّف ومستخدم" "1" "$R23_UI"
-check "receiver UI: إنشاء تكليف جديد يستدعي مسار الإسناد المباشر" "1" "$(
-  grep -cF '/api/receiver/assignments' app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+check "receiver: مسار الإسناد المباشر غير مستدعى في الواجهة" "0" "$(
+  grep -c '/api/receiver/assignments' app/receiver/assignments/page.tsx | awk '{print $1+0}'
 )"
-R23_SEG=0
-for v in 'ALL' 'FAVORITES' 'SAME_ORG' 'ENDORSED' 'INTERVIEWED'; do
-  grep -qF "value: '$v'" app/receiver/assignments/page.tsx && R23_SEG=$((R23_SEG+1))
-done
-check "receiver UI: شرائح اختيار الكوادر الخمس في الإسناد المباشر" "5" "$R23_SEG"
+check "validations: مخطط الإسناد المباشر مُزال" "0" "$(
+  grep -c 'receiverCreateAssignmentSchema' lib/validations/assignment.ts | awk '{print $1+0}'
+)"
+check "مسار الإسناد المباشر محذوف من الخادم (404 حياً)" "404" "$(
+  code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/assignments -H 'Content-Type: application/json' -d '{}'
+)"
+check "seed.js: لا إنشاء جهات صحية أو أقسام إطلاقاً" "0" "$(
+  grep -cE 'hospital\.(upsert|create)|department\.(upsert|create)' prisma/seed.js | awk '{print $1+0}'
+)"
+check "package.json: النشر لا يشغّل البذرة إطلاقاً (لا عودة للجهات المحذوفة)" "0" "$(
+  grep -cF 'node prisma/seed.js' package.json | awk '{print $1+0}'
+)"
+check "الجهات تنشأ من حساب الإدارة فقط (أساس E2E حي)" "ok" "ok"
 
-# --- فحوص حية على مسار الإسناد المباشر ---
-R23_ANON=$(code -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" -d '{}')
-check "الإسناد المباشر بدون جلسة → 401" "401" "$R23_ANON"
-R23_NURSE_ROLE=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" -d '{}')
-check "الإسناد المباشر بجلسة الكادر → 403" "403" "$R23_NURSE_ROLE"
-R23_ADMIN_ROLE=$(code -b "$DIR/admin.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" -d '{}')
-check "الإسناد المباشر بجلسة الإدارة → 403" "403" "$R23_ADMIN_ROLE"
-R23_BAD=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" \
-  -d "{\"title\":\"تكليف إسناد مباشر\",\"facility\":\"مستشفى الاختبار\",\"startDate\":\"$TODAY\",\"nurseId\":\"INVALID\"}")
-check "الإسناد المباشر لكادر غير موجود → 422" "422" "$R23_BAD"
-
-R23_OK=$(curl -s -w '\n%{http_code}' -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/assignments -H "Content-Type: application/json" \
-  -d "{\"title\":\"تكليف إسناد مباشر جولة 23\",\"description\":\"إنشاء مباشر بلا تقديمات\",\"facility\":\"مستشفى الاختبار التخصصي\",\"department\":\"الطوارئ\",\"startDate\":\"$TODAY\",\"nurseId\":\"$NURSE_ID\"}")
-R23_CODE=$(echo "$R23_OK" | tail -1)
-R23_ID=$(echo "$R23_OK" | head -n -1 | jget "['assignment']['id']")
-check "المستلم يُنشئ تكليفاً مباشراً لكادر معتمد → 201" "201" "$R23_CODE"
-
-R23_RCV=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-a=next((x for x in d.get('assignments',[]) if x['id']=='$R23_ID'),None)
-print('yes' if a and a['status']=='ACTIVE' and a.get('post') is None else 'no')")
-check "التكليف المباشر يظهر للمستلم: ACTIVE وبدون تكليف مُعلن" "yes" "$R23_RCV"
-
-R23_N=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
-import json,sys
-ids=[a['id'] for a in json.load(sys.stdin).get('assignments',[])]
-print('yes' if '$R23_ID' in ids else 'no')")
-check "التكليف المباشر يظهر عند الكادل المُسند إليه" "yes" "$R23_N"
-
-R23_NOTIF=$(curl -s -b "$DIR/nurse.jar" $BASE/api/notifications | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-ns=[n for n in d.get('notifications',[]) if 'تكليف إسناد مباشر جولة 23' in (n.get('body') or '')]
-print('yes' if ns else 'no')")
-check "إشعار فوري للكادر بنص مسار الإدارة نفسه" "yes" "$R23_NOTIF"
+# --- فحص حي: مسار التكليف المُعلن الواحد يعمل كما هو ---
+R24_POST=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":45000}")
+check "المسار الواحد (إعلان تكليف) يعمل بكفاءة → 201" "201" "$R24_POST"
 
 echo ""
 echo "==========================================="

@@ -15,7 +15,6 @@ import {
   History,
   Inbox,
   MapPin,
-  Megaphone,
   MessageCircle,
   PackageCheck,
   Plus,
@@ -47,10 +46,6 @@ import {
   type CreatePostInput,
   type CreatePostFormValues,
 } from '@/lib/validations/post'
-import {
-  receiverCreateAssignmentSchema,
-  type ReceiverCreateAssignmentInput,
-} from '@/lib/validations/assignment'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant-cv'
@@ -153,7 +148,6 @@ export default function ReceiverAssignmentsPage() {
   const { data: session } = useSession()
   const [tab, setTab] = useState('posts')
   const [createOpen, setCreateOpen] = useState(false)
-  const [directOpen, setDirectOpen] = useState(false)
   const [repostMode, setRepostMode] = useState(false)
   const [applicationsPost, setApplicationsPost] = useState<ReceiverPost | null>(null)
 
@@ -190,7 +184,7 @@ export default function ReceiverAssignmentsPage() {
         <div>
           <h1 className="text-2xl font-extrabold">التكليفات</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            أنشئ التكليف وأسند الكادر مباشرة — تماماً كطريقة حساب الإدارة — أو أعلن عنه لاستقبال التقديمات، وتابع التكليفات المؤكدة
+            أعلن عن تكليفاتك، راجع سير الكادر المتقدم، واعتمد الأنسب — أو تأكّد من التكليفات المؤكدة
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -212,22 +206,12 @@ export default function ReceiverAssignmentsPage() {
             أعد نشر آخر تكليف
           </Button>
           <Button
-            variant="outline"
             onClick={() => {
               setRepostMode(false)
               setCreateOpen(true)
             }}
             disabled={notApproved}
             title={notApproved ? 'لا يمكن إنشاء تكليف حتى اعتماد حسابك من الإدارة' : undefined}
-            className="gap-2"
-          >
-            <Megaphone className="size-4" />
-            إعلان تكليف لاستقبال التقديمات
-          </Button>
-          <Button
-            onClick={() => setDirectOpen(true)}
-            disabled={notApproved}
-            title={notApproved ? 'لا يمكن إنشاء تكليف حتى اعتماد حسابك من الإدارة' : 'نفس طريقة حساب الإدارة: اختر الكادر مباشرة ليُنشأ التكليف فوراً'}
             className="gap-2"
           >
             <Plus className="size-4" />
@@ -279,9 +263,6 @@ export default function ReceiverAssignmentsPage() {
         nextNumber={nextNumber}
         repostSource={repostMode ? posts[0] ?? null : null}
       />
-
-      {/* حوار الإسناد المباشر — بنفس طريقة حساب الإدارة */}
-      <DirectAssignmentDialog open={directOpen} onOpenChange={setDirectOpen} />
 
       {/* حوار مراجعة التقديمات */}
       <Dialog
@@ -1019,299 +1000,6 @@ function CompleteAssignmentDialog({
             </Button>
           </DialogFooter>
         </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ---------- إنشاء تكليف مباشر — بنفس طريقة حساب الإدارة تماماً ----------
-
-interface DirectNurse {
-  id: string
-  name: string
-  specialty: string | null
-  isFavorite: boolean
-  isAvailable: boolean
-}
-
-type DirectSegment = 'ALL' | 'FAVORITES' | 'SAME_ORG' | 'ENDORSED' | 'INTERVIEWED'
-
-// شرائح اختيار الكادر في الإسناد المباشر — الخمس المعروفة عند المستلم
-const DIRECT_SEGMENT_OPTIONS: Array<{ value: DirectSegment; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { value: 'ALL', label: 'جميع الكوادر', icon: Users },
-  { value: 'FAVORITES', label: 'المفضلون', icon: Star },
-  { value: 'SAME_ORG', label: 'كوادر الجهة', icon: Building2 },
-  { value: 'ENDORSED', label: 'المعتمدون', icon: ShieldCheck },
-  { value: 'INTERVIEWED', label: 'المقابَل معهم', icon: ClipboardCheck },
-]
-
-function DirectAssignmentDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const queryClient = useQueryClient()
-  const [segment, setSegment] = useState<DirectSegment>('ALL')
-  const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null)
-
-  const form = useForm<ReceiverCreateAssignmentInput>({
-    resolver: zodResolver(receiverCreateAssignmentSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      facility: '',
-      department: '',
-      startDate: '',
-      endDate: '',
-      nurseId: '',
-    },
-  })
-
-  // الجهات الصحية والأقسام — تُدار من حساب الإدارة فقط (كما في التكليف المُعلن)
-  const { data: hospitalsData } = useQuery({
-    queryKey: ['hospitals'],
-    queryFn: () => apiFetcher<{ hospitals: Hospital[] }>('/api/hospitals'),
-    enabled: open,
-  })
-  const { data: departmentsData } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => apiFetcher<{ departments: Department[] }>('/api/departments'),
-    enabled: open,
-  })
-  const hospitals = hospitalsData?.hospitals ?? []
-  const departments = departmentsData?.departments ?? []
-
-  // الكوادر بحسب الشريحة المختارة — من المطابقة الذكية (المفضلون والعاملون بالجهة أولاً)
-  const { data: nursesData, isLoading: nursesLoading } = useQuery({
-    queryKey: ['direct-assignment-nurses', segment, selectedHospital?.id ?? ''],
-    queryFn: () => {
-      const params = new URLSearchParams()
-      if (segment === 'FAVORITES') params.set('favoritesOnly', 'true')
-      if (segment === 'SAME_ORG') params.set('affiliationStatus', 'WORKING')
-      if (segment === 'ENDORSED') params.set('affiliationStatus', 'ENDORSED')
-      if (segment === 'INTERVIEWED') params.set('affiliationStatus', 'INTERVIEWED')
-      if (selectedHospital?.id) params.set('hospitalId', selectedHospital.id)
-      const qs = params.toString()
-      return apiFetcher<{
-        nurses: DirectNurse[]
-        summary: { total: number; available: number }
-      }>(`/api/receiver/nurses${qs ? `?${qs}` : ''}`)
-    },
-    enabled: open,
-  })
-  const segmentNurses = nursesData?.nurses ?? []
-  const segmentSummary = nursesData?.summary
-  const watchNurseId = form.watch('nurseId')
-
-  const createMutation = useMutation({
-    mutationFn: (values: ReceiverCreateAssignmentInput) =>
-      apiPost<{ message: string }>('/api/receiver/assignments', values),
-    onSuccess: (res) => {
-      toast.success(res.message)
-      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
-      queryClient.invalidateQueries({ queryKey: ['stats'] })
-      onOpenChange(false)
-      form.reset()
-      setSelectedHospital(null)
-      setSegment('ALL')
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const onSubmit = (values: ReceiverCreateAssignmentInput) => {
-    createMutation.mutate(values)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>إنشاء تكليف جديد — إسناد مباشر</DialogTitle>
-          <DialogDescription>
-            نفس طريقة حساب الإدارة تماماً: املأ بيانات التكليف واختر الكادر التمريضي مباشرة،
-            فيُنشأ التكليف فوراً ويصله إشعار — دون انتظار التقديمات
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="d-title">عنوان التكليف</Label>
-            <Input
-              id="d-title"
-              placeholder="مثال: تكليف تمريضي — قسم الطوارئ"
-              {...form.register('title')}
-            />
-            {form.formState.errors.title && (
-              <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
-            )}
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>الجهة الصحية (من مستشفيات الإدارة)</Label>
-              <Select
-                onValueChange={(v) => {
-                  const h = hospitals.find((x) => x.id === v) ?? null
-                  setSelectedHospital(h)
-                  form.setValue('facility', h?.name ?? '', { shouldValidate: true })
-                  form.setValue('nurseId', '')
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر الجهة الصحية" />
-                </SelectTrigger>
-                <SelectContent>
-                  {hospitals.map((h) => (
-                    <SelectItem key={h.id} value={h.id}>
-                      {h.name}
-                      {h.location ? ` — ${h.location}` : ''}
-                    </SelectItem>
-                  ))}
-                  {hospitals.length === 0 && (
-                    <SelectItem value="none" disabled>
-                      لا توجد مستشفيات — تُضاف من حساب الإدارة
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.facility && (
-                <p className="text-xs text-destructive">{form.formState.errors.facility.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>القسم (من قوائم الإدارة)</Label>
-              <Select onValueChange={(v) => form.setValue('department', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر القسم (اختياري)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.name}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                  {departments.length === 0 && (
-                    <SelectItem value="none" disabled>
-                      لا توجد أقسام — تُضاف من حساب الإدارة
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {selectedHospital?.location && (
-            <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-              <MapPin className="size-3.5" />
-              الموقع الفعلي للجهة: {selectedHospital.location}
-            </p>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="d-start">تاريخ البدء</Label>
-            <Input id="d-start" type="date" {...form.register('startDate')} />
-            {form.formState.errors.startDate && (
-              <p className="text-xs text-destructive">{form.formState.errors.startDate.message}</p>
-            )}
-          </div>
-
-          {/* شريحة الكوادر — الخمس نفسها المعروفة للمستلم */}
-          <div className="space-y-2.5 rounded-2xl border bg-secondary/30 p-4">
-            <div>
-              <Label className="flex items-center gap-1.5 text-sm font-extrabold">
-                <Users className="size-4 text-primary" />
-                من تختار الكادر منه؟
-              </Label>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                حدّد الشريحة ثم اختر الكادر — الترتيب ذكي: المفضلون والعاملون بالجهة أولاً
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {DIRECT_SEGMENT_OPTIONS.map((opt) => {
-                const active = segment === opt.value
-                const OptIcon = opt.icon
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      setSegment(opt.value)
-                      form.setValue('nurseId', '')
-                    }}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-extrabold transition-all',
-                      active
-                        ? 'border-primary bg-primary/5 text-primary shadow-sm'
-                        : 'border-border bg-background text-muted-foreground hover:border-primary/30'
-                    )}
-                  >
-                    <OptIcon className="size-3.5" />
-                    {opt.label}
-                    {active && <span className="size-1.5 rounded-full bg-primary" aria-hidden />}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="space-y-2">
-              <Label>الكادر التمريضي (معتمد)</Label>
-              <Select
-                onValueChange={(v) => form.setValue('nurseId', v)}
-                value={watchNurseId || undefined}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={nursesLoading ? 'جارٍ تحميل الكوادر...' : 'اختر الكادر'}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {segmentNurses.map((n) => (
-                    <SelectItem key={n.id} value={n.id}>
-                      {n.name}
-                      {n.specialty ? ` — ${n.specialty}` : ''}
-                      {!n.isAvailable ? ' — مشغول حالياً' : ''}
-                    </SelectItem>
-                  ))}
-                  {!nursesLoading && segmentNurses.length === 0 && (
-                    <SelectItem value="none" disabled>
-                      لا يوجد كادر في هذه الشريحة
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.nurseId && (
-                <p className="text-xs text-destructive">{form.formState.errors.nurseId.message}</p>
-              )}
-              {segmentSummary && (
-                <p className="text-[11px] text-muted-foreground">
-                  الكوادر في هذه الشريحة: {segmentSummary.total}
-                  {' '}— متاح الآن: {segmentSummary.available}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="d-desc">وصف التكليف (اختياري)</Label>
-            <Textarea
-              id="d-desc"
-              rows={3}
-              placeholder="تفاصيل المهام والمسؤوليات..."
-              {...form.register('description')}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              إلغاء
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending} className="gap-2">
-              <CalendarDays className="size-4" />
-              {createMutation.isPending ? 'جارٍ الإسناد...' : 'إنشاء التكليف وإسناده'}
-            </Button>
-          </DialogFooter>
-        </form>
       </DialogContent>
     </Dialog>
   )

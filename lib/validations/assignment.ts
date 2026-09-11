@@ -27,12 +27,3 @@ export const updateAssignmentStatusSchema = z.object({
 })
 
 export type CreateAssignmentInput = z.infer<typeof createAssignmentSchema>
-
-/**
- * إنشاء تكليف مباشر من حساب المستلم الإداري — بنفس طريقة حساب الإدارة تماماً.
- * المستلم هو الطرف المستقبِل بطبيعة الحال، لذا لا يُطلب receiverId في الجسم
- * (يُضبط من جلسة المستلم على الخادم).
- */
-export const receiverCreateAssignmentSchema = createAssignmentSchema.omit({ receiverId: true })
-
-export type ReceiverCreateAssignmentInput = z.infer<typeof receiverCreateAssignmentSchema>

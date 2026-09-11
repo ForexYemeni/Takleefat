@@ -11,7 +11,9 @@
  *   2) مزامنة إنقاذ لكلمة مرور المدير فقط
  *   3) حذف نهائي دائم لأي حسابات تجريبية قديمة معروفة (تنظيف بلا عودة)
  *   4) إعدادات الرسوم وطرق الدفع
- *   5) قوائم الجهات الصحية والأقسام (تُبذر دائماً — upsert آمن)
+ *
+ * مبدأ صارم (بمطالبة صاحب المنصة): لا تُضاف أي جهة صحية أو قسم من هنا أبداً —
+ * الجهات والأقسام تُدار من حساب الإدارة فقط، ولا يجوز أن تعود بعد حذفها مهما كان التحديث.
  *
  * الاستخدام:
  *   npx prisma db push        (إنشاء الجداول أولاً)
@@ -126,23 +128,11 @@ async function main() {
   }
   console.log('✅ إعدادات الرسوم وطرق الدفع (محفظة جيب — رسوم التقديم 1000 ريال — نسبة الإدارة 10٪)')
 
-  // ---------- 5) الجهات الصحية والأقسام (قوائم الإدارة) — تُبذر دائماً ----------
-  // (upsert آمن للتكرار لا يمس البيانات المضافة من الإدارة)
-  const hospitalsData = [
-    { name: 'مستشفى الملكية', location: 'صنعاء — شارع حدة' },
-    { name: 'مستشفى الثورة العام', location: 'صنعاء — شارع الزراعة' },
-    { name: 'مستشفى الولادة والأطفال', location: 'صنعاء — السبعين' },
-    { name: 'مستشفى الحباري', location: 'عدن — خور مكسر' },
-    { name: 'مركز الرازي', location: 'تعز — الحوبان' },
-  ]
-  for (const h of hospitalsData) {
-    await prisma.hospital.upsert({ where: { name: h.name }, update: {}, create: h })
-  }
-  const departmentsData = ['عناية', 'طوارئ', 'رقود', 'حضانة', 'قبالة', 'مختبر']
-  for (const name of departmentsData) {
-    await prisma.department.upsert({ where: { name }, update: {}, create: { name } })
-  }
-  console.log('✅ الجهات الصحية (5) والأقسام الطبية (6) جاهزة في قوائم الإدارة')
+  // ---------- لا جهات صحية ولا أقسام من هنا — نهائياً ----------
+  // (الجهات والأقسام تُضاف من حساب الإدارة فقط، وما حُذف لا يعود أبداً)
+  const hospitalsCount = await prisma.hospital.count()
+  const departmentsCount = await prisma.department.count()
+  console.log(`✅ لا بذر للجهات الصحية أو الأقسام — الحالية: ${hospitalsCount} جهة، ${departmentsCount} قسم (من الإدارة فقط)`)
 
   const nursesCount = await prisma.user.count({ where: { role: 'NURSE' } })
   const receiversCount = await prisma.user.count({ where: { role: 'RECEIVER' } })
