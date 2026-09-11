@@ -29,7 +29,7 @@ const MAX_TOASTS_PER_BATCH = 3
 const CHIME_MIN_GAP_MS = 3000
 
 export function NotificationRealtime() {
-  const { notifications, markRead } = useNotifications()
+  const { notifications, markRead, isLoading } = useNotifications()
   const router = useRouter()
   const queryClient = useQueryClient()
   const knownIds = useRef<Set<string> | null>(null)
@@ -67,8 +67,12 @@ export function NotificationRealtime() {
   }, [queryClient])
 
   useEffect(() => {
+    // الجولة الثامنة عشرة: لا أساس قبل وصول البيانات الحقيقية — كان الأساس
+    // يُسجَّل ضد الدفعة الفارغة الأولية فيظهر كل السجل القديم (حتى المقروء)
+    // كتنبيهات منبثقة عند كل دخول/تحميل
+    if (isLoading) return
     if (knownIds.current === null) {
-      // أول تحميل — نُسجّل الموجود بلا تنبيهات بأثر رجعي
+      // أول دفعة حقيقية — تُسجَّل كأساس بلا تنبيهات بأثر رجعي
       knownIds.current = new Set(notifications.map((n) => n.id))
       return
     }
@@ -143,7 +147,7 @@ export function NotificationRealtime() {
         { duration: 8000 }
       )
     }
-  }, [notifications, markRead, router])
+  }, [notifications, markRead, router, isLoading])
 
   return null
 }

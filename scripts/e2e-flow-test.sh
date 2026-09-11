@@ -1297,6 +1297,12 @@ check "push-banner: إخفاء لكل جلسة (sessionStorage بمفتاح v2)"
 # الطبقة الفورية: سلوك الاشتراك — نغمة خلفية للأجهزة غير المشتركة دون فقد إشعارات
 R17_RT=$(awk '/subscribedRef/{p1=1} /getPushState/{p2=1} END{print p1+p2}' components/shared/notification-realtime.tsx)
 check "notification-realtime: وعي بالاشتراك (نغمة خلفية + عرض عند العودة)" "2" "$R17_RT"
+# الجولة 18: الأساس ضد أول دفعة حقيقية (لا تنبيهات للسجل القديم عند كل دخول)
+R18_BASE=$(awk '/isLoading[)]/{p1=1} /knownIds[.]current === null/{p2=1} END{print p1+p2}' components/shared/notification-realtime.tsx)
+check "notification-realtime: الأساس بعد انتهاء التحميل (لا منبثق للسجل القديم)" "2" "$R18_BASE"
+check "notification-realtime: isLoading ضمن معتمدات الأثر" "1" "$(
+  grep -cF 'notifications, markRead, router, isLoading' components/shared/notification-realtime.tsx | awk '{print ($1>=1)?1:0}'
+)"
 
 echo ""
 echo "==========================================="
