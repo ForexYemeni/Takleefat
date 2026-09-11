@@ -75,6 +75,8 @@ export interface ApplicantData {
     qualification: string | null
     yearsOfExperience: number | null
     isFavorite?: boolean
+    /** أقسام العمل المصرّح بها — ممرض طوارئ/رقود/عناية/مختبر... */
+    workDepartments?: string[]
     documents: ApplicantDocument[]
     ratings?: ApplicantRatings
     /** السجل المهني — الجهات التي عمل بها مع سنوات العمل (الجولة الثامنة) */
@@ -167,6 +169,30 @@ export function ApplicantCV({
           value={nurse.yearsOfExperience != null ? `${nurse.yearsOfExperience} سنة` : '—'}
         />
       </div>
+
+      {/* أقسام العمل المصرّح بها — القسم الذي يعمل به الكادر ضمن كتالوج الإدارة */}
+      {nurse.workDepartments && nurse.workDepartments.length > 0 && (
+        <div className="rounded-2xl border border-primary/25 bg-gradient-to-bl from-primary/5 to-transparent p-4">
+          <p className="flex items-center gap-1.5 text-sm font-extrabold">
+            <BadgeCheck className="size-4 text-primary" />
+            أقسام العمل
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            الأقسام التي يعمل بها الكادر — تُستخدم في توجيه التكليفات حسب القسم المطلوب
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {nurse.workDepartments.map((d) => (
+              <Badge
+                key={d}
+                variant="outline"
+                className="border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-bold text-primary"
+              >
+                {d}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* السجل المهني — جهات العمل المعتمدة مع سنوات العمل */}
       {nurse.affiliations && nurse.affiliations.length > 0 && (

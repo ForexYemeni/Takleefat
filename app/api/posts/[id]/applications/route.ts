@@ -52,6 +52,10 @@ export async function GET(
               },
               orderBy: { createdAt: 'desc' },
             },
+            // أقسام عمل الكادر — تظهر في السيرة الذاتية (ممرض طوارئ/رقود/عناية...)
+            workDepartments: {
+              select: { department: { select: { id: true, name: true } } },
+            },
             // السجل المهني — الجهات التي عمل بها مع سنوات العمل (الجولة الثامنة)
             // تُستثنى الطلبات قيد المراجعة — يظهر التاريخ المهني المعتمد فقط
             affiliations: {
@@ -103,12 +107,13 @@ export async function GET(
           ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
           : null
       }
-      const { ratingsReceived, affiliations, ...nurse } = a.nurse
+      const { ratingsReceived, affiliations, workDepartments, ...nurse } = a.nurse
       return {
         ...a,
         nurse: {
           ...nurse,
           affiliations,
+          workDepartments: workDepartments.map((w) => w.department.name),
           isFavorite: favSet.has(a.nurse.id),
           ratings: {
             average,

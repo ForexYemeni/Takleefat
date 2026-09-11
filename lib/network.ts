@@ -156,7 +156,15 @@ export interface AudiencePreviewResult {
     external: number
     former: number
     basic: number
+    /** المطابقة العلائقية حصراً — كوادر أضافوا القسم ضمن أقسام عملهم */
+    departmentMatch: number
   }
+  /** عدد الكوادر المصرّحين بقسم التكليف ضمن أقسام عملهم (مطابقة علائقية) */
+  departmentMatch: number
+  /** عدد من ستصلهم الإشعارات الفورية فور النشر (وفق طريقة التوزيع والقسم) */
+  directNotify: number
+  /** اسم القسم المطلوب كما مُرّر للمعاينة */
+  departmentName: string | null
   /** عدادات مراحل النشر التدريجي — تُملأ فقط عند distribution = PROGRESSIVE */
   progressive?: { stage0: number; stage1: number; stage2: number; stage3: number }
 }
@@ -183,8 +191,8 @@ export async function getAudiencePreview(opts: {
     }),
     db.favoriteNurse.findMany({ where: { receiverId: opts.receiverId }, select: { nurseId: true } }),
   ])
-
   const nurseIds = nurses.map((n) => n.id)
+  const workDeptsMap = await getWorkDepartmentsMap(nurseIds)
   const affs =
     opts.hospitalId && nurseIds.length > 0
       ? await db.nurseAffiliation.findMany({
@@ -197,17 +205,22 @@ export async function getAudiencePreview(opts: {
   const affMap = new Map(affs.map((a) => [a.nurseId, a.status as string]))
 
   const dept = (opts.department ?? '').trim()
-  const deptMatch = (n: { specialty: string | null; qualification: string | null }): boolean => {
+  const deptMatch = (n: { id: string; specialty: string | null; qualification: string | null }): boolean => {
     if (!dept) return false
+    // علائقياً أولاً: القسم ضمن أقسام عمله المصرّح بها
+    if ((workDeptsMap.get(n.id) ?? []).includes(dept)) return true
     const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`.trim()
     if (!hay) return false
     return hay.includes(dept) || dept.includes(hay)
   }
+  // المطابقة العلائقية حصراً — كوادر أضافوا القسم ضمن أقسام عملهم من كتالوج الإدارة
+  const relationalDeptMatch = (nurseId: string): boolean =>
+    !!dept && (workDeptsMap.get(nurseId) ?? []).includes(dept)
   const affIs = (nurseId: string, statuses: string[]): boolean =>
     statuses.includes(affMap.get(nurseId) ?? '')
 
   // التوزيع الهرمي حسب الأولوية — لعرض الشرائح
-  const breakdown = {
+  const breakdown: AudiencePreviewResult['breakdown'] = {
     favorites: 0,
     working: 0,
     endorsed: 0,
@@ -215,6 +228,7 @@ export async function getAudiencePreview(opts: {
     external: 0,
     former: 0,
     basic: 0,
+    departmentMatch: 0,
   }
   for (const n of nurses) {
     if (favSet.has(n.id)) breakdown.favorites++
@@ -230,6 +244,9 @@ export async function getAudiencePreview(opts: {
   const distribution = opts.distribution ?? 'ALL_MATCHING'
   let total = 0
   let progressive: AudiencePreviewResult['progressive'] | undefined
+
+  // جمهور الإشعارات الفوري — كوادر القسم (علائقي + نصي) عند تحديد قسم
+  const deptAudienceIds = dept ? nurses.filter((n) => deptMatch(n)).map((n) => n.id) : []
 
   switch (distribution) {
     case 'FAVORITES':
@@ -267,12 +284,36 @@ export async function getAudiencePreview(opts: {
       total = stage0
       break
     }
-    default:
-      // ALL_MATCHING
+    default: {
+      // ALL_MATCHING — الجميع المطابقون للجنس
       total = nurses.length
+      break
+    }
   }
 
-  return { distribution, total, breakdown, progressive }
+  // من ستصلهم الإشعارات فعلياً فور النشر — مرآة منطق POST /api/posts:
+  // - الاستدعاء المحدد: 0 (إشعارات فردية عبر الاستدعاءات)
+  // - النشر التدريجي: جمهور المرحلة الأولى
+  // - ALL_MATCHING/AUTO_MATCH مع قسم: كوادر القسم حصراً (توجيه احترافي حسب طلب المستلم)
+  // - بلا قسم أو التوزيع الخاص: نفس الجمهور الكامل (السلوك القائم)
+  const directNotify =
+    distribution === 'INVITE_SELECTED'
+      ? 0
+      : distribution === 'PROGRESSIVE'
+        ? (progressive?.stage0 ?? 0)
+        : dept && (distribution === 'ALL_MATCHING' || distribution === 'AUTO_MATCH')
+          ? deptAudienceIds.length
+          : total
+
+  return {
+    distribution,
+    total,
+    breakdown: { ...breakdown, departmentMatch: nurses.filter((n) => relationalDeptMatch(n.id)).length },
+    departmentMatch: nurses.filter((n) => relationalDeptMatch(n.id)).length,
+    directNotify,
+    departmentName: dept || null,
+    progressive,
+  }
 }
 
 // ---------- جمهور التوزيع ----------
@@ -342,7 +383,7 @@ export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): P
     return !!aff && (required as string[]).includes(aff.status)
   }
 
-  // 6) AUTO_MATCH — مطابق للجنس + (تخصص يوافق القسم أو مرتبط بالجهة)
+  // 6) AUTO_MATCH — مطابق للجنس + (أقسام عمله توافق القسم أو تخصصه نصياً أو مرتبط بالجهة)
   if (distribution === 'AUTO_MATCH') {
     if (post.hospitalId) {
       const aff = await db.nurseAffiliation.findUnique({
@@ -352,12 +393,22 @@ export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): P
       if (aff && AFFILIATED_AUDIENCE.includes(aff.status as never)) return true
     }
     if (post.department) {
+      // علائقياً: القسم ضمن أقسام عمل الكادر المصرّح بها (كتالوج الإدارة)
+      const wd = await db.workDepartment.findFirst({
+        where: {
+          nurseId: ctx.nurseId,
+          department: { name: post.department, isActive: true },
+        },
+        select: { id: true },
+      })
+      if (wd) return true
+      // سقوط نصي للكوادر التاريخيين بلا أقسام عمل مصرّح بها
       const nurse = await db.user.findUnique({
         where: { id: ctx.nurseId },
         select: { specialty: true, qualification: true },
       })
-      const hay = `${nurse?.specialty ?? ''} ${nurse?.qualification ?? ''}`
-      if (hay && post.department && (hay.includes(post.department) || post.department.includes(hay.trim()))) return true
+      const hay = `${nurse?.specialty ?? ''} ${nurse?.qualification ?? ''}`.trim()
+      if (hay && (hay.includes(post.department) || post.department.includes(hay))) return true
     }
     return false
   }
@@ -395,6 +446,60 @@ async function progressiveAudienceContains(post: Post, nurseId: string): Promise
   }
   // المرحلة الأخيرة: كل المطابقين للجنس
   return stage >= 3
+}
+
+// ---------- جمهور الإشعارات حسب القسم (توجيه احترافي) ----------
+
+/**
+ * جمهور إشعارات التكليف المُعلن عند تحديد قسم:
+ * - departmentNurseIds: كوادر أضافوا القسم ضمن أقسام عملهم (مطابقة علائقية من كتالوج الإدارة)
+ *   — يحصلون على إشعار مخصص «أنت من كادر هذا القسم»
+ * - extendedNurseIds: مطابقون نصياً (تخصص/مؤهل) أو مرتبطون بالجهة الصحية — إشعار عادي
+ * فلترة الجنس إلزامية على الجميع.
+ */
+export async function getDepartmentAudience(opts: {
+  department: string
+  gender?: Gender | null
+  hospitalId?: string | null
+}): Promise<{ departmentNurseIds: string[]; extendedNurseIds: string[] }> {
+  const genderWhere = opts.gender && opts.gender !== 'ANY' ? { gender: opts.gender } : {}
+  const base = { role: 'NURSE' as const, status: 'APPROVED' as const, ...genderWhere }
+  const dept = opts.department.trim()
+
+  // 1) كوادر القسم — علائقياً من أقسام عملهم
+  const deptRows = await db.workDepartment.findMany({
+    where: { department: { name: dept, isActive: true }, nurse: base },
+    select: { nurseId: true },
+  })
+  const departmentNurseIds = Array.from(new Set(deptRows.map((r) => r.nurseId)))
+  const deptSet = new Set(departmentNurseIds)
+
+  // 2) الجمهور الموسع: مطابقة نصية للكوادر التاريخيين + المرتبطون بالجهة الصحية
+  const candidates = await db.user.findMany({
+    where: { ...base, id: { notIn: departmentNurseIds } },
+    select: { id: true, specialty: true, qualification: true },
+  })
+  const extended = new Set<string>()
+  for (const n of candidates) {
+    const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`.trim()
+    if (hay && (hay.includes(dept) || dept.includes(hay))) extended.add(n.id)
+  }
+  if (opts.hospitalId && candidates.length > 0) {
+    const affs = await db.nurseAffiliation.findMany({
+      where: {
+        hospitalId: opts.hospitalId,
+        status: { in: ['WORKING', 'ENDORSED', 'INTERVIEWED', 'EXTERNAL', 'FORMER'] },
+        nurseId: { in: candidates.map((c) => c.id) },
+      },
+      select: { nurseId: true },
+    })
+    for (const a of affs) extended.add(a.nurseId)
+  }
+
+  return {
+    departmentNurseIds,
+    extendedNurseIds: Array.from(extended).filter((id) => !deptSet.has(id)),
+  }
 }
 
 // ---------- النشر التدريجي (ترقية كاسحة عند انتهاء مدة المرحلة) ----------
@@ -486,6 +591,10 @@ export interface MatchedNurse {
   specialty: string | null
   qualification: string | null
   yearsOfExperience: number | null
+  /** أقسام العمل المصرّح بها من الكادر (من كتالوج الإدارة) */
+  workDepartments: string[]
+  /** هل يطابق قسم التكليف المطلوب ضمن أقسام عمله؟ */
+  departmentMatch: boolean
   /** متوسط التقييم وعدده */
   ratingAverage: number | null
   ratingCount: number
@@ -516,9 +625,31 @@ export interface MatchOptions {
 }
 
 /**
+ * خريطة أقسام عمل الكوادر — أسماء الأقسام النشطة لكل كادر من كتالوج الإدارة
+ * تُستخدم في المطابقة العلائقية للقسم (بديل احترافي عن مطابقة النصوص)
+ */
+export async function getWorkDepartmentsMap(
+  nurseIds: string[]
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>()
+  if (nurseIds.length === 0) return map
+  const rows = await db.workDepartment.findMany({
+    where: { nurseId: { in: nurseIds }, department: { isActive: true } },
+    select: { nurseId: true, department: { select: { name: true } } },
+  })
+  for (const row of rows) {
+    const list = map.get(row.nurseId) ?? []
+    list.push(row.department.name)
+    map.set(row.nurseId, list)
+  }
+  return map
+}
+
+/**
  * جلب الكوادر مرتبين حسب أولوية المطابقة الذكية:
  * المفضلون ← العاملون بالجهة ← المعتمدون ← المتقابَل معهم ← الخارجيون المؤهلون ← بقية المطابقين
  * فلترة الجنس إلزامية: لا يظهر في النتيجة أي كادر لا يطابق جنس التكليف المطلوب.
+ * مطابقة القسم علائقية أولاً (من أقسام عمل الكادر المصرّح بها) مع سقوط نصي للتاريخي.
  */
 export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNurse[]> {
   const genderWhere = opts.postGender && opts.postGender !== 'ANY' ? { gender: opts.postGender } : {}
@@ -584,11 +715,14 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
   const affMap = new Map(affiliations.map((a) => [a.nurseId, a.status]))
   const ratingMap = new Map(ratingAgg.map((r) => [r.nurseId, { avg: r._avg.overall, count: r._count }]))
   const docsMap = new Map(docsCounts.map((d) => [d.userId, d._count]))
+  // أقسام عمل الكوادر من كتالوج الإدارة — المطابقة العلائقية للقسم
+  const workDeptsMap = await getWorkDepartmentsMap(nurseIds)
 
   const result: MatchedNurse[] = nurses
     .map((n) => {
       const affStatus = affMap.get(n.id) ?? null
       const isFavorite = favMap.has(n.id)
+      const nurseWorkDepts = workDeptsMap.get(n.id) ?? []
       // أولوية المطابقة: 5 مفضل ← 4 يعمل حالياً ← 3 معتمد ← 2 متقابَل ← 1 خارجي ← 0 مطابق أساسي
       let priority = 0
       if (isFavorite) priority = 5
@@ -599,6 +733,12 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
 
       // تعزيز طفيف للخبرة داخل نفس المستوى (لا يغيّر الترتيب الأساسي للأولويات)
       const rating = ratingMap.get(n.id)
+      const dept = opts.department?.trim() ?? ''
+      // مطابقة القسم: علائقية من أقسام عمله أولاً ثم السقوط النصي (تخصص/مؤهل)
+      const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`.trim()
+      const textMatch = !!dept && !!hay && (hay.includes(dept) || dept.includes(hay))
+      const departmentMatch =
+        !!dept && (nurseWorkDepts.includes(dept) || (!nurseWorkDepts.length && textMatch))
       return {
         id: n.id,
         name: n.name,
@@ -607,6 +747,8 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
         specialty: n.specialty,
         qualification: n.qualification,
         yearsOfExperience: n.yearsOfExperience,
+        workDepartments: nurseWorkDepts,
+        departmentMatch,
         ratingAverage: rating?.avg ? Number(rating.avg.toFixed(2)) : null,
         ratingCount: rating?.count ?? 0,
         isFavorite,
@@ -622,16 +764,19 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
       if (opts.affiliationStatus && n.affiliationStatus !== opts.affiliationStatus) return false
       if (opts.availableOnly && !n.isAvailable) return false
       if (opts.department && opts.department.trim()) {
-        // المطابقة الذكية للقسم: التخصص أو المؤهل يوافق القسم — مع إبقاء المعتمدين/العاملين بالجهة
-        const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`
+        // المطابقة الذكية للقسم: أقسام عمله المصرّح بها أو تخصصه/مؤهله يوافق القسم
+        // — مع إبقاء المعتمدين/العاملين بالجهة (السلوك التاريخي محفوظ)
         const dept = opts.department.trim()
-        const deptMatch = hay.includes(dept) || dept.includes(hay.trim())
-        if (!deptMatch && !['WORKING', 'ENDORSED'].includes(n.affiliationStatus ?? '')) return false
+        const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`
+        const textMatch = hay.includes(dept) || dept.includes(hay.trim())
+        if (!n.departmentMatch && !textMatch && !['WORKING', 'ENDORSED'].includes(n.affiliationStatus ?? '')) return false
       }
       return true
     })
     .sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority
+      // ضمن نفس الأولوية: مطابقو القسم المصرّح به أولاً — ثم الخبرة ثم التقييم
+      if (a.departmentMatch !== b.departmentMatch) return a.departmentMatch ? -1 : 1
       const expDiff = (b.yearsOfExperience ?? 0) - (a.yearsOfExperience ?? 0)
       if (expDiff !== 0) return expDiff
       return (b.ratingAverage ?? 0) - (a.ratingAverage ?? 0)

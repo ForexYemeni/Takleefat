@@ -13,13 +13,19 @@ export async function GET() {
     const session = await requireRole('NURSE')
     const nurseId = session.user.id
 
-    const [affiliations, assignmentAgg, applicationAgg, ratingsAgg, busy] = await Promise.all([
+    const [affiliations, workDepartments, assignmentAgg, applicationAgg, ratingsAgg, busy] = await Promise.all([
       db.nurseAffiliation.findMany({
         where: { nurseId },
         orderBy: { createdAt: 'desc' },
         include: {
           hospital: { select: { id: true, name: true, type: true, city: true, status: true } },
         },
+      }),
+      // أقسام العمل المصرّح بها — تظهر في البطاقة المهنية والسيرة الذاتية
+      db.workDepartment.findMany({
+        where: { nurseId, department: { isActive: true } },
+        orderBy: { createdAt: 'asc' },
+        select: { department: { select: { id: true, name: true } } },
       }),
       db.assignment.groupBy({ by: ['status'], where: { nurseId }, _count: true }),
       db.application.groupBy({ by: ['status'], where: { nurseId }, _count: true }),
@@ -42,6 +48,7 @@ export async function GET() {
     const completed = assignmentStatus.COMPLETED ?? 0
 
     return NextResponse.json({
+      workDepartments: workDepartments.map((w) => w.department),
       affiliations: affiliations.map((a) => ({
         id: a.id,
         status: a.status,

@@ -32,6 +32,7 @@ interface CardData {
     gender: string | null
     createdAt: Date
   }
+  departments: string[]
   completedAssignments: number
   ratingAverage: number | null
   ratingCount: number
@@ -51,6 +52,12 @@ async function getApprovedNurseCard(id: string): Promise<CardData | null> {
       role: true,
       status: true,
       createdAt: true,
+      // أقسام العمل المصرّح بها — تظهر في البطاقة المهنية العامة
+      workDepartments: {
+        where: { department: { isActive: true } },
+        orderBy: { createdAt: 'asc' },
+        select: { department: { select: { name: true } } },
+      },
     },
   })
   // الكادر المعتمد حصراً — أي حالة أخرى تعامل كغير موجودة
@@ -64,6 +71,7 @@ async function getApprovedNurseCard(id: string): Promise<CardData | null> {
 
   return {
     nurse,
+    departments: nurse.workDepartments.map((w) => w.department.name),
     completedAssignments: statusMap.COMPLETED ?? 0,
     ratingAverage: ratingsAgg._avg.overall ? Number(ratingsAgg._avg.overall.toFixed(1)) : null,
     ratingCount: ratingsAgg._count,
@@ -114,6 +122,7 @@ export default async function PublicNurseCardPage({
     qualification: data.nurse.qualification,
     yearsOfExperience: data.nurse.yearsOfExperience,
     gender: data.nurse.gender,
+    departments: data.departments,
     ratingAverage: data.ratingAverage,
     ratingCount: data.ratingCount,
     completedAssignments: data.completedAssignments,

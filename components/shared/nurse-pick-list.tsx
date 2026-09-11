@@ -23,6 +23,10 @@ export interface SuggestedNurse {
   gender: string | null
   specialty: string | null
   yearsOfExperience: number | null
+  /** أقسام العمل المصرّح بها من الكادر (كتالوج الإدارة) */
+  workDepartments?: string[]
+  /** يطابق قسم التكليف المطلوب ضمن أقسام عمله؟ */
+  departmentMatch?: boolean
   ratingAverage: number | null
   ratingCount: number
   isFavorite: boolean
@@ -34,12 +38,17 @@ export interface SuggestedNurse {
   applicationStatus?: string | null
 }
 
-export function useSuggestedNurses(hospitalId: string | null | undefined, gender: string | null | undefined, enabled = true) {
+export function useSuggestedNurses(
+  hospitalId: string | null | undefined,
+  gender: string | null | undefined,
+  department?: string | null,
+  enabled = true
+) {
   return useQuery({
-    queryKey: ['receiver-nurses', hospitalId, gender],
+    queryKey: ['receiver-nurses', hospitalId, gender, department ?? ''],
     queryFn: () =>
       apiFetcher<{ nurses: SuggestedNurse[]; summary: { total: number; available: number } }>(
-        `/api/receiver/nurses?hospitalId=${hospitalId ?? ''}&gender=${gender || 'ANY'}`
+        `/api/receiver/nurses?hospitalId=${hospitalId ?? ''}&gender=${gender || 'ANY'}&department=${encodeURIComponent(department ?? '')}`
       ),
     // hospitalId اختياري — عند فراغه تُرجع الـ API الكوادر المرتبطين بجهة المستلم تلقائياً
     enabled,
@@ -49,6 +58,7 @@ export function useSuggestedNurses(hospitalId: string | null | undefined, gender
 export function NursePickList({
   hospitalId,
   gender,
+  department,
   selected,
   onToggle,
   emptyText = 'لا يوجد كوادر مطابقون — اختر جهة أخرى أو عدّل الجنس المطلوب',
@@ -56,13 +66,14 @@ export function NursePickList({
 }: {
   hospitalId: string | null | undefined
   gender: string | null | undefined
+  department?: string | null
   selected: string[]
   onToggle: (id: string) => void
   emptyText?: string
   heightClass?: string
 }) {
   const [search, setSearch] = useState('')
-  const { data, isLoading } = useSuggestedNurses(hospitalId, gender)
+  const { data, isLoading } = useSuggestedNurses(hospitalId, gender, department)
 
   const nurses = useMemo(() => {
     const all = data?.nurses ?? []
@@ -96,15 +107,18 @@ export function NursePickList({
         {nurses.map((n) => {
           const isSelected = selected.includes(n.id)
           const alreadyApplied = !!n.applicationStatus
+          const deptMatch = !!n.departmentMatch
           return (
             <button
               key={n.id}
               type="button"
               disabled={alreadyApplied}
               onClick={() => onToggle(n.id)}
-              className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start text-xs transition-colors ${
-                isSelected ? 'bg-primary/10' : 'hover:bg-accent'
-              } ${alreadyApplied ? 'opacity-50' : ''}`}
+              className={`flex w-full flex-wrap items-center gap-2 rounded-lg px-2 py-2 text-start text-xs transition-colors ${
+                deptMatch ? 'bg-primary/5' : ''
+              } ${isSelected ? 'bg-primary/10' : 'hover:bg-accent'} ${
+                alreadyApplied ? 'opacity-50' : ''
+              }`}
             >
               {isSelected ? (
                 <CheckSquare className="size-4 shrink-0 text-primary" />
@@ -116,6 +130,16 @@ export function NursePickList({
               </span>
               <span className="font-bold">{n.name}</span>
               <span className="truncate text-muted-foreground">{n.specialty ?? ''}</span>
+              {deptMatch && (
+                <Badge className="bg-primary/10 text-primary text-[10px] shrink-0" variant="secondary">
+                  يطابق القسم
+                </Badge>
+              )}
+              {(n.workDepartments ?? []).slice(0, 3).map((d) => (
+                <Badge key={d} variant="outline" className="text-[10px] shrink-0">
+                  {d}
+                </Badge>
+              ))}
               {n.affiliationStatus && (
                 <Badge variant="outline" className="text-[10px] shrink-0">
                   {AFFILIATION_STATUS_LABELS[n.affiliationStatus]}

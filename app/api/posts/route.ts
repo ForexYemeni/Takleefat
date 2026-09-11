@@ -9,6 +9,7 @@ import {
   canNurseSeePost,
   escalateDueProgressivePosts,
   genderMatches,
+  getDepartmentAudience,
   progressiveAudienceIds,
   DISTRIBUTION_LABELS,
 } from '@/lib/network'
@@ -169,6 +170,8 @@ export async function POST(req: NextRequest) {
     })
 
     // ---------- جمهور الإشعار حسب طريقة التوزيع + فلتر الجنس (مستوى قاعدة البيانات) ----------
+    // مع تحديد القسم: توجيه احترافي — التكليف يصل حصراً لكوادر القسم المطلوب
+    // (من أقسام عملهم المصرّح بها) مع إشعار فاخر مخصص لهم
     const settings = await getSettings()
     const genderNote = gender === 'ANY' ? '' : ` — ${POST_GENDER_LABELS[gender]}`
     const postBody = `${finalTitle} — ${hospital.name}${department ? ` (${department})` : ''}${genderNote} — القيمة ${formatCurrency(value)}`
@@ -238,7 +241,46 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // التوزيع الواسع: إشعار الجمهور المطابق للجنس فقط — في ALL_MATCHING/AUTO_MATCH
+    // التوزيع الواسع (ALL_MATCHING/AUTO_MATCH) مع قسم محدد: توجيه احترافي — التكليف
+    // يصل حصراً لكوادر القسم المطلوب (من أقسام عملهم المصرّح بها) بإشعار فاخر مخصص
+    // أما طرق التوزيع الخاصة (المفضلة/الجهة/المعتمدون/المتقابلون) فسلوكها القائم لا يتغير
+    if (department && (distribution === 'ALL_MATCHING' || distribution === 'AUTO_MATCH')) {
+      const { departmentNurseIds, extendedNurseIds } = await getDepartmentAudience({
+        department,
+        gender,
+        hospitalId: hospital.id,
+      })
+      await Promise.all([
+        ...departmentNurseIds.map((nurseId) =>
+          notify(nurseId, {
+            title: `تكليف جديد في قسم ${department}`,
+            body: `${postBody} — بما أنك من كادر قسم ${department} هذه أولوية لك — سارِ بالتقديم قبل اكتمال العدد`,
+            type: 'POST_CREATED',
+            link: '/nurse/assignments',
+          })
+        ),
+        ...extendedNurseIds.map((nurseId) =>
+          notify(nurseId, {
+            title: 'تكليف جديد متاح للتقديم',
+            body: `${postBody} — سارِ بالتقديم قبل اكتمال العدد`,
+            type: 'POST_CREATED',
+            link: '/nurse/assignments',
+          })
+        ),
+      ])
+      const targetedNote =
+        departmentNurseIds.length > 0
+          ? ` — توجيه مباشر لكوادر قسم ${department} (${departmentNurseIds.length} كادر)`
+          : ''
+      return NextResponse.json(
+        {
+          message: `تم نشر التكليف بنجاح (${finalTitle}) — ${DISTRIBUTION_LABELS[distribution]}${targetedNote} — حصة الإدارة: ${adminFeeLabel(settings)}`,
+          post,
+        },
+        { status: 201 }
+      )
+    }
+
     const genderWhere = gender === 'ANY' ? {} : { gender }
     const audienceNurses = await db.user.findMany({
       where: { role: 'NURSE', status: 'APPROVED', ...genderWhere },

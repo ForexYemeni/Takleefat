@@ -30,6 +30,7 @@ interface MyProfile {
 }
 
 interface ProfessionalStats {
+  workDepartments?: Array<{ id: string; name: string }>
   stats: {
     completedAssignments: number
     ratingAverage: number | null
@@ -116,6 +117,7 @@ export default function NurseCardPage() {
           qualification: profile.qualification,
           yearsOfExperience: profile.yearsOfExperience,
           gender: profile.gender,
+          departments: statsData.workDepartments?.map((w) => w.name),
           ratingAverage: statsData.stats.ratingAverage,
           ratingCount: statsData.stats.ratingCount,
           completedAssignments: statsData.stats.completedAssignments,

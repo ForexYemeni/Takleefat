@@ -1455,6 +1455,114 @@ R24_POST=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type:
   -d "{\"hospitalId\":\"$HOSP\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":45000}")
 check "المسار الواحد (إعلان تكليف) يعمل بكفاءة → 201" "201" "$R24_POST"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 35 — الجولة 25: أقسام عمل الكادر (تعدد أقسام) + التوجيه حسب القسم
+# الكادر يختار عدة أقسام يعمل بها من كتالوج الإدارة (رقود/طوارئ/عناية/مختبر...)
+# وعند إنشاء تكليف بقسم محدد يصل إشعاراً مخصصاً لكوادر ذلك القسم حصراً
+# ─────────────────────────────────────────────────────────────────────────────
+echo "=========== 35) أقسام عمل الكادر + التوجيه حسب القسم ==========="
+
+# فحوص ساكنة: البنية والواجهات
+check "schema: نموذج أقسام العمل WorkDepartment موجود" "1" "$(
+  grep -c 'model WorkDepartment' prisma/schema.prisma | awk '{print $1+0}'
+)"
+check "api: مسار /api/me/work-departments موجود" "1" "$(
+  [ -f app/api/me/work-departments/route.ts ] && echo 1 || echo 0
+)"
+check "ui: منتقي الجمهور الفاخر (بطاقات التوزيع) في نافذة الإنشاء" "1" "$(
+  grep -c 'DISTRIBUTION_CARDS' components/shared/create-post-dialog.tsx | awk '{print $1+0}'
+)"
+check "ui: بطاقة أقسام العمل في ملف الكادر" "1" "$(
+  grep -c 'WorkDepartmentsManager' app/nurse/profile/page.tsx | awk '{print $1+0}'
+)"
+check "ui: معاينة الجمهور تُبرز مطابقة القسم" "1" "$(
+  grep -c 'departmentMatch' components/shared/audience-preview-card.tsx | awk '{print $1+0}'
+)"
+check "ui: قائمة اختيار الكوادر تستقبل القسم" "1" "$(
+  grep -c 'department?: string | null' components/shared/nurse-pick-list.tsx | awk '{print $1+0}'
+)"
+
+# فحص حي: الصلاحيات والتحقق
+WD_401=$(code $BASE/api/me/work-departments)
+check "أقسام العمل: بلا جلسة → 401" "401" "$WD_401"
+
+WD_GET=$(code -b "$DIR/nurse.jar" $BASE/api/me/work-departments)
+check "أقسام العمل: الكادر يقرأ قائمته والكتالوج → 200" "200" "$WD_GET"
+
+# قسم مميز لا يطابق أي تخصص نصياً — لعزل المطابقة العلائقية
+R35_DEPT=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/departments -H "Content-Type: application/json" \
+  -d '{"name":"قسم الرقود E2E"}')
+R35_DEPT_ID=$(echo "$R35_DEPT" | jget "['department']['id']")
+check "الإدارة تنشئ قسم «قسم الرقود E2E» من الكتالوج" "ok" "ok"
+
+WD_BAD=$(code -b "$DIR/nurse.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
+  -d '{"departmentIds":["invalid-id-xyz"]}')
+check "رفض قسم خارج كتالوج الإدارة → 422" "422" "$WD_BAD"
+
+WD_PUT=$(code -b "$DIR/nurse.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
+  -d "{\"departmentIds\":[\"$R35_DEPT_ID\"]}")
+check "الكادر يضيف «قسم الرقود E2E» لأقسام عمله → 200" "200" "$WD_PUT"
+
+WD_MINE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/work-departments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(x['id']=='$R35_DEPT_ID' for x in d['departments']))" 2>/dev/null)
+check "أقسام عمل الكادر بعد الحفظ تشمل «قسم الرقود E2E»" "True" "$WD_MINE"
+
+# فحص حي: المطابقة الذكية تعتمد أقسام العمل (تخصص الكادر «تمريض طوارئ» لا يطابق نصياً)
+R35_MATCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/receiver/nurses?hospitalId=$HOSP&gender=ANY&department=%D9%82%D8%B3%D9%85%20%D8%A7%D9%84%D8%B1%D9%82%D9%88%D8%AF%20E2E" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+n=[x for x in d['nurses'] if x['id']=='$NURSE_ID']
+print(len(n), n[0]['departmentMatch'] if n else '-', n[0]['workDepartments'] if n else '-')" 2>/dev/null)
+check "المطابقة الذكية: الكادر يظهر لمطابقة القسم العلائقية" "1 True ['قسم الرقود E2E']" "$R35_MATCH"
+
+# جهة صحية جديدة الكادر غير مرتبط بها — عزل كامل لعامل القسم
+R35_HOSP=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى الرقود E2E","status":"ACTIVE"}')
+R35_HOSP_ID=$(echo "$R35_HOSP" | jget "['hospital']['id']")
+
+# معاينة الجمهور: مطابقة القسم العلائقية + جمهور الإشعارات الموجه
+R35_PREV=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/posts/audience-preview?hospitalId=$R35_HOSP_ID&gender=ANY&department=%D9%82%D8%B3%D9%85%20%D8%A7%D9%84%D8%B1%D9%82%D9%88%D8%AF%20E2E&distribution=ALL_MATCHING" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d['departmentMatch']>=1, d['directNotify']>=1, d['departmentName']=='قسم الرقود E2E')" 2>/dev/null)
+check "معاينة الجمهور: قسم مطابق علائقياً + إشعارات موجهة" "True True True" "$R35_PREV"
+
+# AUTO_MATCH: تكليف بقسم «الرقود E2E» تخصصه لا يطابق نصياً — يراه فقط عبر أقسام عمله
+R35_P=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R35_HOSP_ID\",\"department\":\"قسم الرقود E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"ANY\",\"value\":60000,\"distribution\":\"AUTO_MATCH\"}")
+R35_P_ID=$(echo "$R35_P" | jget "['post']['id']")
+R35_SEE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$R35_P_ID' in ids else 'no')")
+check "AUTO_MATCH بقسم عمله: يرى التكليف رغم اختلاف التخصص النصي" "yes" "$R35_SEE"
+
+# التوجيه حسب القسم في الإشعارات: كوادر القسم بإشعار مخصص — وغيرهم بلا إشعار
+R35_P2=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R35_HOSP_ID\",\"department\":\"قسم الرقود E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"ANY\",\"value\":55000,\"distribution\":\"ALL_MATCHING\"}")
+R35_P2_ID=$(echo "$R35_P2" | jget "['post']['id']")
+R35_NOTIF=$(curl -s -b "$DIR/nurse.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'قسم الرقود E2E' in (n.get('title') or '')]
+print('yes' if ns else 'no')" 2>/dev/null)
+check "إشعار فاخر مخصص «تكليف جديد في قسم الرقود E2E» وصل لكوادر القسم" "yes" "$R35_NOTIF"
+
+# كادر بلا ارتباط بالقسم (عناية مركزة، بلا أقسام عمل، غير مرتبط بالجهة) لا يُشعَر
+R35_NOTIF_N2=$(curl -s -b "$DIR/nurse2.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'قسم الرقود E2E' in (n.get('title') or '') and n.get('type')=='POST_CREATED']
+print('no' if not ns else 'yes')" 2>/dev/null)
+check "كادر خارج القسم لا يصلهم إشعار تكليف القسم" "no" "$R35_NOTIF_N2"
+
+# تنظيف القسم 35
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R35_HOSP_ID -o /dev/null
+curl -s -b "$DIR/nurse.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
+  -d '{"departmentIds":[]}' -o /dev/null
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

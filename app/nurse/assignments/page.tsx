@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -17,6 +17,7 @@ import {
   MapPin,
   Search,
   Send,
+  Sparkles,
   UserRound,
   Users,
   Wallet,
@@ -267,6 +268,18 @@ function AvailablePosts({
   const [search, setSearch] = useState('')
   const [applyPost, setApplyPost] = useState<OpenPost | null>(null)
 
+  // أقسام عمل الكادر — لإبراز التكليفات المطابقة لأقسامه بشارة فاخرة
+  const { data: wdData } = useQuery({
+    queryKey: ['my-work-departments'],
+    queryFn: () =>
+      apiFetcher<{ departments: Array<{ id: string; name: string }> }>('/api/me/work-departments'),
+    staleTime: 60_000,
+  })
+  const myWorkDepartments = useMemo(
+    () => new Set((wdData?.departments ?? []).map((d) => d.name)),
+    [wdData]
+  )
+
   const filtered = posts.filter(
     (p) =>
       !search ||
@@ -340,8 +353,9 @@ function AvailablePosts({
           {filtered.map((post) => {
             const myApp = post.applications?.[0]
             const fees = settings ? computeFees(post.value, settings) : null
+            const deptMatch = !!post.department && myWorkDepartments.has(post.department)
             return (
-              <Card key={post.id} className="border-teal-200 bg-teal-50/30">
+              <Card key={post.id} className={deptMatch ? 'border-primary/50 bg-primary/5' : 'border-teal-200 bg-teal-50/30'}>
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -351,7 +365,14 @@ function AvailablePosts({
                         {post.department ? ` — ${post.department}` : ''}
                       </p>
                     </div>
-                    <Badge className="bg-teal-600">متاح للتقديم</Badge>
+                    {deptMatch ? (
+                      <Badge className="gap-1 bg-primary shadow-sm">
+                        <Sparkles className="size-3" />
+                        يطابق قسم عملك
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-teal-600">متاح للتقديم</Badge>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 text-xs">

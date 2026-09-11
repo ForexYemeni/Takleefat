@@ -5,18 +5,23 @@ import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
+  BadgeCheck,
   BriefcaseMedical,
+  Building2,
   CalendarDays,
-  CheckSquare,
   Clock,
   Coins,
   Layers,
   MapPin,
+  MessagesSquare,
   Send,
-  Square,
+  Sparkles,
   Stethoscope,
   Star,
+  TrendingUp,
+  UserCheck,
   Users,
+  type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPost } from '@/lib/api-client'
@@ -70,6 +75,72 @@ interface DepartmentOption {
   name: string
   isActive: boolean
 }
+
+/** بطاقات جمهور التكليف الفاخرة — كل طريقة توزيع ببطاقة أيقونة ووصف مختصر */
+const DISTRIBUTION_CARDS: Array<{
+  key: CreatePostInput['distribution']
+  icon: LucideIcon
+  title: string
+  desc: string
+  cls: string
+}> = [
+  {
+    key: 'ALL_MATCHING',
+    icon: Users,
+    title: 'الجميع المطابق',
+    desc: 'يصل التكليف لكل الكوادر المطابقين للجنس المطلوب',
+    cls: 'text-teal-600 bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300',
+  },
+  {
+    key: 'AUTO_MATCH',
+    icon: Sparkles,
+    title: 'مطابقة ذكية',
+    desc: 'كوادر القسم المطلوب والمرتبطون بالجهة الصحية حصراً',
+    cls: 'text-violet-600 bg-violet-100 dark:bg-violet-950/50 dark:text-violet-300',
+  },
+  {
+    key: 'INVITE_SELECTED',
+    icon: UserCheck,
+    title: 'استدعاء محدد',
+    desc: 'اختر كوادر بعينهم — يصلهم استدعاء بالقبول أو الرفض',
+    cls: 'text-blue-600 bg-blue-100 dark:bg-blue-950/50 dark:text-blue-300',
+  },
+  {
+    key: 'FAVORITES',
+    icon: Star,
+    title: 'المفضلون فقط',
+    desc: 'حصرياً لكوادرك المفضلين المطابقين للجنس',
+    cls: 'text-amber-600 bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300',
+  },
+  {
+    key: 'SAME_ORG',
+    icon: Building2,
+    title: 'كوادر الجهة',
+    desc: 'حصرياً للعاملين بالجهة الصحية المختارة',
+    cls: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300',
+  },
+  {
+    key: 'ENDORSED',
+    icon: BadgeCheck,
+    title: 'المعتمدون',
+    desc: 'حصرياً للكوادر المعتمدين لدى الجهة الصحية',
+    cls: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-950/50 dark:text-cyan-300',
+  },
+  {
+    key: 'INTERVIEWED',
+    icon: MessagesSquare,
+    title: 'المتقابلون',
+    desc: 'حصرياً لمن تمت مقابلته مسبقاً لدى الجهة',
+    cls: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300',
+  },
+  {
+    key: 'PROGRESSIVE',
+    icon: TrendingUp,
+    title: 'نشر تدريجي',
+    desc: 'المفضلون ← الجهة ← المعتمدون ← الجميع — تلقائياً',
+    cls: 'text-rose-600 bg-rose-100 dark:bg-rose-950/50 dark:text-rose-300',
+  },
+]
 
 
 
@@ -154,11 +225,12 @@ export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }
 
   // ---------- اختيار الكوادر عند التوزيع المحدد/الاستدعاء ----------
   const [selectedNurseIds, setSelectedNurseIds] = useState<string[]>([])
+  const selectedDepartment = form.watch('department') || ''
   const { data: suggestedData } = useQuery({
-    queryKey: ['suggested-nurses', selectedHospitalId, form.watch('gender')],
+    queryKey: ['suggested-nurses', selectedHospitalId, form.watch('gender'), selectedDepartment],
     queryFn: () =>
       apiFetcher<{ nurses: SuggestedNurse[]; priorityLabels: Record<string, string> }>(
-        `/api/receiver/nurses?hospitalId=${selectedHospitalId}&gender=${form.watch('gender') || 'ANY'}`
+        `/api/receiver/nurses?hospitalId=${selectedHospitalId}&gender=${form.watch('gender') || 'ANY'}&department=${encodeURIComponent(selectedDepartment)}`
       ),
     enabled: open && !!selectedHospitalId,
   })
@@ -339,31 +411,56 @@ export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }
             />
           </div>
 
-          {/* ---------- طريقة توزيع التكليف — شبكة الكوادر الصحية المعتمدة ---------- */}
-          <div className="space-y-2 rounded-2xl border bg-secondary/30 p-4">
-            <Label className="flex items-center gap-1.5 text-sm font-extrabold">
-              <Layers className="size-4 text-primary" />
-              طريقة توزيع التكليف
-            </Label>
-            <Select
-              value={distribution}
-              onValueChange={(v) => {
-                form.setValue('distribution', v as CreatePostInput['distribution'])
-                if (v !== 'INVITE_SELECTED') setSelectedNurseIds([])
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(DISTRIBUTION_LABELS).map(([k, label]) => (
-                  <SelectItem key={k} value={k}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* ---------- جمهور التكليف — بطاقات فاخرة لاختيار من يصله التكليف ---------- */}
+          <div className="space-y-3 rounded-2xl border bg-gradient-to-bl from-secondary/40 to-transparent p-4">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="flex items-center gap-1.5 text-sm font-extrabold">
+                <Layers className="size-4 text-primary" />
+                جمهور التكليف — من يصله؟
+              </Label>
+              <Badge variant="secondary" className="text-[11px]">
+                {DISTRIBUTION_LABELS[distribution]}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {DISTRIBUTION_CARDS.map((card) => {
+                const isActive = distribution === card.key
+                const Icon = card.icon
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      form.setValue('distribution', card.key)
+                      if (card.key !== 'INVITE_SELECTED') setSelectedNurseIds([])
+                    }}
+                    className={`flex items-start gap-2.5 rounded-2xl border-2 p-3 text-start transition-all ${
+                      isActive
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-transparent bg-background/70 hover:border-primary/30 hover:bg-background'
+                    }`}
+                  >
+                    <span className={`rounded-xl p-1.5 shrink-0 ${card.cls}`}>
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className={`block text-xs font-extrabold ${isActive ? 'text-primary' : ''}`}>
+                        {card.title}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                        {card.desc}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
             <p className="text-[11px] text-muted-foreground">
               {distribution === 'ALL_MATCHING' && 'يُنشر التكليف لكل الكوادر المطابقين للجنس المطلوب — الفلترة مطبقة على مستوى قاعدة البيانات والAPI'}
-              {distribution === 'AUTO_MATCH' && 'يظهر فقط للكوادر المطابقين ذكاءً: تخصص يوافق القسم أو مرتبطون بالجهة الصحية'}
+              {distribution === 'AUTO_MATCH' && 'يظهر فقط للكوادر المطابقين ذكاءً: أصحاب القسم المطلوب من أقسام عملهم أو المرتبطون بالجهة الصحية'}
               {distribution === 'INVITE_SELECTED' && 'استدعاء مباشر: اختر كادراً أو أكثر من القائمة أدناه — يصلهم إشعار بالقبول/الرفض'}
               {distribution === 'FAVORITES' && 'يظهر حصراً لكوادرك المفضلين المطابقين للجنس'}
               {distribution === 'SAME_ORG' && 'يظهر حصراً للكوادر المرتبطين بالجهة الصحية المختارة'}
@@ -404,9 +501,10 @@ export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }
                 <NursePickList
                   hospitalId={selectedHospitalId}
                   gender={form.watch('gender')}
+                  department={selectedDepartment}
                   selected={selectedNurseIds}
                   onToggle={toggleNurse}
-                  emptyText="لا يوجد كوادر مطابقون للجنس المطلوب — أضف كوادر أو اختر جهة أخرى"
+                  emptyText="لا يوجد كوادر مطابقون للجنس والقسم المطلوبين — أضف كوادر أو اختر جهة أخرى"
                 />
                 {selectedNurseIds.length === 0 && (
                   <p className="text-xs font-bold text-amber-600">اختر كادراً واحداً على الأقل قبل النشر</p>

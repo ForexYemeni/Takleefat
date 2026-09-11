@@ -10,6 +10,7 @@ import { formatDate, ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { AffiliationsManager } from '@/components/nurse/affiliations-manager'
+import { WorkDepartmentsManager } from '@/components/nurse/work-departments-manager'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -164,6 +165,14 @@ export default function NurseProfilePage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* أقسام العمل — تعدد أقسام من كتالوج الإدارة: رقود/طوارئ/عناية/مختبر...
+          عند إنشاء تكليف في أحد الأقسام يصل الإشعار للكادر مباشرة */}
+      <Card>
+        <CardContent className="pt-6">
+          <WorkDepartmentsManager />
         </CardContent>
       </Card>
 

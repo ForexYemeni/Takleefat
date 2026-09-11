@@ -16,6 +16,8 @@ export interface ProfessionalCardProps {
   qualification: string | null
   yearsOfExperience: number | null
   gender?: string | null
+  /** أقسام العمل المصرّح بها (ممرض طوارئ/رقود/عناية...) — صف شرائح فاخر */
+  departments?: string[]
   ratingAverage: number | null
   ratingCount: number
   completedAssignments: number
@@ -32,6 +34,7 @@ export function ProfessionalCard({
   qualification,
   yearsOfExperience,
   gender,
+  departments,
   ratingAverage,
   ratingCount,
   completedAssignments,
@@ -72,6 +75,23 @@ export function ProfessionalCard({
 
       {/* جسم البطاقة — البيانات المهنية */}
       <div className="space-y-4 bg-background p-5">
+        {/* أقسام العمل — شريحة فاخرة أعلى البيانات */}
+        {departments && departments.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-[#2563EB]/20 bg-[#2563EB]/5 p-3">
+            <span className="flex items-center gap-1.5 text-[11px] font-extrabold text-[#2563EB]">
+              <BriefcaseBusiness className="size-3.5" />
+              أقسام العمل:
+            </span>
+            {departments.map((d) => (
+              <span
+                key={d}
+                className="rounded-full border border-[#2563EB]/25 bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#2563EB] dark:bg-white/10"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border bg-secondary/40 p-3">
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

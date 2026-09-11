@@ -196,6 +196,8 @@ model User {
   posts                Post[]
   applications         Application[]
   applicationsReviewed Application[]      @relation("ApplicationReviewer")
+  // أقسام العمل التي يعمل بها الكادر (رقود/طوارئ/عناية/مختبر...) — تعدد أقسام من كتالوج الإدارة
+  workDepartments      WorkDepartment[]   @relation("NurseWorkDepartments")
   // شبكة الكوادر: الارتباط المهني + المفضلة + الاستدعاءات
   affiliations         NurseAffiliation[] @relation("NurseAffiliations")
   affiliationsReviewed NurseAffiliation[] @relation("AffiliationReviewer")
@@ -388,7 +390,26 @@ model Department {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  nurses WorkDepartment[] @relation("DepartmentNurses")
+
   @@map("departments")
+}
+
+/// أقسام عمل الكادر التمريضي — يختار الكادر عدة أقسام يعمل بها من كتالوج الإدارة
+/// (ممرض رقود، ممرض طوارئ، ممرض عناية، ممرض مختبر...) وعند إنشاء تكليف في قسم
+/// محدد يصل التكليف مباشرة لمن أضاف هذا القسم ضمن أقسام عمله
+model WorkDepartment {
+  id           String   @id @default(cuid())
+  nurseId      String
+  departmentId String
+  createdAt    DateTime @default(now())
+
+  nurse      User       @relation("NurseWorkDepartments", fields: [nurseId], references: [id], onDelete: Cascade)
+  department Department @relation("DepartmentNurses", fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([nurseId, departmentId])
+  @@index([departmentId])
+  @@map("work_departments")
 }
 
 /// تقديم الكادر التمريضي على تكليف مُعلن

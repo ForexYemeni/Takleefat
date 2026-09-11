@@ -122,3 +122,14 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 export type ChangePhoneInput = z.infer<typeof changePhoneSchema>
+
+// ---------- أقسام عمل الكادر التمريضي (تعدد أقسام من كتالوج الإدارة) ----------
+
+export const workDepartmentsSchema = z.object({
+  // معرفات الأقسام المختارة من كتالوج الإدارة — استبدال كامل للمجموعة الحالية
+  departmentIds: z
+    .array(z.string().min(1, 'معرّف القسم غير صحيح'), { error: 'قائمة الأقسام غير صحيحة' })
+    .max(20, 'الحد الأقصى 20 قسماً'),
+})
+
+export type WorkDepartmentsInput = z.infer<typeof workDepartmentsSchema>
