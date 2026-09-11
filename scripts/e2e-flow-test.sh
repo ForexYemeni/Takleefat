@@ -1360,13 +1360,24 @@ check "receiver: بطاقة تقديم مصغّرة (تعريف + استخدام
 check "receiver: زر عودة من السيرة الذاتية لقائمة التقديمات" "1" "$(
   grep -cF 'عودة لقائمة التقديمات' app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
 )"
+# الجولة 26: المستلم الإداري يستخدم نفس نافذة الإنشاء المشتركة الفاخرة (8 بطاقات توزيع)
+# المستلَمة من حساب الإدارة — مع رقم التكليف التسلسلي nextNumber الخاص بحساب المستلم
+check "receiver: يستخدم نافذة الإنشاء المشتركة الفاخرة CreatePostDialog" "1" "$(
+  grep -cF "import { CreatePostDialog } from '@/components/shared/create-post-dialog'" app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+)"
+check "receiver: يمرر رقم التكليف التسلسلي nextNumber إلى النافذة المشتركة" "1" "$(
+  grep -cF 'nextNumber={nextNumber}' app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+)"
 R22_AUD=0
-for v in ALL_MATCHING FAVORITES SAME_ORG ENDORSED INTERVIEWED; do
-  grep -qF "value: '$v'" app/receiver/assignments/page.tsx && R22_AUD=$((R22_AUD+1))
+for v in ALL_MATCHING AUTO_MATCH INVITE_SELECTED FAVORITES SAME_ORG ENDORSED INTERVIEWED PROGRESSIVE; do
+  grep -qF "key: '$v'" components/shared/create-post-dialog.tsx && R22_AUD=$((R22_AUD+1))
 done
-check "receiver: خيارات الجمهور الخمسة (الجميع/المفضلون/الجهة/المعتمدون/المقابلون)" "5" "$R22_AUD"
-check "receiver: معاينة الجمهور الحية تتبع التوزيع المختار" "1" "$(
-  grep -cF "distribution={form.watch('distribution')" app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+check "بطاقات الجمهور الثمانية الفاخرة في النافذة المشتركة (للمستلم والإدارة)" "8" "$R22_AUD"
+check "receiver: معاينة الجمهور الحية الفاخرة عبر AudiencePreviewCard في النافذة المشتركة" "1" "$(
+  grep -c 'AudiencePreviewCard' components/shared/create-post-dialog.tsx | awk '{print ($1>=1)?1:0}'
+)"
+check "receiver: نسخته المحلية المبسطة للنافذة أُزيلت كلياً" "0" "$(
+  grep -c 'RECEIVER_AUDIENCE_OPTIONS' app/receiver/assignments/page.tsx | awk '{print $1+0}'
 )"
 check "hospitals DELETE: أُزيل حاجز 409 — الحذف الكامل دائماً" "0" "$(
   grep -cF 'لا يمكن حذف الجهة' 'app/api/admin/hospitals/[id]/route.ts' | awk '{print $1+0}'

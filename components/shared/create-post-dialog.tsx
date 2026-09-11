@@ -163,9 +163,17 @@ interface CreatePostDialogProps {
   onCreated?: (post: { id: string; title: string; number: number }) => void
   /** آخر تكليف — يُملأ به النموذج تلقائياً عند الفتح (زر «أعد نشر آخر تكليف») */
   repostSource?: RepostSource | null
+  /** رقم التكليف التالي — عند تمريره يظهر العنوان الاختياري «التكليف رقم N» (وضع المستلم الإداري) */
+  nextNumber?: number
 }
 
-export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }: CreatePostDialogProps) {
+export function CreatePostDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  repostSource,
+  nextNumber,
+}: CreatePostDialogProps) {
   const form = useForm<CreatePostFormValues, unknown, CreatePostInput>({
     resolver: zodResolver(createPostSchema),
     defaultValues: {
@@ -263,14 +271,31 @@ export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>إضافة تكليف مُعلن</DialogTitle>
+          <DialogTitle>
+            {nextNumber ? `إنشاء تكليف جديد — التكليف رقم ${nextNumber}` : 'إضافة تكليف مُعلن'}
+          </DialogTitle>
           <DialogDescription>
-            يُنشر التكليف للكادر التمريضي للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N»
-            والموقع يُعبأ تلقائياً من الجهة الصحية المختارة
+            {nextNumber
+              ? `سيظهر العنوان تلقائياً «التكليف رقم ${nextNumber}» (ويمكن الإدارة تعديله لاحقاً) — الجهة الصحية تُختار من مستشفيات الإدارة والموقع يُعبأ تلقائياً — بدون تاريخ انتهاء`
+              : 'يُنشر التكليف للكادر التمريضي للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(submitMutation)} className="space-y-4" noValidate>
+          {/* العنوان الاختياري — وضع المستلم الإداري (الترقيم التسلسلي التلقائي) */}
+          {nextNumber != null && (
+            <div className="space-y-2">
+              <Label htmlFor="cp-title">عنوان التكليف (اختياري)</Label>
+              <Input
+                id="cp-title"
+                placeholder={`اتركه فارغاً ليكون: التكليف رقم ${nextNumber}`}
+                {...form.register('title')}
+              />
+              {form.formState.errors.title && (
+                <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
+              )}
+            </div>
+          )}
           {/* الجهة الصحية من قوائم الإدارة */}
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5">
@@ -279,7 +304,11 @@ export function CreatePostDialog({ open, onOpenChange, onCreated, repostSource }
             </Label>
             <Select
               value={selectedHospitalId || undefined}
-              onValueChange={(v) => form.setValue('hospitalId', v, { shouldValidate: true })}
+              onValueChange={(v) => {
+                form.setValue('hospitalId', v, { shouldValidate: true })
+                // الموقع يُعبأ تلقائياً من الجهة الصحية المختارة
+                form.setValue('location', hospitals.find((h) => h.id === v)?.location ?? '')
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="اختر الجهة الصحية" />

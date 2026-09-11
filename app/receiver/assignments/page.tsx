@@ -6,11 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeCheck,
   Banknote,
-  Building2,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ClipboardCheck,
   Clock,
   History,
   Inbox,
@@ -19,15 +17,12 @@ import {
   PackageCheck,
   Plus,
   ShieldAlert,
-  ShieldCheck,
   Star,
   UserRound,
   Users,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPost, apiPatch } from '@/lib/api-client'
 import {
   cn,
@@ -41,16 +36,10 @@ import {
   whatsappLink,
   buildPostShareMessage,
 } from '@/lib/utils'
-import {
-  createPostSchema,
-  type CreatePostInput,
-  type CreatePostFormValues,
-} from '@/lib/validations/post'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant-cv'
-import { AudiencePreviewCard } from '@/components/shared/audience-preview-card'
-import type { RepostSource } from '@/components/shared/create-post-dialog'
+import { CreatePostDialog } from '@/components/shared/create-post-dialog'
 import { Stars, StarRatingInput } from '@/components/shared/star-rating'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -262,6 +251,11 @@ export default function ReceiverAssignmentsPage() {
         }}
         nextNumber={nextNumber}
         repostSource={repostMode ? posts[0] ?? null : null}
+        onCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ['my-posts'] })
+          queryClient.invalidateQueries({ queryKey: ['open-posts'] })
+          queryClient.invalidateQueries({ queryKey: ['stats'] })
+        }}
       />
 
       {/* حوار مراجعة التقديمات */}
@@ -1005,367 +999,3 @@ function CompleteAssignmentDialog({
   )
 }
 
-// ---------- إنشاء تكليف مُعلن ----------
-
-// جمهور التكليف — شرائح الاستهداف المتاحة عند إنشاء تكليف (الجولة 22)
-// القيم مطابقة لطريقة التوزيع في الخادم (DistributionMethod) والرؤية مطبقة فيه
-const RECEIVER_AUDIENCE_OPTIONS: Array<{
-  value: NonNullable<CreatePostInput['distribution']>
-  label: string
-  hint: string
-  icon: React.ComponentType<{ className?: string }>
-  wide?: boolean
-}> = [
-  {
-    value: 'ALL_MATCHING',
-    label: 'جميع الممرضين',
-    hint: 'يصل التكليف لكل الكوادر المؤهلين المطابقين للجنس المطلوب — النشر العام للجميع',
-    icon: Users,
-    wide: true,
-  },
-  {
-    value: 'FAVORITES',
-    label: 'المفضلون لديك',
-    hint: 'حصراً للكوادر الذين أضفتهم إلى قائمة المفضلة الخاصة بحسابك',
-    icon: Star,
-  },
-  {
-    value: 'SAME_ORG',
-    label: 'كوادر الجهة الصحية',
-    hint: 'الذين يعملون أو ارتبطوا بالجهة الصحية المختارة لهذا التكليف',
-    icon: Building2,
-  },
-  {
-    value: 'ENDORSED',
-    label: 'المعتمدون',
-    hint: 'الكوادر الذين اعتمدتهم الإدارة لدى الجهة الصحية المختارة',
-    icon: ShieldCheck,
-  },
-  {
-    value: 'INTERVIEWED',
-    label: 'من تمت مقابلتهم',
-    hint: 'الكوادر الذين سُجّل أن الإدارة قابلتهم لدى الجهة الصحية المختارة',
-    icon: ClipboardCheck,
-  },
-]
-
-function CreatePostDialog({
-  open,
-  onOpenChange,
-  nextNumber,
-  repostSource,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  nextNumber: number
-  repostSource?: RepostSource | null
-}) {
-  const queryClient = useQueryClient()
-  const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null)
-
-  const form = useForm<CreatePostFormValues, unknown, CreatePostInput>({
-    resolver: zodResolver(createPostSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      hospitalId: '',
-      department: '',
-      location: '',
-      startDate: '',
-      nursesNeeded: '1',
-      hours: '',
-      gender: 'ANY',
-      value: '',
-      distribution: 'ALL_MATCHING',
-    },
-  })
-
-  // الجهات الصحية والأقسام — تُدار من حساب الإدارة
-  const { data: hospitalsData } = useQuery({
-    queryKey: ['hospitals'],
-    queryFn: () => apiFetcher<{ hospitals: Hospital[] }>('/api/hospitals'),
-    enabled: open,
-  })
-  const { data: departmentsData } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => apiFetcher<{ departments: Department[] }>('/api/departments'),
-    enabled: open,
-  })
-  const hospitals = hospitalsData?.hospitals ?? []
-  const departments = departmentsData?.departments ?? []
-
-  // إعادة نشر: ملء النموذج من آخر تكليف — العنوان يُترك فارغاً ليأخذ الرقم الجديد تلقائياً
-  useEffect(() => {
-    if (open && repostSource) {
-      const hospital = hospitals.find((h) => h.id === repostSource.hospitalId) ?? null
-      setSelectedHospital(hospital)
-      form.reset({
-        title: '',
-        description: repostSource.description ?? '',
-        hospitalId: repostSource.hospitalId ?? '',
-        department: repostSource.department ?? '',
-        location: hospital?.location ?? '',
-        startDate: new Date().toISOString().slice(0, 10),
-        nursesNeeded: repostSource.nursesNeeded != null ? String(repostSource.nursesNeeded) : '1',
-        hours: repostSource.hours != null ? String(repostSource.hours) : '',
-        gender: (repostSource.gender as 'MALE' | 'FEMALE' | 'ANY') ?? 'ANY',
-        value: repostSource.value != null ? String(repostSource.value) : '',
-        distribution:
-          (repostSource.distribution as CreatePostInput['distribution']) ?? 'ALL_MATCHING',
-      })
-    }
-  }, [open, repostSource, hospitals.length])
-
-  const createMutation = useMutation({
-    mutationFn: (values: CreatePostInput) => apiPost<{ message: string }>('/api/posts', values),
-    onSuccess: (res) => {
-      toast.success(res.message)
-      queryClient.invalidateQueries({ queryKey: ['my-posts'] })
-      queryClient.invalidateQueries({ queryKey: ['open-posts'] })
-      queryClient.invalidateQueries({ queryKey: ['stats'] })
-      onOpenChange(false)
-      form.reset()
-      setSelectedHospital(null)
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const onSubmit = (values: CreatePostInput) => {
-    createMutation.mutate(values)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>إنشاء تكليف جديد — التكليف رقم {nextNumber}</DialogTitle>
-          <DialogDescription>
-            سيظهر العنوان تلقائياً «التكليف رقم {nextNumber}» (ويمكن الإدارة تعديله لاحقاً) — الجهة
-            الصحية تُختار من مستشفيات الإدارة والموقع يُعبأ تلقائياً — بدون تاريخ انتهاء
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="p-title">عنوان التكليف (اختياري)</Label>
-            <Input
-              id="p-title"
-              placeholder={`اتركه فارغاً ليكون: التكليف رقم ${nextNumber}`}
-              {...form.register('title')}
-            />
-            {form.formState.errors.title && (
-              <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
-            )}
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>الجهة الصحية (من مستشفيات الإدارة)</Label>
-              <Select
-                onValueChange={(v) => {
-                  const h = hospitals.find((x) => x.id === v) ?? null
-                  setSelectedHospital(h)
-                  form.setValue('hospitalId', v, { shouldValidate: true })
-                  // الموقع الفعلي يُعبأ تلقائياً بحسب الجهة الصحية
-                  form.setValue('location', h?.location ?? '')
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر المستشفى" />
-                </SelectTrigger>
-                <SelectContent>
-                  {hospitals.map((h) => (
-                    <SelectItem key={h.id} value={h.id}>
-                      {h.name}
-                      {h.location ? ` — ${h.location}` : ''}
-                    </SelectItem>
-                  ))}
-                  {hospitals.length === 0 && (
-                    <SelectItem value="none" disabled>
-                      لا توجد مستشفيات — تُضاف من حساب الإدارة
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.hospitalId && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.hospitalId.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>القسم (من قوائم الإدارة)</Label>
-              <Select onValueChange={(v) => form.setValue('department', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر القسم" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.name}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                  {departments.length === 0 && (
-                    <SelectItem value="none" disabled>
-                      لا توجد أقسام — تُضاف من حساب الإدارة
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {selectedHospital?.location && (
-            <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-              <MapPin className="size-3.5" />
-              الموقع الفعلي (تلقائي): {selectedHospital.location}
-            </p>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="p-value">قيمة التكليف (ريال)</Label>
-              <Input
-                id="p-value"
-                type="number"
-                min={1}
-                placeholder="مثال: 120000"
-                {...form.register('value')}
-              />
-              {form.formState.errors.value && (
-                <p className="text-xs text-destructive">{form.formState.errors.value.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="p-hours">عدد الساعات</Label>
-              <Input
-                id="p-hours"
-                type="number"
-                min={1}
-                max={999}
-                placeholder="مثال: 8"
-                {...form.register('hours')}
-              />
-              {form.formState.errors.hours && (
-                <p className="text-xs text-destructive">{form.formState.errors.hours.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="p-needed">عدد الكادر المطلوب</Label>
-              <Input id="p-needed" type="number" min={1} max={50} {...form.register('nursesNeeded')} />
-              {form.formState.errors.nursesNeeded && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.nursesNeeded.message}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>الجنس المطلوب</Label>
-              <Select onValueChange={(v) => form.setValue('gender', v as CreatePostInput['gender'])}>
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر الجنس" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ANY">أي جنس</SelectItem>
-                  <SelectItem value="MALE">ذكر</SelectItem>
-                  <SelectItem value="FEMALE">أنثى</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="p-start">تاريخ البدء</Label>
-              <Input id="p-start" type="date" {...form.register('startDate')} />
-              {form.formState.errors.startDate && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.startDate.message}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="p-desc">وصف التكليف (اختياري)</Label>
-            <Textarea
-              id="p-desc"
-              rows={3}
-              placeholder="تفاصيل المهام والمسؤوليات والوردية..."
-              {...form.register('description')}
-            />
-          </div>
-
-          {/* ---------- جمهور التكليف — من يصلهم؟ (الجولة 22) ---------- */}
-          <div className="space-y-2.5 rounded-2xl border bg-secondary/30 p-4">
-            <div>
-              <Label className="flex items-center gap-1.5 text-sm font-extrabold">
-                <Users className="size-4 text-primary" />
-                جمهور التكليف — من يصلهم؟
-              </Label>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                اختر شريحة الكوادر التي يظهر لها هذا التكليف — باقي الكوادر لن يروه في قائمتهم
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {RECEIVER_AUDIENCE_OPTIONS.map((opt) => {
-                const active = (form.watch('distribution') || 'ALL_MATCHING') === opt.value
-                const OptIcon = opt.icon
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => form.setValue('distribution', opt.value)}
-                    className={cn(
-                      'flex items-start gap-2.5 rounded-xl border-2 p-3 text-start transition-all',
-                      opt.wide && 'sm:col-span-2',
-                      active
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-border bg-background hover:border-primary/30'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'mt-0.5 shrink-0 rounded-lg p-1.5',
-                        active ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'
-                      )}
-                    >
-                      <OptIcon className="size-4" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-1.5 text-sm font-extrabold">
-                        {opt.label}
-                        {active && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden />}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
-                        {opt.hint}
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* المعاينة الحية لجمهور التكليف قبل النشر — تتبع الخيار المختار */}
-            <AudiencePreviewCard
-              hospitalId={form.watch('hospitalId')}
-              gender={form.watch('gender') || 'ANY'}
-              department={form.watch('department') || ''}
-              distribution={form.watch('distribution') || 'ALL_MATCHING'}
-              enabled={open}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              إلغاء
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending} className="gap-2">
-              <CalendarDays className="size-4" />
-              {createMutation.isPending ? 'جارٍ النشر...' : 'نشر التكليف'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
