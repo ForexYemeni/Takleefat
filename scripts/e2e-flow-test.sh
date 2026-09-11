@@ -1820,6 +1820,98 @@ d=json.load(sys.stdin)
 print('ok' if d.get('totalDoctors',0)>=2 and d.get('totalSupervisors',0)>=1 else 'bad')" 2>/dev/null)
 check "إحصاءات الإدارة تعرض الأطباء والمشرفين" "ok" "$R29_STATS"
 
+# ============================================================
+# القسم 39 — الجولة 30: مفضلة الأطباء لمشرف الأطباء (واعية بالجمهور) + صفحة تسجيل احترافية
+# ============================================================
+echo "=========== 39) الجولة 30: مفضلة الأطباء للمشرف + تسجيل احترافي ==========="
+
+# --- فحوص ساكنة: API المفضلة واعية بالجمهور ---
+R30_AUD=$(grep -c "favoritesAudience" app/api/receiver/favorites/route.ts | awk '{print ($1>=2)?1:0}')
+check "api: المفضلة واعية بالجمهور (المشرف=أطباء / المستلم=كادر)" "1" "$R30_AUD"
+
+R30_ROLE=$(grep -c "role: audience" app/api/receiver/favorites/route.ts | awk '{print ($1>=2)?1:0}')
+check "api: GET/POST المفضلة يمرران دور الجمهور للمطابقة العلائقية" "1" "$R30_ROLE"
+
+R30_STFAV=$(grep -c "isFavorite" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: كوادر/أطباء الجهة تتضمن حالة المفضلة لكل صف" "1" "$R30_STFAV"
+
+R30_STAR_SUP=$(grep -c "FavoriteStar" app/supervisor/staff/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: صفحة أطباء جهتي تضم زر مفضلة لكل طبيب" "1" "$R30_STAR_SUP"
+
+R30_STAR_REC=$(grep -c "FavoriteStar" app/receiver/staff/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: صفحة كوادر جهتي تضم زر مفضلة لكل كادر" "1" "$R30_STAR_REC"
+
+R30_VAR=$(grep -c 'variant="doctor"' app/supervisor/favorites/page.tsx | awk '{print ($1==1)?1:0}')
+check "ui: صفحة مفضلة المشرف تعرض نصوص الأطباء (variant=doctor)" "1" "$R30_VAR"
+
+R30_REGCARDS=$(grep -c "ROLE_CARDS" "app/(auth)/register/page.tsx" | awk '{print ($1>=2)?1:0}')
+check "ui: صفحة التسجيل ببطاقات أدوار غنية (ROLE_CARDS + مزايا)" "1" "$R30_REGCARDS"
+
+R30_PWS=$(grep -c "PW_STRENGTH" "app/(auth)/register/page.tsx" | awk '{print ($1>=2)?1:0}')
+check "ui: صفحة التسجيل تضم مؤشر قوة كلمة المرور الحي" "1" "$R30_PWS"
+
+# --- فحوص حية: مفضلة المشرف للأطباء ---
+DOC_ID=$(jget "['user']['id']" < "$DIR/r29_doc.json")
+FAV_DOC=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$DOC_ID\"}")
+check "مشرف الأطباء يضيف طبيباً (دور DOCTOR) لمفضلته → 201" "201" "$FAV_DOC"
+
+FAV_DOC_DUP=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$DOC_ID\"}")
+check "منع تكرار الطبيب في مفضلة المشرف → 409" "409" "$FAV_DOC_DUP"
+
+FAV_DOC_FORBID=$(code -b "$DIR/doctor.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$DOC_ID\"}")
+check "حماية الدور: الطبيب ممنوع من إدارة المفضلة → 403" "403" "$FAV_DOC_FORBID"
+
+FAV_DOC_LIST=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/favorites | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['favorites']
+n=[x for x in d if x['id']=='$DOC_ID']
+print(n[0]['isFavorite'] if n else 'missing', n[0]['specialty'] if n else '-')" 2>/dev/null)
+check "قائمة مفضلة المشرف تعرض الطبيب بتخصصه من كتالوج التخصصات" "True قلبية E2E" "$FAV_DOC_LIST"
+
+FAV_PATCH=$(code -b "$DIR/supervisor.jar" -X PATCH "$BASE/api/receiver/favorites?nurseId=$DOC_ID" \
+  -H "Content-Type: application/json" -d '{"note":"أولوية استشاري"}')
+check "المشرف يحدّث ملاحظة الطبيب المفضل → 200" "200" "$FAV_PATCH"
+
+# --- فحص حي: صفحة أطباء جهتي تعكس نجمة المفضلة ---
+SUP_ORG=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى E2E الأساس","type":"HOSPITAL"}')
+check "إنشاء جهة المشرف الصحية (ربط بالاسم) → 201" "201" "$SUP_ORG"
+
+R30_NEWDOC=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r30_newdoc.json" -w "%{http_code}" -X POST $BASE/api/receiver/staff \
+  -H "Content-Type: application/json" \
+  -d '{"name":"د. جهة الصحة","phone":"791110905","password":"Doctor@123","gender":"MALE","qualification":"بكالوريوس طب وجراحة","specialty":"قلبية E2E","yearsOfExperience":4}')
+check "المشرف يضيف طبيباً لجهته (مرآة المستلم) → 201" "201" "$R30_NEWDOC"
+STAFF_DOC_ID=$(jget "['nurse']['id']" < "$DIR/r30_newdoc.json")
+
+R30_STAFF0=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$STAFF_DOC_ID']
+print('ok' if rows and rows[0]['isFavorite']==False else 'bad')" 2>/dev/null)
+check "أطباء جهتي: صف الطبيب يتضمن isFavorite=false قبل الإضافة" "ok" "$R30_STAFF0"
+
+FAV_STAFF=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$STAFF_DOC_ID\"}")
+check "المشرف يضيف طبيب جهته للمفضلة (زر الصفحة) → 201" "201" "$FAV_STAFF"
+
+R30_STAFF1=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$STAFF_DOC_ID']
+print('ok' if rows and rows[0]['isFavorite']==True else 'bad')" 2>/dev/null)
+check "أطباء جهتي: isFavorite انعكست فوراً بعد الإضافة" "ok" "$R30_STAFF1"
+
+FAV_DEL=$(code -b "$DIR/supervisor.jar" -X DELETE "$BASE/api/receiver/favorites?nurseId=$STAFF_DOC_ID")
+check "المشرف يزيل طبيب جهته من المفضلة → 200" "200" "$FAV_DEL"
+
+# --- التراجع التام: عودة المستلم لتفضيل الكادر (لا تراجع في الجمهور) ---
+FAV_NURSE_BACK=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$NURSE_ID\"}")
+check "استمرار سلوك المستلم: إضافة كادر لمفضلته → 409 (مفضل مسبقاً من القسم 21)" "409" "$FAV_NURSE_BACK"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

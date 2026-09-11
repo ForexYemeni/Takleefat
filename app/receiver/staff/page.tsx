@@ -28,6 +28,7 @@ import { QUALIFICATION_OPTIONS } from '@/lib/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
+import { FavoriteStar } from '@/components/shared/favorite-star'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -61,6 +62,7 @@ interface StaffNurse {
   requestedStatus: string | null
   workYears: number | null
   createdAt: string
+  isFavorite: boolean
   nurse: {
     id: string
     name: string
@@ -220,6 +222,7 @@ export default function ReceiverStaffPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <FavoriteStar nurseId={n.nurse.id} isFavorite={n.isFavorite} onChanged={() => queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })} />
                 <span className="text-[10px] text-muted-foreground">الارتباط:</span>
                 <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
                 <Button

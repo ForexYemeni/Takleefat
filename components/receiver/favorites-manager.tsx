@@ -32,9 +32,31 @@ import {
 } from '@/components/ui/select'
 
 /**
- * الممرضون المفضلون | Favorite Nurses — قائمة خاصة بكل مستلم إداري:
+ * المفضلة الخاصة بصاحب التكليف — واعية بالجمهور (منظومة الأطباء):
+ * variant="nurse" (المستلم الإداري): الكوادر المفضلة
+ * variant="doctor" (مشرف الأطباء): الأطباء المفضلون
  * بحث + تصنيف + بيانات مهنية + حالة الاعتماد والتوفر + استدعاء مباشر لتكليف مفتوح.
  */
+const COPY = {
+  nurse: {
+    title: 'الكوادر المفضلة',
+    subtitle: 'قائمتك الخاصة الموثوقة — لا تظهر لأي مستلم إداري آخر — مع استدعاء مباشر',
+    emptyTitle: 'قائمة المفضلة فارغة',
+    emptyDesc: 'أضف الكوادر الموثوقين عبر نجمة المفضلة ⭐ في أي بطاقة كادر — التقديمات أو نتائج المطابقة أو كوادر جهتي',
+    emptyNoResults: 'لا نتائج مطابقة في مفضلتك',
+    inviteDesc: 'اختر تكليفاً مفتوحاً من تكليفاتك المُعلنة — يصل للكادر إشعار بالتفاصيل ويجيب بالقبول أو الرفض',
+    personLabel: 'بلا تخصص',
+  },
+  doctor: {
+    title: 'الأطباء المفضلون',
+    subtitle: 'قائمتك الخاصة الموثوقة — لا تظهر لأي مشرف أطباء آخر — مع استدعاء مباشر',
+    emptyTitle: 'قائمة الأطباء المفضلين فارغة',
+    emptyDesc: 'أضف الأطباء الموثوقين عبر نجمة المفضلة ⭐ في بطاقات الأطباء — التقديمات أو أطباء جهتي أو قائمة إنشاء التكليف',
+    emptyNoResults: 'لا نتائج مطابقة في مفضلتك',
+    inviteDesc: 'اختر تكليفاً مفتوحاً من تكليفاتك المُعلنة — يصل للطبيب إشعار بالتفاصيل ويجيب بالقبول أو الرفض',
+    personLabel: 'بلا تخصص',
+  },
+} as const
 
 interface FavoriteNurseRow {
   id: string
@@ -62,7 +84,8 @@ interface OpenPost {
   value: number
 }
 
-export function FavoritesManager() {
+export function FavoritesManager({ variant = 'nurse' }: { variant?: 'nurse' | 'doctor' }) {
+  const copy = COPY[variant]
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [inviteNurse, setInviteNurse] = useState<FavoriteNurseRow | null>(null)
@@ -117,10 +140,10 @@ export function FavoritesManager() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-extrabold">
             <Star className="size-6 fill-amber-400 text-amber-400" />
-            الكوادر المفضلة
+            {copy.title}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            قائمتك الخاصة الموثوقة — لا تظهر لأي مستلم إداري آخر — مع استدعاء مباشر
+            {copy.subtitle}
           </p>
         </div>
         <div className="relative w-full sm:w-64">
@@ -132,8 +155,8 @@ export function FavoritesManager() {
       {favorites.length === 0 ? (
         <EmptyState
           icon={Star}
-          title={search ? 'لا نتائج مطابقة في مفضلتك' : 'قائمة المفضلة فارغة'}
-          description="أضف الكوادر الموثوقين عبر نجمة المفضلة ⭐ في أي بطاقة كادر — التقديمات أو نتائج المطابقة"
+          title={search ? copy.emptyNoResults : copy.emptyTitle}
+          description={copy.emptyDesc}
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -149,7 +172,7 @@ export function FavoritesManager() {
                     <span className="text-xs text-muted-foreground" dir="ltr">{n.phone}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {n.specialty ?? 'بلا تخصص'}
+                    {n.specialty ?? copy.personLabel}
                     {n.yearsOfExperience != null ? ` — ${n.yearsOfExperience} سنة خبرة` : ''}
                     {n.gender ? ` — ${GENDER_LABELS[n.gender]}` : ''}
                   </p>
@@ -209,7 +232,7 @@ export function FavoritesManager() {
               استدعاء {inviteNurse?.name}
             </DialogTitle>
             <DialogDescription>
-              اختر تكليفاً مفتوحاً من تكليفاتك المُعلنة — يصل للكادر إشعار بالتفاصيل ويجيب بالقبول أو الرفض
+              {copy.inviteDesc}
             </DialogDescription>
           </DialogHeader>
 

@@ -6,21 +6,53 @@ import { notify } from '@/lib/notifications'
 import { findMatchingNurses } from '@/lib/network'
 
 /**
- * الممرضون المفضلون | Favorite Nurses — قائمة خاصة بكل مستلم إداري لا تظهر لغيره
+ * المفضلة الخاصة بصاحب التكليف — واعية بالجمهور (منظومة الأطباء):
+ * المستلم الإداري → يفضّل الكادر التمريضي | مشرف الأطباء → يفضّل الأطباء
  *
  * GET /api/receiver/favorites?search=... — قائمة مفضلته مع البيانات المهنية والتقييم
- *   وحالة الارتباط بجهته والتوفر + بحث داخلي
+ *   وحالة الارتباط بجهته والتوفر + بحث داخلي (بحسب جمهور صاحب الحساب)
  * POST /api/receiver/favorites { nurseId, category?, note? } — إضافة لمفضلته
- * ملاحظة: الإضافة تُرسل إشعاراً للكادر أن المستلم أضافه لمفضلته.
+ * ملاحظة: الإضافة تُرسل إشعاراً للكادر/الطبيب أن صاحب التكليف أضافه لمفضلته.
  */
+
+/// جمهور المفضلة حسب دور صاحب الحساب: المشرف يفضّل أطباء — المستلم يفضّل كادراً تمريضياً
+function favoritesAudience(role: string): 'NURSE' | 'DOCTOR' {
+  return role === 'DOCTOR_SUPERVISOR' ? 'DOCTOR' : 'NURSE'
+}
+
+/// تسميات الجمهور — رسائل وإشعارات دقيقة بحسب نوع الحساب
+const AUDIENCE_LABELS = {
+  NURSE: {
+    targetMissing: 'الكادر التمريضي غير موجود',
+    targetDuplicate: 'هذا الكادر ضمن مفضلتك مسبقاً',
+    targetNotInFavorites: 'هذا الكادر ليس ضمن مفضلتك',
+    notifyTitle: 'أُضفت إلى قائمة المفضلين',
+    notifyBody:
+      'قام مستلم إداري بإضافتك إلى قائمة كوادره المفضلة الموثوقة — ستكون أولوية لديه في التكليفات',
+    notifyLink: '/nurse',
+  },
+  DOCTOR: {
+    targetMissing: 'الطبيب غير موجود',
+    targetDuplicate: 'هذا الطبيب ضمن مفضلتك مسبقاً',
+    targetNotInFavorites: 'هذا الطبيب ليس ضمن مفضلتك',
+    notifyTitle: 'أُضفت إلى قائمة المفضلين',
+    notifyBody:
+      'قام مشرف الأطباء بإضافتك إلى قائمة أطبائه المفضلة الموثوقة — ستكون أولوية لديه في التكليفات',
+    notifyLink: '/doctor',
+  },
+} as const
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const search = req.nextUrl.searchParams.get('search')
+    const audience = favoritesAudience(session.user.role)
 
-    // قائمته الخاصة حصراً — ثم تُرتب بالمطابقة الذكية (المفضلة أولاً بطبيعتها)
+    // قائمته الخاصة حصراً — بحسب جمهور حسابه (كادر تمريضي للمستلم / أطباء للمشرف)
+    // ثم تُرتب بالمطابقة الذكية (المفضلة أولاً بطبيعتها)
     const matched = await findMatchingNurses({
       receiverId: session.user.id,
+      role: audience,
       favoritesOnly: true,
       search: search ?? undefined,
     })
@@ -48,22 +80,26 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
+    const audience = favoritesAudience(session.user.role)
+    const labels = AUDIENCE_LABELS[audience]
+
     const parsed = favoriteSchema.safeParse(await req.json())
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
 
     const { nurseId, category, note } = parsed.data
-    const nurse = await db.user.findFirst({
-      where: { id: nurseId, role: 'NURSE' },
+    // جمهور المفضلة بحسب الدور: المستلم يضيف كادراً تمريضياً — المشرف يضيف أطباء
+    const target = await db.user.findFirst({
+      where: { id: nurseId, role: audience },
       select: { id: true, name: true },
     })
-    if (!nurse) return jsonError('الكادر التمريضي غير موجود', 404)
+    if (!target) return jsonError(labels.targetMissing, 404)
 
     const existing = await db.favoriteNurse.findUnique({
       where: { receiverId_nurseId: { receiverId: session.user.id, nurseId } },
     })
-    if (existing) return jsonError('هذا الكادر ضمن مفضلتك مسبقاً', 409)
+    if (existing) return jsonError(labels.targetDuplicate, 409)
 
     const favorite = await db.favoriteNurse.create({
       data: {
@@ -75,13 +111,13 @@ export async function POST(req: NextRequest) {
     })
 
     await notify(nurseId, {
-      title: 'أُضفت إلى قائمة المفضلين',
-      body: 'قام مستلم إداري بإضافتك إلى قائمة كوادره المفضلة الموثوقة — ستكون أولوية لديه في التكليفات',
+      title: labels.notifyTitle,
+      body: labels.notifyBody,
       type: 'FAVORITE_ADDED',
-      link: '/nurse',
+      link: labels.notifyLink,
     })
 
-    return NextResponse.json({ message: `تمت إضافة (${nurse.name}) إلى مفضلتيك`, favorite }, { status: 201 })
+    return NextResponse.json({ message: `تمت إضافة (${target.name}) إلى مفضلتيك`, favorite }, { status: 201 })
   } catch (error) {
     return handleApiError(error)
   }
@@ -94,6 +130,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
+    const labels = AUDIENCE_LABELS[favoritesAudience(session.user.role)]
     const nurseId = req.nextUrl.searchParams.get('nurseId')
     if (!nurseId) throw new ApiError('معرّف الكادر مطلوب', 400)
 
@@ -101,7 +138,7 @@ export async function PATCH(req: NextRequest) {
     const existing = await db.favoriteNurse.findUnique({
       where: { receiverId_nurseId: { receiverId: session.user.id, nurseId } },
     })
-    if (!existing) return jsonError('هذا الكادر ليس ضمن مفضلتك', 404)
+    if (!existing) return jsonError(labels.targetNotInFavorites, 404)
 
     const updated = await db.favoriteNurse.update({
       where: { id: existing.id },
@@ -119,13 +156,14 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
+    const labels = AUDIENCE_LABELS[favoritesAudience(session.user.role)]
     const nurseId = req.nextUrl.searchParams.get('nurseId')
     if (!nurseId) throw new ApiError('معرّف الكادر مطلوب', 400)
 
     const existing = await db.favoriteNurse.findUnique({
       where: { receiverId_nurseId: { receiverId: session.user.id, nurseId } },
     })
-    if (!existing) return jsonError('هذا الكادر ليس ضمن مفضلتك', 404)
+    if (!existing) return jsonError(labels.targetNotInFavorites, 404)
 
     await db.favoriteNurse.delete({ where: { id: existing.id } })
     return NextResponse.json({ message: 'تمت الإزالة من المفضلة' })

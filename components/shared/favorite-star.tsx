@@ -39,6 +39,7 @@ export function FavoriteStar({
       queryClient.invalidateQueries({ queryKey: ['favorites'] })
       queryClient.invalidateQueries({ queryKey: ['receiver-nurses'] })
       queryClient.invalidateQueries({ queryKey: ['suggested-nurses'] })
+      queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
       onChanged?.()
     },
   })

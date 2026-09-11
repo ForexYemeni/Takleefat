@@ -124,8 +124,9 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * GET /api/receiver/staff — كوادر جهة المستلم الإداري
- * قائمة الارتباطات المرتبطة بجهة المستلم (كل الحالات) لعرضها في صفحة كوادر الجهة.
+ * GET /api/receiver/staff — كوادر/أطباء جهة صاحب التكليف
+ * قائمة الارتباطات المرتبطة بجهته (كل الحالات) لعرضها في صفحة كوادر الجهة
+ * مع حالة المفضلة الشخصية لكل صف (نجمة المفضلة تُدار مباشرة من صفحة الجهة).
  */
 export async function GET() {
   try {
@@ -138,25 +139,33 @@ export async function GET() {
     // شفاء كسول: ارتباطات أُضيفت من المستلم ثم اعتُمدت الجهة وتوقفت على PENDING
     await healReceiverPendingAffiliations(org.id)
 
-    const affiliations = await db.nurseAffiliation.findMany({
-      where: { hospitalId: org.id },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        nurse: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            gender: true,
-            specialty: true,
-            qualification: true,
-            yearsOfExperience: true,
-            status: true,
-            _count: { select: { documents: true } },
+    const [affiliations, favorites] = await Promise.all([
+      db.nurseAffiliation.findMany({
+        where: { hospitalId: org.id },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          nurse: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              gender: true,
+              specialty: true,
+              qualification: true,
+              yearsOfExperience: true,
+              status: true,
+              _count: { select: { documents: true } },
+            },
           },
         },
-      },
-    })
+      }),
+      // مفضلة صاحب الحساب نفسه — لتصيير نجمة المفضلة بحالتها الصحيحة
+      db.favoriteNurse.findMany({
+        where: { receiverId: session.user.id },
+        select: { nurseId: true },
+      }),
+    ])
+    const favoriteSet = new Set(favorites.map((f) => f.nurseId))
 
     return NextResponse.json({
       org,
@@ -167,6 +176,7 @@ export async function GET() {
         requestedStatus: a.requestedStatus,
         workYears: a.workYears,
         createdAt: a.createdAt,
+        isFavorite: favoriteSet.has(a.nurse.id),
         nurse: a.nurse,
       })),
     })
