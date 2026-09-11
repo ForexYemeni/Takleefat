@@ -5,12 +5,15 @@ import { pushSubscribeSchema, pushUnsubscribeSchema } from '@/lib/validations/pu
 import { MAX_SUBSCRIPTIONS_PER_USER } from '@/lib/push'
 
 /**
- * POST /api/push/subscribe — تسجيل جهاز للإشعارات الفورية (idempotent: upsert بـ endpoint)
- * DELETE /api/push/subscribe — إلغاء اشتراك جهاز
+ * POST /api/push/subscribe — تسجيل جهاز للإشعارات الفورية (idempotent: upsert بـ userId+endpoint)
+ * DELETE /api/push/subscribe — إلغاء اشتراك جهاز من الحساب الحالي
  *
- * الجولة الرابعة عشرة:
- * - الاشتراك مقيد بجلسة صالحة، ويُحدَّث صاحبه إن أُعيد تسجيل نفس endpoint من حساب آخر
- * - حد أقصى MAX_SUBSCRIPTIONS_PER_USER اشتراك لكل مستخدم — الأقدم يُحذف
+ * الجولة الرابعة عشرة: الاشتراك مقيد بجلسة صالحة، وحد أقصى MAX_SUBSCRIPTIONS_PER_USER لكل مستخدم
+ * الجولة العشرون — إصلاح الجذر الثاني لعدم وصول الإشعارات الحقيقية:
+ * كان الـ endpoint فريداً عالمياً مع نقل ملكيته لآخر حساب يحمّل لوحته على الجهاز،
+ * فكانت إشعارات بقية الحسابات (المستلم/الكادر/المدير) تُرسل إلى لا شيء.
+ * الآن: نفس الجهاز يُسجَّل لكل حساب استخدمه على حدة (صفوف مستقلة بنفس الـ endpoint)
+ * فيصل كل إشعار لصاحبه مهما كان الحساب النشط حالياً على الجهاز.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +25,9 @@ export async function POST(req: NextRequest) {
     const { endpoint, keys, userAgent } = parsed.data
 
     const subscription = await db.pushSubscription.upsert({
-      where: { endpoint },
+      where: {
+        userId_endpoint: { userId: session.user.id, endpoint },
+      },
       create: {
         userId: session.user.id,
         endpoint,
@@ -31,8 +36,7 @@ export async function POST(req: NextRequest) {
         userAgent: userAgent || null,
       },
       update: {
-        // الجهاز نفسه قد يعاد تسجيله بعد تبديل جلسة — يُنقل لمالكه الحالي
-        userId: session.user.id,
+        // الجهاز نفسه لحساب هذا المستخدم — تُحدَّث المفاتيح فقط
         p256dh: keys.p256dh,
         auth: keys.auth,
       },

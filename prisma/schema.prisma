@@ -97,26 +97,26 @@ enum OrgType {
 /// حالة الارتباط المهني للكادر مع الجهة الصحية
 /// الحالات المحمية (ENDORSED/INTERVIEWED/UNENDORSED) لا يمكن للكادر تعيينها بنفسه
 enum AffiliationStatus {
-  WORKING      /// يعمل حالياً
-  FORMER       /// عمل سابقاً
-  INTERVIEWED  /// تمت مقابلته
-  ENDORSED     /// معتمد
-  PENDING      /// قيد المراجعة (طلب الكادر)
-  EXTERNAL     /// خارجي مؤهل
-  UNENDORSED   /// غير معتمد
-  SUSPENDED    /// موقوف
+  WORKING /// يعمل حالياً
+  FORMER /// عمل سابقاً
+  INTERVIEWED /// تمت مقابلته
+  ENDORSED /// معتمد
+  PENDING /// قيد المراجعة (طلب الكادر)
+  EXTERNAL /// خارجي مؤهل
+  UNENDORSED /// غير معتمد
+  SUSPENDED /// موقوف
 }
 
 /// طريقة توزيع التكليف المُعلن
 enum DistributionMethod {
-  ALL_MATCHING    /// نشر للجميع المطابقين (الافتراضي التاريخي)
-  AUTO_MATCH      /// نشر تلقائي للمطابقين ذكاءً
+  ALL_MATCHING /// نشر للجميع المطابقين (الافتراضي التاريخي)
+  AUTO_MATCH /// نشر تلقائي للمطابقين ذكاءً
   INVITE_SELECTED /// استدعاء ممرضين محددين
-  FAVORITES       /// اختيار من المفضلة
-  SAME_ORG        /// العاملون في نفس الجهة
-  ENDORSED        /// المعتمدون
-  INTERVIEWED     /// تمت مقابلتهم
-  PROGRESSIVE     /// النشر التدريجي
+  FAVORITES /// اختيار من المفضلة
+  SAME_ORG /// العاملون في نفس الجهة
+  ENDORSED /// المعتمدون
+  INTERVIEWED /// تمت مقابلتهم
+  PROGRESSIVE /// النشر التدريجي
 }
 
 /// حالة استدعاء كادر لتكليف محدد
@@ -186,32 +186,32 @@ model User {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  documents           Document[]
-  assignments         Assignment[]   @relation("NurseAssignments")
-  receivedAssignments Assignment[]   @relation("ReceiverAssignments")
-  createdAssignments  Assignment[]   @relation("AssignmentCreator")
-  notifications       Notification[]
-  assignmentLogs      AssignmentLog[]
-  documentsReviewed   Document[]     @relation("DocumentReviewer")
-  posts               Post[]
-  applications        Application[]
-  applicationsReviewed Application[] @relation("ApplicationReviewer")
+  documents            Document[]
+  assignments          Assignment[]       @relation("NurseAssignments")
+  receivedAssignments  Assignment[]       @relation("ReceiverAssignments")
+  createdAssignments   Assignment[]       @relation("AssignmentCreator")
+  notifications        Notification[]
+  assignmentLogs       AssignmentLog[]
+  documentsReviewed    Document[]         @relation("DocumentReviewer")
+  posts                Post[]
+  applications         Application[]
+  applicationsReviewed Application[]      @relation("ApplicationReviewer")
   // شبكة الكوادر: الارتباط المهني + المفضلة + الاستدعاءات
-  affiliations          NurseAffiliation[] @relation("NurseAffiliations")
-  affiliationsReviewed  NurseAffiliation[] @relation("AffiliationReviewer")
-  affiliationRequests   NurseAffiliation[] @relation("AffiliationRequester")
-  favoritesGiven        FavoriteNurse[]    @relation("ReceiverFavorites")
-  favoritedBy           FavoriteNurse[]    @relation("NurseFavoritedBy")
-  invitationsReceived   NurseInvitation[]  @relation("InvitedNurse")
-  invitationsSent       NurseInvitation[]  @relation("InvitingReceiver")
+  affiliations         NurseAffiliation[] @relation("NurseAffiliations")
+  affiliationsReviewed NurseAffiliation[] @relation("AffiliationReviewer")
+  affiliationRequests  NurseAffiliation[] @relation("AffiliationRequester")
+  favoritesGiven       FavoriteNurse[]    @relation("ReceiverFavorites")
+  favoritedBy          FavoriteNurse[]    @relation("NurseFavoritedBy")
+  invitationsReceived  NurseInvitation[]  @relation("InvitedNurse")
+  invitationsSent      NurseInvitation[]  @relation("InvitingReceiver")
   // حقول خاصة بالمستلم الإداري — بيانات السحب (تُحفظ بشكل رئيسي للسحب)
-  walletAddress       String?
-  accountNumber       String?
-  ratingsReceived     NurseRating[]      @relation("RatingNurse")
-  ratingsGiven        NurseRating[]      @relation("RatingReceiver")
-  earnings            ReceiverEarning[]
-  withdrawals         Withdrawal[]
-  pushSubscriptions   PushSubscription[]
+  walletAddress        String?
+  accountNumber        String?
+  ratingsReceived      NurseRating[]      @relation("RatingNurse")
+  ratingsGiven         NurseRating[]      @relation("RatingReceiver")
+  earnings             ReceiverEarning[]
+  withdrawals          Withdrawal[]
+  pushSubscriptions    PushSubscription[]
 
   @@index([role, status])
   @@map("users")
@@ -219,20 +219,20 @@ model User {
 
 /// مستندات الكادر التمريضي (يُحفظ رابط الملف فقط في قاعدة البيانات)
 model Document {
-  id           String          @id @default(cuid())
+  id           String         @id @default(cuid())
   userId       String
-  type         DocumentType    @default(OTHER)
+  type         DocumentType   @default(OTHER)
   title        String
   fileUrl      String
   fileName     String
   fileSize     Int?
   mimeType     String?
-  status       DocumentStatus  @default(PENDING)
+  status       DocumentStatus @default(PENDING)
   reviewNote   String?
   reviewedById String?
   reviewedAt   DateTime?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   reviewedBy User? @relation("DocumentReviewer", fields: [reviewedById], references: [id])
@@ -244,44 +244,44 @@ model Document {
 
 /// التكليف الطبي / التمريضي
 model Assignment {
-  id          String           @id @default(cuid())
-  title       String
-  description String?
-  facility    String
-  department  String?
-  startDate   DateTime
-  endDate     DateTime?
-  status      AssignmentStatus @default(ACTIVE)
-  nurseId     String
-  receiverId  String
-  createdById String
-  receivedAt  DateTime?
+  id                    String           @id @default(cuid())
+  title                 String
+  description           String?
+  facility              String
+  department            String?
+  startDate             DateTime
+  endDate               DateTime?
+  status                AssignmentStatus @default(ACTIVE)
+  nurseId               String
+  receiverId            String
+  createdById           String
+  receivedAt            DateTime?
   /// القيمة المالية للتكليف (بالريال اليمني) — تُعبأ تلقائياً من التكليف المُعلن
-  value         Int?
+  value                 Int?
   /// حصة الإدارة المحسوبة من قيمة التكليف
-  adminFee      Int?
+  adminFee              Int?
   /// حالة دفع الرسوم للإدارة
-  paymentStatus PaymentStatus  @default(UNPAID)
+  paymentStatus         PaymentStatus    @default(UNPAID)
   /// التكليف المُعلن الذي نتج عنه هذا التكليف (إن وجد)
-  postId        String?
+  postId                String?
   // ---------- دورة الإنهاء والدفع ----------
   /// تأكيد الكادر من إنهاء التكليف واستلام مبلغ التكليف
-  nurseDoneAt          DateTime?
-  nurseConfirmedReceipt Boolean @default(false)
+  nurseDoneAt           DateTime?
+  nurseConfirmedReceipt Boolean          @default(false)
   /// إنهاء التكليف من جهة المستلم الإداري
-  receiverDoneAt       DateTime?
+  receiverDoneAt        DateTime?
   /// إجابة المستلم الإداري: هل تم الدفع للممرض؟
-  nursePaid            Boolean?
+  nursePaid             Boolean?
   /// لقطة شاشة إثبات الدفع المرفوعة من الكادر (تظهر للإدارة بتكبير احترافي)
   paymentScreenshotUrl  String?
   paymentScreenshotName String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
-  nurse     User            @relation("NurseAssignments", fields: [nurseId], references: [id])
-  receiver  User            @relation("ReceiverAssignments", fields: [receiverId], references: [id])
-  createdBy User            @relation("AssignmentCreator", fields: [createdById], references: [id])
-  post      Post?           @relation(fields: [postId], references: [id])
+  nurse     User             @relation("NurseAssignments", fields: [nurseId], references: [id])
+  receiver  User             @relation("ReceiverAssignments", fields: [receiverId], references: [id])
+  createdBy User             @relation("AssignmentCreator", fields: [createdById], references: [id])
+  post      Post?            @relation(fields: [postId], references: [id])
   logs      AssignmentLog[]
   rating    NurseRating?
   earning   ReceiverEarning?
@@ -314,37 +314,37 @@ model Setting {
 
 /// التكليف المُعلن من المستلم الإداري — يقدّم عليه الكادر التمريضي
 model Post {
-  id           String     @id @default(cuid())
+  id                String              @id @default(cuid())
   /// الرقم التسلسلي الاحترافي — يُستخدم في العنوان التلقائي «التكليف رقم N»
-  number       Int        @default(0)
-  title        String
-  description  String?
-  facility     String
-  department   String?
-  location     String?
-  startDate    DateTime
+  number            Int                 @default(0)
+  title             String
+  description       String?
+  facility          String
+  department        String?
+  location          String?
+  startDate         DateTime
   /// عدد الساعات المطلوبة للوردية/التكليف
-  hours        Int?
+  hours             Int?
   /// الجنس المطلوب للتكليف
-  gender       Gender     @default(ANY)
-  nursesNeeded Int        @default(1)
+  gender            Gender              @default(ANY)
+  nursesNeeded      Int                 @default(1)
   /// قيمة التكليف (المقابل المالي الكامل) بالريال اليمني
-  value        Int
-  status       PostStatus @default(OPEN)
-  receiverId   String
+  value             Int
+  status            PostStatus          @default(OPEN)
+  receiverId        String
   /// الجهة الصحية المرتبطة (للمطابقة والارتباط المهني)
-  hospitalId   String?
+  hospitalId        String?
   /// طريقة توزيع التكليف — null يعني النشر العام للجميع (التوافق مع التكليفات السابقة)
-  distribution        DistributionMethod?
+  distribution      DistributionMethod?
   /// مرحلة النشر التدريجي الحالية (0 = المفضلون ... 3 = الخارجيون المؤهلون)
-  progressiveStage    Int       @default(0)
+  progressiveStage  Int                 @default(0)
   /// موعد الانتقال للمرحلة التالية في النشر التدريجي
-  progressiveNextAt   DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  progressiveNextAt DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
-  receiver     User          @relation(fields: [receiverId], references: [id], onDelete: Cascade)
-  hospital     Hospital?     @relation(fields: [hospitalId], references: [id])
+  receiver     User              @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+  hospital     Hospital?         @relation(fields: [hospitalId], references: [id])
   applications Application[]
   assignments  Assignment[]
   invitations  NurseInvitation[]
@@ -357,23 +357,23 @@ model Post {
 /// الجهات الصحية (المستشفيات والمراكز الطبية) — كيانات مستقلة تُدار من الإدارة
 /// وتُربط بها الكوادر التمريضية عبر الارتباط المهني وتُبنى عليها التكليفات
 model Hospital {
-  id        String   @id @default(cuid())
-  name      String   @unique
+  id        String    @id @default(cuid())
+  name      String    @unique
   /// الموقع الفعلي للجهة — يُعبأ تلقائياً عند اختيار الجهة في التكليف
   location  String?
   /// الإحداثيات الجغرافية الحقيقية (تُلتقط من الخريطة التفاعلية)
   lat       Float?
   lng       Float?
   /// نوع الجهة: مستشفى / مركز طبي / مركز تخصصي / عيادة / مجمع طبي / أخرى
-  type      OrgType  @default(HOSPITAL)
+  type      OrgType   @default(HOSPITAL)
   city      String?
   address   String?
   phone     String?
   email     String?
   /// حالة الجهة: نشطة / غير نشطة / معلقة — الحقول المشتقة (isActive) للتوافق
   status    OrgStatus @default(ACTIVE)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
 
   affiliations NurseAffiliation[]
   posts        Post[]
@@ -404,9 +404,9 @@ model Application {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
-  nurse     User       @relation(fields: [nurseId], references: [id], onDelete: Cascade)
-  reviewedBy User?     @relation("ApplicationReviewer", fields: [reviewedById], references: [id])
+  post       Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  nurse      User  @relation(fields: [nurseId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("ApplicationReviewer", fields: [reviewedById], references: [id])
 
   @@unique([postId, nurseId])
   @@index([nurseId])
@@ -433,22 +433,22 @@ model AssignmentLog {
 /// تقييم الكادر التمريضي من المستلم الإداري — احترافي ومتعدد المحاور
 /// يظهر ضمن التقييمات في ملف الكادر ويُضاف إلى السيرة الذاتية عند التقديم لأي تكليف آخر
 model NurseRating {
-  id           String   @id @default(cuid())
-  assignmentId String   @unique
-  nurseId      String
-  receiverId   String
+  id            String   @id @default(cuid())
+  assignmentId  String   @unique
+  nurseId       String
+  receiverId    String
   /// التقييم العام (1..5 نجوم)
-  overall      Int
+  overall       Int
   /// الالتزام بالمواعيد (1..5)
-  punctuality  Int?
+  punctuality   Int?
   /// جودة الأداء الطبي (1..5)
-  quality      Int?
+  quality       Int?
   /// التعامل والتواصل (1..5)
   communication Int?
   /// الانضباط المهني (1..5)
-  discipline   Int?
-  comment      String?
-  createdAt    DateTime @default(now())
+  discipline    Int?
+  comment       String?
+  createdAt     DateTime @default(now())
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   nurse      User       @relation("RatingNurse", fields: [nurseId], references: [id], onDelete: Cascade)
@@ -486,7 +486,7 @@ model Withdrawal {
   accountNumber String
   status        WithdrawalStatus @default(PENDING)
   note          String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime         @default(now())
   processedAt   DateTime?
 
   receiver User @relation(fields: [receiverId], references: [id], onDelete: Cascade)
@@ -513,12 +513,14 @@ model Notification {
   @@map("notifications")
 }
 
-/// اشتراكات الإشعارات الفورية (Web Push) — جهاز أو أكثر لكل مستخدم عبر الـ PWA
+/// اشتراكات الإشعارات الفورية (Web Push)
+/// الجولة العشرون: نفس الجهاز قد يخدم عدة حسابات — لكل حساب صف مستقل بنفس الـ endpoint،
+/// فيصل الإشعار لصاحبه مهما كان الحساب النشط حالياً على الجهاز
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
-  /// رابط نقطة نهاية خدمة الدفع الفوري (endpoint من المتصفح) — فريد لكل جهاز
-  endpoint  String   @unique
+  /// رابط نقطة نهاية خدمة الدفع الفوري (endpoint من المتصفح) — قد يتشاركه عدة حسابات لنفس الجهاز
+  endpoint  String
   /// مفاتيح التشفير من المتصفح (p256dh + auth) — لا تُقرأ إلا لخدمة الدفع
   p256dh    String
   auth      String
@@ -528,6 +530,7 @@ model PushSubscription {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, endpoint])
   @@index([userId])
   @@map("push_subscriptions")
 }
@@ -535,21 +538,21 @@ model PushSubscription {
 /// الارتباط المهني — يربط الكادر التمريضي بجهة صحية مع تحديد طبيعة العلاقة
 /// شبكة الكوادر الصحية المعتمدة | Verified Healthcare Workforce Network
 model NurseAffiliation {
-  id            String            @id @default(cuid())
-  nurseId       String
-  hospitalId    String
-  status        AffiliationStatus @default(PENDING)
+  id              String             @id @default(cuid())
+  nurseId         String
+  hospitalId      String
+  status          AffiliationStatus  @default(PENDING)
   /// الحالة التي طلبها مقدم الطلب (الكادر: يعمل حالياً/سابقاً) — الإدارة تعتمدها أو تعدّلها
   requestedStatus AffiliationStatus?
   /// سنوات العمل في الجهة — يُدخلها الكادر ضمن سيرته الذاتية
-  workYears     Int?
+  workYears       Int?
   /// مَن أنشأ الارتباط (الكادر بطلب / المستلم / الإدارة)
-  requestedById String?
-  note          String?
-  reviewedById  String?
-  reviewedAt    DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  requestedById   String?
+  note            String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   nurse       User     @relation("NurseAffiliations", fields: [nurseId], references: [id], onDelete: Cascade)
   hospital    Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)

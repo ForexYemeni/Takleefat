@@ -65,7 +65,7 @@ async function sendToSubscription(
   }
 }
 
-/** إرسال Push لكل أجهزة مستخدم — يُستدعى في الخلفية فقط (fire-and-forget) */
+/** إرسال Push لكل أجهزة مستخدم — يُجدول عبر after() فلا يُؤخر الاستجابة ويُكمل حتماً */
 export async function deliverPushToUser(userId: string, payload: PushPayload): Promise<void> {
   if (!isPushConfigured()) return
   try {
@@ -75,7 +75,13 @@ export async function deliverPushToUser(userId: string, payload: PushPayload): P
       select: { id: true, endpoint: true, p256dh: true, auth: true },
     })
     if (subs.length === 0) return
-    await Promise.allSettled(subs.map((sub) => sendToSubscription(sub, payload)))
+    const results = await Promise.allSettled(subs.map((sub) => sendToSubscription(sub, payload)))
+    const delivered = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
+    // الجولة العشرون: سطر تشخيصي في سجلات المنصة — يثبت أن الإرسال استُكمل فعلاً
+    // بعد الاستجابة (after) ويعرض عدد الأجهزة التي وصلها الإشعار
+    console.info(
+      `[push] delivered ${delivered}/${subs.length} → user ${userId} | «${(payload.title || '').slice(0, 40)}»`
+    )
   } catch (error) {
     console.warn('[push] deliverPushToUser failed:', error)
   }

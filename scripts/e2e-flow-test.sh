@@ -1315,6 +1315,23 @@ check "لا إرسال fire-and-forget متبقٍ (deliverPushInBackground مح�
   grep -cF 'deliverPushInBackground' lib/push.ts lib/notifications.ts | awk -F: '{s+=$2} END{print s+0}'
 )"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 31 — الجولة 20: الجهاز يخدم كل حساباته (بلا نقل ملكية الاشتراك)
+# الجذر الثاني: endpoint فريد عالمياً تنتقل ملكيته لآخر حساب يحمّل لوحته —
+# فتصل إشعارات الحسابات الأخرى إلى لا شيء. الآن لكل حساب صف مستقل لنفس الجهاز.
+# ─────────────────────────────────────────────────────────────────────────────
+R20_UQ=$(grep -cF '@@unique([userId, endpoint])' prisma/schema.prisma | awk '{print ($1>=1)?1:0}')
+check "schema: اشتراك فريد لكل (حساب+جهاز) لا للجهاز وحده" "1" "$R20_UQ"
+check "schema: لا فريدية عالمية للـ endpoint (بلا نقل ملكية)" "0" "$(
+  grep -cE 'endpoint[[:space:]]+String[[:space:]]+@unique' prisma/schema.prisma | awk '{print $1+0}'
+)"
+check "subscribe: upsert بمركب userId_endpoint (كل حساب يملك جهازه)" "1" "$(
+  grep -cF 'userId_endpoint' app/api/push/subscribe/route.ts | awk '{print ($1>=1)?1:0}'
+)"
+check "push: سجل تشخيصي لعدد الأجهزة التي وصلها الإشعار" "1" "$(
+  grep -cF '[push] delivered' lib/push.ts | awk '{print ($1>=1)?1:0}'
+)"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
