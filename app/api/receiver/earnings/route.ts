@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
-import { getSettings } from '@/lib/settings'
+import { getSettings, effectiveSharePercent } from '@/lib/settings'
 
 /**
  * GET /api/receiver/earnings — قسم أرباحي (المستلم الإداري)
@@ -27,7 +27,7 @@ export async function GET() {
       getSettings(),
       db.user.findUnique({
         where: { id: session.user.id },
-        select: { walletAddress: true, accountNumber: true },
+        select: { walletAddress: true, accountNumber: true, commissionPercent: true },
       }),
     ])
 
@@ -46,7 +46,8 @@ export async function GET() {
         withdrawn,
         pending,
         available,
-        sharePercent: settings.receiverSharePercent,
+        // الجولة 32: نسبتك الفعالة — مخصصة من الإدارة أو التلقائية (نصف نسبة الإدارة)
+        sharePercent: effectiveSharePercent(me ?? {}, settings),
       },
       earnings: earnings.map((e) => ({
         id: e.id,

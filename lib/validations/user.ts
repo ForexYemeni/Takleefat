@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PHONE_REGEX, PHONE_MESSAGE, QUALIFICATION_VALUES, DOCTOR_QUALIFICATION_VALUES } from '@/lib/validations/auth'
+import { PHONE_REGEX, PHONE_MESSAGE } from '@/lib/validations/auth'
 
 /**
  * حسابات يُنشئها مدير النظام (مستلم إداري / كادر تمريضي) ومستلم الجهة لكوادر جهته.
@@ -62,8 +62,12 @@ export const createNurseSchema = z.object({
     .trim()
     .min(1, 'التخصص مطلوب — اختر القسم من القائمة')
     .max(80, 'التخصص طويل جداً'),
+  // المؤهل العلمي — إجباري، وتُتحقق قيمته على الخادم من كتالوج المؤهلات المُدار من الإدارة (الجولة 32)
   qualification: z
-    .enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
+    .string({ error: 'المؤهل العلمي مطلوب — اختره من القائمة' })
+    .trim()
+    .min(1, 'المؤهل العلمي مطلوب — اختره من القائمة')
+    .max(80, 'المؤهل طويل جداً'),
   gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
   // سنوات الخبرة إجبارية — الفراغ يُعامل كحقل مفقود (0 للمتخرج الجديد)
   yearsOfExperience: z.preprocess(
@@ -82,8 +86,12 @@ export const receiverCreateNurseSchema = z.object({
   phone: adminPhoneSchema,
   password: adminPasswordSchema,
   gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
+  // المؤهل العلمي — إجباري، وتُتحقق قيمته على الخادم من كتالوج المؤهلات (الجولة 32)
   qualification: z
-    .enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
+    .string({ error: 'المؤهل العلمي مطلوب — اختره من القائمة' })
+    .trim()
+    .min(1, 'المؤهل العلمي مطلوب — اختره من القائمة')
+    .max(80, 'المؤهل طويل جداً'),
   specialty: z
     .string({ error: 'التخصص مطلوب — أدخل التخصص' })
     .trim()
@@ -109,7 +117,11 @@ export const createDoctorSchema = z.object({
     .trim()
     .min(1, 'التخصص مطلوب — اختر التخصص الطبي من القائمة')
     .max(80, 'التخصص طويل جداً'),
-  qualification: z.enum(DOCTOR_QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
+  qualification: z
+    .string({ error: 'المؤهل العلمي مطلوب — اختره من القائمة' })
+    .trim()
+    .min(1, 'المؤهل العلمي مطلوب — اختره من القائمة')
+    .max(80, 'المؤهل طويل جداً'),
   gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
   yearsOfExperience: z.preprocess(
     (v) => (v === '' || v === null ? undefined : v),
@@ -139,7 +151,7 @@ export type CreateSupervisorInput = z.infer<typeof createSupervisorSchema>
 
 export const updateQualificationSchema = z.object({
   userId: z.string({ error: 'معرّف الحساب مطلوب' }).min(1, 'معرّف الحساب مطلوب'),
-  // المؤهل يُتحقق منه على الخادم من قائمة الدور (كادر: 3 خيارات / طبيب: 4 خيارات)
+  // المؤهل يُتحقق منه على الخادم من كتالوج المؤهلات العلمية المُدار من الإدارة (الجولة 32)
   qualification: z
     .string({ error: 'المؤهل العلمي مطلوب — اختره من القائمة' })
     .trim()
@@ -150,6 +162,53 @@ export const updateQualificationSchema = z.object({
 export type UpdateQualificationInput = z.infer<typeof updateQualificationSchema>
 export type ReceiverCreateNurseInput = z.infer<typeof receiverCreateNurseSchema>
 export type ReceiverCreateNurseFormValues = z.input<typeof receiverCreateNurseSchema>
+
+// ---------- نِسَب الحصص والأذونات — للمستلم الإداري ومشرف الأطباء (الجولة 32) ----------
+
+/**
+ * تعديل نسبة الحصة من قيمة كل تكليف لحساب مستلم إداري أو مشرف أطباء:
+ * - commissionPercent = رقم 0..100 → نسبة مخصصة لهذا الحساب حصراً
+ * - commissionPercent = null → العودة للتلقائي (نصف نسبة الإدارة)
+ */
+export const commissionPercentSchema = z.object({
+  commissionPercent: z
+    .number({ error: 'النسبة غير صحيحة' })
+    .min(0, 'النسبة لا يمكن أن تكون سالبة')
+    .max(100, 'النسبة لا تتجاوز 100٪')
+    .nullable(),
+})
+
+/** فتح/إغلاق إذن رؤية البيانات الكاملة (السيرة الذاتية + المستندات) من حساب الإدارة */
+export const fullProfileAccessSchema = z.object({
+  fullProfileAccess: z.boolean({ error: 'قيمة الإذن غير صحيحة' }),
+})
+
+export type CommissionPercentInput = z.infer<typeof commissionPercentSchema>
+export type FullProfileAccessInput = z.infer<typeof fullProfileAccessSchema>
+
+// ---------- كتالوج المؤهلات العلمية — إدارة الإدارة (الجولة 32) ----------
+
+export const qualificationCatalogSchema = z.object({
+  name: z
+    .string({ error: 'اسم المؤهل مطلوب' })
+    .trim()
+    .min(2, 'اسم المؤهل قصير جداً — مثال: دبلوم عالي')
+    .max(80, 'اسم المؤهل طويل جداً'),
+  audience: z.enum(['NURSE', 'DOCTOR'], { error: 'جمهور المؤهل مطلوب — كادر تمريضي أو أطباء' }),
+})
+
+export const qualificationCatalogUpdateSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, 'اسم المؤهل قصير جداً — مثال: دبلوم عالي')
+    .max(80, 'اسم المؤهل طويل جداً')
+    .optional(),
+  isActive: z.boolean().optional(),
+})
+
+export type QualificationCatalogInput = z.infer<typeof qualificationCatalogSchema>
+export type QualificationCatalogUpdateInput = z.infer<typeof qualificationCatalogUpdateSchema>
 
 // ---------- إدارة الحساب من الإدارة (تغيير كلمة المرور / حذف نهائي) ----------
 

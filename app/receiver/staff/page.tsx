@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeCheck,
@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  IdCard,
   Lock,
   PhoneIcon,
   ShieldAlert,
@@ -29,6 +30,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
+import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -81,11 +83,30 @@ export default function ReceiverStaffPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [details, setDetails] = useState<StaffNurse | null>(null)
+  // السيرة الذاتية الكاملة — تظهر فقط لمن مُنحه حساب الإدارة الإذن (الجولة 32)
+  const [profileUserId, setProfileUserId] = useState<string | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+
+  // كتالوج المؤهلات العلمية من حساب الإدارة — القوائم التاريخية احتياط
+  const [qualOptions, setQualOptions] = useState<readonly { value: string; label: string }[]>(QUALIFICATION_OPTIONS)
+
+  useEffect(() => {
+    fetch('/api/qualifications/public?audience=NURSE')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.qualifications ?? []).map((q: { name: string }) => ({ value: q.name, label: q.name }))
+        if (list.length > 0) setQualOptions(list)
+      })
+      .catch(() => null)
+  }, [])
 
   const { data, isLoading } = useQuery({
     queryKey: ['receiver-staff'],
-    queryFn: () => apiFetcher<{ org: { id: string; name: string; city: string | null; status: string } | null; nurses: StaffNurse[] }>('/api/receiver/staff'),
+    queryFn: () => apiFetcher<{ org: { id: string; name: string; city: string | null; status: string } | null; nurses: StaffNurse[]; fullProfileAccess?: boolean }>('/api/receiver/staff'),
   })
+
+  /** إذن رؤية البيانات الكاملة — يفتحه حساب الإدارة حصراً (الجولة 32) */
+  const fullProfileAccess = data?.fullProfileAccess ?? false
 
   const createForm = useForm<ReceiverCreateNurseFormValues, unknown, ReceiverCreateNurseInput>({
     resolver: zodResolver(receiverCreateNurseSchema),
@@ -225,6 +246,20 @@ export default function ReceiverStaffPage() {
                 <FavoriteStar nurseId={n.nurse.id} isFavorite={n.isFavorite} onChanged={() => queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })} />
                 <span className="text-[10px] text-muted-foreground">الارتباط:</span>
                 <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
+                {fullProfileAccess && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
+                    onClick={() => {
+                      setProfileUserId(n.nurse.id)
+                      setProfileOpen(true)
+                    }}
+                  >
+                    <IdCard className="size-3.5" />
+                    السيرة الذاتية
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -316,7 +351,7 @@ export default function ReceiverStaffPage() {
                     <SelectValue placeholder="اختر المؤهل" />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUALIFICATION_OPTIONS.map((q) => (
+                    {qualOptions.map((q) => (
                       <SelectItem key={q.value} value={q.value}>
                         {q.label}
                       </SelectItem>
@@ -439,6 +474,13 @@ export default function ReceiverStaffPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ---------- السيرة الذاتية الكاملة — لمن مُنح الإذن من الإدارة (الجولة 32) ---------- */}
+      <FullProfileDialog
+        userId={profileUserId}
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+      />
     </div>
   )
 }

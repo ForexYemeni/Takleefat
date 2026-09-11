@@ -7,7 +7,6 @@ import {
   Banknote,
   Coins,
   Hash,
-  HeartPulse,
   Percent,
   PiggyBank,
   Save,
@@ -79,8 +78,6 @@ export default function AdminSettingsPage() {
       paymentAccountNumber: '',
       paymentAccountName: 'منصة تكليفات',
       paymentNotes: '',
-      receiverSharePercent: 10,
-      supervisorSharePercent: 10,
     },
   })
 
@@ -105,8 +102,8 @@ export default function AdminSettingsPage() {
   const adminPercentage = Number(form.watch('adminPercentage')) || 0
   const adminFeeFixed = Number(form.watch('adminFeeFixed')) || 0
   const adminFeeType = form.watch('adminFeeType')
-  const receiverSharePercent = Number(form.watch('receiverSharePercent')) || 0
-  const supervisorSharePercent = Number(form.watch('supervisorSharePercent')) || 0
+  /** النسبة التلقائية للمستلمين/المشرفين — نصف نسبة الإدارة (الجولة 32) */
+  const autoSharePercent = Math.round((adminPercentage / 2) * 10) / 10
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -288,86 +285,32 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
 
-        {/* نسبة المستلم الإداري */}
+        {/* نِسَب الحصص — تُدار لكل حساب على حدة (الجولة 32) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Coins className="size-4 text-amber-600" />
-              نسبة المستلم الإداري من كل تكليف
+              نِسَب المستلمين الإداريين ومشرفي الأطباء
             </CardTitle>
             <CardDescription>
-              تُضاف هذه النسبة من قيمة كل تكليف إلى قسم «أرباحي» لدى المستلم الإداري — وتُحتسب من
-              حساب الإدارة — ويمكنه طلب سحبها ببيانات محفظته
+              لم تعد النسب إعدادات عامة — تُدار لكل حساب على حدة من صفحتي
+              «المستلمون الإداريون» و«مشرفو الأطباء» عبر قائمة الإجراءات
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 rounded-2xl bg-muted/40 p-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="s-receiver-share">نسبة المستلم الإداري (٪ من قيمة التكليف)</Label>
-                <Input
-                  id="s-receiver-share"
-                  type="number"
-                  min={0}
-                  max={100}
-                  {...form.register('receiverSharePercent')}
-                />
-                {form.formState.errors.receiverSharePercent && (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.receiverSharePercent.message}
-                  </p>
-                )}
-              </div>
-              <p className="self-center text-xs leading-relaxed text-muted-foreground">
-                مثال: تكليف بقيمة 100,000 ريال بنسبة{' '}
-                <span className="font-bold text-foreground">{receiverSharePercent}٪</span> → ربح
-                المستلم{' '}
-                <span className="font-bold text-amber-700" dir="ltr">
-                  {formatCurrency(Math.round((100000 * receiverSharePercent) / 100))}
-                </span>{' '}
-                تُضاف لأرباحه بعد إنهاء التكليف
+            <div className="flex flex-col gap-3 rounded-2xl bg-muted/40 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="leading-relaxed text-muted-foreground">
+                <span className="font-bold text-foreground">النسبة الأساسية التلقائية: {autoSharePercent}٪</span>
+                {' '}— نصف نسبة الإدارة الحالية ({adminPercentage}٪). وتُحتسب من قيمة كل تكليف
+                يُنهيه المستلم أو المشرف وتُضاف لقسم «أرباحي» لديه.
               </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* نسبة مشرف الأطباء — منظومة الأطباء */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <HeartPulse className="size-4 text-rose-600" />
-              نسبة مشرف الأطباء من كل تكليف أطباء
-            </CardTitle>
-            <CardDescription>
-              تُضاف هذه النسبة من قيمة كل تكليف أطباء إلى قسم «أرباحي» لدى مشرف الأطباء — وتُحتسب
-              من حساب الإدارة — ويمكنه طلب سحبها ببيانات محفظته (منظومة الأطباء)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 rounded-2xl bg-muted/40 p-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="s-supervisor-share">نسبة مشرف الأطباء (٪ من قيمة التكليف)</Label>
-                <Input
-                  id="s-supervisor-share"
-                  type="number"
-                  min={0}
-                  max={100}
-                  {...form.register('supervisorSharePercent')}
-                />
-                {form.formState.errors.supervisorSharePercent && (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.supervisorSharePercent.message}
-                  </p>
-                )}
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Badge variant="outline" className="gap-1">
+                  <Coins className="size-3" />
+                  تلقائي: {autoSharePercent}٪
+                </Badge>
+                <Badge variant="secondary">تخصيص لكل حساب: 0٪ حتى 100٪</Badge>
               </div>
-              <p className="self-center text-xs leading-relaxed text-muted-foreground">
-                مثال: تكليف أطباء بقيمة 100,000 ريال بنسبة{' '}
-                <span className="font-bold text-foreground">{supervisorSharePercent}٪</span> → ربح
-                المشرف{' '}
-                <span className="font-bold text-rose-700" dir="ltr">
-                  {formatCurrency(Math.round((100000 * supervisorSharePercent) / 100))}
-                </span>{' '}
-                تُضاف لأرباحه بعد إنهاء التكليف
-              </p>
             </div>
           </CardContent>
         </Card>

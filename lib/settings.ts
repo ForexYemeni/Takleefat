@@ -34,10 +34,31 @@ export interface PlatformSettings {
   paymentAccountName: string
   /** ملاحظات إضافية على الدفع */
   paymentNotes: string
-  /** نسبة المستلم الإداري من كل تكليف (٪) — تُحتسب من حساب الإدارة */
-  receiverSharePercent: number
-  /** نسبة مشرف الأطباء من كل تكليف أطباء (٪) — تُحتسب من حساب الإدارة (منظومة الأطباء) */
-  supervisorSharePercent: number
+}
+
+/**
+ * النسبة الأساسية التلقائية للمستلم الإداري ومشرف الأطباء من كل تكليف — الجولة 32:
+ * نصف نسبة الإدارة (إذا كانت الإدارة 10٪ فيكون الافتراضي 5٪).
+ * تُستخدم فقط عندما لا تكون هناك نسبة مخصصة محفوظة على الحساب نفسه
+ * (User.commissionPercent) — الإدارة قد تخصّص النسبة لكل حساب على حدة
+ * من صفحتي المستلمين / مشرفي الأطباء (9٪، 10٪... حتى 100٪).
+ */
+export function autoSharePercent(settings: Pick<PlatformSettings, 'adminPercentage'>): number {
+  return Math.round((settings.adminPercentage / 2) * 10) / 10
+}
+
+/**
+ * النسبة الفعالة لحساب مستلم إداري أو مشرف أطباء:
+ * النسبة المخصصة على الحساب إن وُجدت، وإلا النسبة التلقائية (نصف نسبة الإدارة).
+ */
+export function effectiveSharePercent(
+  user: { commissionPercent?: number | null },
+  settings: Pick<PlatformSettings, 'adminPercentage'>
+): number {
+  const custom = user.commissionPercent
+  return typeof custom === 'number' && custom >= 0 && custom <= 100
+    ? custom
+    : autoSharePercent(settings)
 }
 
 export const SETTINGS_DEFAULTS: PlatformSettings = {
@@ -50,8 +71,6 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   paymentAccountNumber: '',
   paymentAccountName: 'منصة تكليفات',
   paymentNotes: '',
-  receiverSharePercent: 10,
-  supervisorSharePercent: 10,
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
@@ -64,8 +83,6 @@ const KEYS: Record<keyof PlatformSettings, string> = {
   paymentAccountNumber: 'paymentAccountNumber',
   paymentAccountName: 'paymentAccountName',
   paymentNotes: 'paymentNotes',
-  receiverSharePercent: 'receiverSharePercent',
-  supervisorSharePercent: 'supervisorSharePercent',
 }
 
 /**
@@ -138,14 +155,6 @@ export async function getSettings(): Promise<PlatformSettings> {
       paymentAccountNumber: str('paymentAccountNumber', SETTINGS_DEFAULTS.paymentAccountNumber),
       paymentAccountName: str('paymentAccountName', SETTINGS_DEFAULTS.paymentAccountName),
       paymentNotes: map.get(KEYS.paymentNotes) ?? SETTINGS_DEFAULTS.paymentNotes,
-      receiverSharePercent: Math.min(
-        100,
-        num('receiverSharePercent', SETTINGS_DEFAULTS.receiverSharePercent)
-      ),
-      supervisorSharePercent: Math.min(
-        100,
-        num('supervisorSharePercent', SETTINGS_DEFAULTS.supervisorSharePercent)
-      ),
     }
   } catch {
     // في حال عدم توفر الجداول بعد — نُرجع الافتراضي بدل تعطيل الخدمة

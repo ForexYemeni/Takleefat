@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, MailPlus, Search, Star, Trash2, UserRound } from 'lucide-react'
+import { IdCard, Loader2, MailPlus, Search, Star, Trash2, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiDelete, apiFetcher, apiPost } from '@/lib/api-client'
 import { GENDER_LABELS } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
+import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -91,13 +92,19 @@ export function FavoritesManager({ variant = 'nurse' }: { variant?: 'nurse' | 'd
   const [inviteNurse, setInviteNurse] = useState<FavoriteNurseRow | null>(null)
   const [inviteMessage, setInviteMessage] = useState('')
   const [selectedPost, setSelectedPost] = useState<string>('')
+  // السيرة الذاتية الكاملة — لمن مُنحه حساب الإدارة الإذن (الجولة 32)
+  const [profileUserId, setProfileUserId] = useState<string | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['favorites', search],
-    queryFn: () => apiFetcher<{ favorites: FavoriteNurseRow[]; total: number }>(
+    queryFn: () => apiFetcher<{ favorites: FavoriteNurseRow[]; total: number; fullProfileAccess?: boolean }>(
       `/api/receiver/favorites${search ? `?search=${encodeURIComponent(search)}` : ''}`
     ),
   })
+
+  /** إذن رؤية البيانات الكاملة — يفتحه حساب الإدارة حصراً */
+  const fullProfileAccess = data?.fullProfileAccess ?? false
 
   const { data: postsData } = useQuery({
     queryKey: ['receiver-posts-open'],
@@ -207,6 +214,20 @@ export function FavoritesManager({ variant = 'nurse' }: { variant?: 'nurse' | 'd
                   <MailPlus className="size-4" />
                   استدعاء مباشر
                 </Button>
+                {fullProfileAccess && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-emerald-700 dark:text-emerald-400"
+                    onClick={() => {
+                      setProfileUserId(n.id)
+                      setProfileOpen(true)
+                    }}
+                  >
+                    <IdCard className="size-3.5" />
+                    السيرة الذاتية
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -281,6 +302,13 @@ export function FavoritesManager({ variant = 'nurse' }: { variant?: 'nurse' | 'd
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ---------- السيرة الذاتية الكاملة — لمن مُنح الإذن من الإدارة (الجولة 32) ---------- */}
+      <FullProfileDialog
+        userId={profileUserId}
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Building2,
@@ -119,6 +119,24 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
   const [detailsUser, setDetailsUser] = useState<AdminUser | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  // كتالوج المؤهلات العلمية من حساب الإدارة (الجولة 32) — القوائم التاريخية احتياط
+  const [qualOptions, setQualOptions] = useState<readonly { value: string; label: string }[]>(
+    isDoctor ? DOCTOR_QUALIFICATION_OPTIONS : QUALIFICATION_OPTIONS
+  )
+
+  useEffect(() => {
+    fetch(`/api/qualifications/public?audience=${isDoctor ? 'DOCTOR' : 'NURSE'}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.qualifications ?? []).map((q: { name: string }) => ({
+          value: q.name,
+          label: q.name,
+        }))
+        if (list.length > 0) setQualOptions(list)
+      })
+      .catch(() => null)
+  }, [isDoctor])
 
   const createForm = useForm<CreateNurseFormValues, unknown, CreateNurseInput>({
     resolver: zodResolver(isDoctor ? (createDoctorSchema as never) : createNurseSchema),
@@ -416,7 +434,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
                     <SelectValue placeholder="اختر المؤهل" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(isDoctor ? DOCTOR_QUALIFICATION_OPTIONS : QUALIFICATION_OPTIONS).map((q) => (
+                    {qualOptions.map((q) => (
                       <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
                     ))}
                   </SelectContent>

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { registerSchema } from '@/lib/validations/auth'
 import { handleApiError, jsonError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notifications'
+import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
 
 /**
  * POST /api/auth/register — إنشاء حساب جديد (كادر تمريضي / مستلم إداري / طبيب)
@@ -53,6 +54,14 @@ export async function POST(req: NextRequest) {
           'التخصص الطبي يجب أن يكون من كتالوج التخصصات المُدار من حساب الإدارة — تواصل مع الإدارة لإضافة تخصصك',
           422
         )
+      }
+    }
+
+    // الجولة 32: المؤهل العلمي للكادر/الطبيب من كتالوج المؤهلات المُدار من حساب الإدارة
+    if ((role === 'NURSE' || role === 'DOCTOR') && qualification) {
+      const audience = role === 'DOCTOR' ? 'DOCTOR' : 'NURSE'
+      if (!(await isValidQualification(qualification, audience))) {
+        return jsonError(qualificationErrorMessage(audience), 422)
       }
     }
 

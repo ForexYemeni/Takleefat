@@ -36,7 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Eye, EyeOff, Hospital } from 'lucide-react'
+import { Eye, EyeOff, Hospital, Percent, ShieldCheck } from 'lucide-react'
 
 interface ReceiverUser {
   id: string
@@ -45,6 +45,8 @@ interface ReceiverUser {
   role: string
   status: string
   hospitalName: string | null
+  commissionPercent: number | null
+  fullProfileAccess: boolean
   createdAt: string
   _count: { documents: number; assignments: number }
 }
@@ -59,8 +61,14 @@ export default function AdminReceiversPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', 'RECEIVER'],
-    queryFn: () => apiFetcher<{ users: ReceiverUser[] }>('/api/admin/users?role=RECEIVER'),
+    queryFn: () =>
+      apiFetcher<{ users: ReceiverUser[]; autoSharePercent: number }>(
+        '/api/admin/users?role=RECEIVER'
+      ),
   })
+
+  /** النسبة التلقائية (نصف نسبة الإدارة) — تأتي من الخادم */
+  const autoSharePercent = data?.autoSharePercent ?? 5
 
   const form = useForm<CreateReceiverInput>({
     resolver: zodResolver(createReceiverSchema),
@@ -134,6 +142,7 @@ export default function AdminReceiversPage() {
                   <TableHead className="hidden md:table-cell">الهاتف</TableHead>
                   <TableHead className="hidden lg:table-cell">الجهة الصحية</TableHead>
                   <TableHead>الحالة</TableHead>
+                  <TableHead>الحصة والأذونات</TableHead>
                   <TableHead className="hidden md:table-cell">تكليفات</TableHead>
                   <TableHead className="hidden md:table-cell">تاريخ الإنشاء</TableHead>
                   <TableHead className="text-start">إجراءات</TableHead>
@@ -159,6 +168,28 @@ export default function AdminReceiversPage() {
                     <TableCell>
                       <StatusBadge status={user.status} labels={USER_STATUS_LABELS} />
                     </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge
+                          variant={user.commissionPercent != null ? 'default' : 'outline'}
+                          className="gap-1"
+                        >
+                          <Percent className="size-3" />
+                          {user.commissionPercent != null
+                            ? `${user.commissionPercent}٪ مخصصة`
+                            : `تلقائي ${autoSharePercent}٪`}
+                        </Badge>
+                        {user.fullProfileAccess && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+                          >
+                            <ShieldCheck className="size-3" />
+                            أذونات كاملة
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <Badge variant="secondary">{user._count.assignments} تكليف</Badge>
                     </TableCell>
@@ -167,7 +198,11 @@ export default function AdminReceiversPage() {
                     </TableCell>
                     <TableCell>
                       <UserActionsMenu
-                        user={{ ...user, documentsCount: user._count.documents }}
+                        user={{
+                          ...user,
+                          documentsCount: user._count.documents,
+                          autoSharePercent,
+                        }}
                         onChanged={() => {
                           queryClient.invalidateQueries({ queryKey: ['admin-users'] })
                           queryClient.invalidateQueries({ queryKey: ['stats'] })

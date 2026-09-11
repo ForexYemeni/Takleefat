@@ -9,6 +9,8 @@ import {
   createSupervisorSchema,
 } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
+import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
+import { getSettings, autoSharePercent } from '@/lib/settings'
 
 /**
  * GET /api/admin/users?role=NURSE&status=PENDING&search=...
@@ -22,47 +24,57 @@ export async function GET(req: NextRequest) {
     const status = req.nextUrl.searchParams.get('status')
     const search = req.nextUrl.searchParams.get('search')
 
-    const users = await db.user.findMany({
-      where: {
-        ...(role && ['NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR'].includes(role)
-          ? { role: role as 'NURSE' | 'RECEIVER' | 'ADMIN' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' }
-          : {}),
-        ...(status && ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(status)
-          ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
-          : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { phone: { contains: search } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        role: true,
-        status: true,
-        specialty: true,
-        qualification: true,
-        yearsOfExperience: true,
-        hospitalName: true,
-        rejectNote: true,
-        createdAt: true,
-        // جهة الكادر الأولى (إذا أضافه مستلم إداري لجهته) — تُعرض في قائمة الكادر
-        affiliations: {
-          take: 1,
-          orderBy: { createdAt: 'desc' as const },
-          select: { hospital: { select: { name: true, status: true } } },
+    const [users, settings] = await Promise.all([
+      db.user.findMany({
+        where: {
+          ...(role && ['NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR'].includes(role)
+            ? { role: role as 'NURSE' | 'RECEIVER' | 'ADMIN' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' }
+            : {}),
+          ...(status && ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(status)
+            ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
+            : {}),
+          ...(search
+            ? {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { phone: { contains: search } },
+                ],
+              }
+            : {}),
         },
-        _count: { select: { documents: true, assignments: true } },
-      },
-    })
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          role: true,
+          status: true,
+          specialty: true,
+          qualification: true,
+          yearsOfExperience: true,
+          hospitalName: true,
+          rejectNote: true,
+          // نِسَب الحصة والأذونات — للمستلمين ومشرفي الأطباء (الجولة 32)
+          commissionPercent: true,
+          fullProfileAccess: true,
+          createdAt: true,
+          // جهة الكادر الأولى (إذا أضافه مستلم إداري لجهته) — تُعرض في قائمة الكادر
+          affiliations: {
+            take: 1,
+            orderBy: { createdAt: 'desc' as const },
+            select: { hospital: { select: { name: true, status: true } } },
+          },
+          _count: { select: { documents: true, assignments: true } },
+        },
+      }),
+      getSettings(),
+    ])
 
-    return NextResponse.json({ users })
+    return NextResponse.json({
+      users,
+      // النسبة التلقائية (نصف نسبة الإدارة) — تُعرض بجانب كل حساب بلا نسبة مخصصة
+      autoSharePercent: autoSharePercent(settings),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -96,6 +108,11 @@ export async function POST(req: NextRequest) {
         return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
       }
       const { name, phone, password, specialty, qualification, gender, yearsOfExperience } = parsed.data
+
+      // الجولة 32: مؤهل الكادر من كتالوج المؤهلات العلمية المُدار من حساب الإدارة
+      if (!(await isValidQualification(qualification, 'NURSE'))) {
+        return jsonError(qualificationErrorMessage('NURSE'), 422)
+      }
 
       const existing = await db.user.findUnique({ where: { phone } })
       if (existing) {
@@ -151,6 +168,11 @@ export async function POST(req: NextRequest) {
           'التخصص الطبي يجب أن يكون من كتالوج التخصصات المُدار من حساب الإدارة — أضف التخصص أولاً من قسم «التخصصات الطبية»',
           422
         )
+      }
+
+      // الجولة 32: مؤهل الطبيب من كتالوج المؤهلات العلمية المُدار من حساب الإدارة
+      if (!(await isValidQualification(qualification, 'DOCTOR'))) {
+        return jsonError(qualificationErrorMessage('DOCTOR'), 422)
       }
 
       const existing = await db.user.findUnique({ where: { phone } })

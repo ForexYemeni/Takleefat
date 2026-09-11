@@ -190,6 +190,12 @@ model User {
   gender            Gender?
   // ملاحظة الرفض في حال عدم اعتماد الحساب
   rejectNote        String?
+  // نِسَب الحصة من قيمة كل تكليف (٪) — للمستلم الإداري ومشرف الأطباء فقط.
+  // null = تلقائي: نصف نسبة الإدارة (adminPercentage / 2) — والإدارة قد تخصّصها لكل حساب (0..100)
+  commissionPercent Float?
+  // إذن رؤية البيانات الكاملة (السيرة الذاتية + المستندات + كل البيانات) للكادر/الأطباء —
+  // يُفتح من حساب الإدارة حصراً لبعض المستلمين الإداريين ومشرفي الأطباء
+  fullProfileAccess Boolean    @default(false)
   // الجهة الصحية (المستشفى) — يُدخلها المستلم الإداري عند التسجيل
   hospitalName      String?
   createdAt         DateTime   @default(now())
@@ -436,6 +442,20 @@ model Specialty {
   doctors DoctorSpecialty[] @relation("SpecialtyDoctors")
 
   @@map("specialties")
+}
+
+/// المؤهلات العلمية — كتالوج مستقل تُديره الإدارة (الجولة 32)
+/// يُغذّى تلقائياً بالخيارات التاريخية عند أول استخدام ويمكن للإدارة إضافة مؤهلات جديدة
+/// أو تعديل أسمائها أو تعطيلها — وتُختار منه مؤهلات الكادر التمريضي والأطباء في كل النماذج
+model Qualification {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  /// جمهور المؤهل: NURSE = كادر تمريضي | DOCTOR = أطباء
+  audience  Audience
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("qualifications")
 }
 
 /// تخصصات عمل الطبيب — يختار الطبيب عدة تخصصات يعمل بها من كتالوج الإدارة

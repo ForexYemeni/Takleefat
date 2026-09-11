@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { reviewUserSchema, resetPasswordSchema } from '@/lib/validations/user'
+import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
-import { getSettings } from '@/lib/settings'
+import { getSettings, effectiveSharePercent } from '@/lib/settings'
 import { USER_STATUS_LABELS } from '@/lib/utils'
 
 /**
@@ -35,6 +35,8 @@ export async function GET(
         yearsOfExperience: true,
         hospitalName: true,
         rejectNote: true,
+        commissionPercent: true,
+        fullProfileAccess: true,
         walletAddress: true,
         accountNumber: true,
         createdAt: true,
@@ -96,11 +98,9 @@ export async function GET(
       const pending = allWithdrawals.filter((w) => w.status === 'PENDING').reduce((s, w) => s + w.amount, 0)
       const available = Math.max(0, totalEarned - withdrawn - pending)
 
-      // نسبة الحصة حسب الدور: مشرف الأطباء → نسبة المشرف | مستلم إداري → نسبة المستلم
-      const sharePercent =
-        user.role === 'DOCTOR_SUPERVISOR'
-          ? settings.supervisorSharePercent
-          : settings.receiverSharePercent
+      // الجولة 32 — النسبة الفعالة: مخصصة على الحساب إن عيّنتها الإدارة،
+      // وإلا التلقائي (نصف نسبة الإدارة)
+      const sharePercent = effectiveSharePercent(user, settings)
 
       return NextResponse.json({
         user,
@@ -227,6 +227,82 @@ export async function PATCH(
 
       return NextResponse.json({
         message: `تم تعيين كلمة مرور جديدة للحساب (${target.name}) — أبلغها له بشكل آمن`,
+      })
+    }
+
+    // ---------- نِسَب الحصة — للمستلم الإداري ومشرف الأطباء فقط (الجولة 32) ----------
+    if (body && typeof body === 'object' && 'commissionPercent' in body) {
+      if (target.role !== 'RECEIVER' && target.role !== 'DOCTOR_SUPERVISOR') {
+        return jsonError('نسبة الحصة تُدار للمستلمين الإداريين ومشرفي الأطباء فقط', 422)
+      }
+
+      const parsed = commissionPercentSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'النسبة غير صحيحة', 422)
+      }
+
+      const { commissionPercent } = parsed.data
+      const updated = await db.user.update({
+        where: { id },
+        data: { commissionPercent },
+        select: { id: true, name: true, commissionPercent: true },
+      })
+
+      const settings = await getSettings()
+      const auto = effectiveSharePercent({ commissionPercent: null }, settings)
+
+      await notify(id, {
+        title: commissionPercent == null ? 'أُعيدت نسبة حصتك للتلقائية' : 'تم تحديث نسبة حصتك من التكليفات',
+        body:
+          commissionPercent == null
+            ? `قامت إدارة المنصة بإعادة نسبة حصتك من قيمة كل تكليف إلى النسبة التلقائية (${auto}٪).`
+            : `قامت إدارة المنصة بتحديث نسبة حصتك من قيمة كل تكليف إلى ${commissionPercent}٪.`,
+        type: 'GENERIC',
+      })
+
+      return NextResponse.json({
+        message:
+          commissionPercent == null
+            ? `أُعيدت نسبة الحصة لـ (${updated.name}) إلى التلقائية: ${auto}٪`
+            : `تم تعيين نسبة الحصة لـ (${updated.name}) إلى ${commissionPercent}٪ من قيمة كل تكليف`,
+        user: updated,
+      })
+    }
+
+    // ---------- أذونات رؤية البيانات الكاملة — للمستلم الإداري ومشرف الأطباء (الجولة 32) ----------
+    if (body && typeof body === 'object' && 'fullProfileAccess' in body) {
+      if (target.role !== 'RECEIVER' && target.role !== 'DOCTOR_SUPERVISOR') {
+        return jsonError('هذا الإذن متاح للمستلمين الإداريين ومشرفي الأطباء فقط', 422)
+      }
+
+      const parsed = fullProfileAccessSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'قيمة الإذن غير صحيحة', 422)
+      }
+
+      const { fullProfileAccess } = parsed.data
+      const updated = await db.user.update({
+        where: { id },
+        data: { fullProfileAccess },
+        select: { id: true, name: true, fullProfileAccess: true },
+      })
+
+      const audienceLabel =
+        target.role === 'DOCTOR_SUPERVISOR' ? 'بيانات الأطباء كاملة' : 'بيانات الكوادر كاملة'
+
+      await notify(id, {
+        title: fullProfileAccess ? 'مُنحت إذن رؤية البيانات الكاملة' : 'سُحب إذن رؤية البيانات الكاملة',
+        body: fullProfileAccess
+          ? `فتحت إدارة المنصة لك إذن رؤية ${audienceLabel} مع السيرة الذاتية والمستندات من حسابك.`
+          : 'أغلقت إدارة المنصة إذن رؤية البيانات الكاملة من حسابك — عُدت لعرض البيانات المختصرة.',
+        type: 'GENERIC',
+      })
+
+      return NextResponse.json({
+        message: fullProfileAccess
+          ? `فُتح إذن رؤية ${audienceLabel} مع السيرة الذاتية للحساب (${updated.name})`
+          : `أُغلق إذن رؤية البيانات الكاملة على الحساب (${updated.name})`,
+        user: updated,
       })
     }
 

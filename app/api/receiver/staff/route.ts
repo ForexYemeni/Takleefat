@@ -5,6 +5,7 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { receiverCreateNurseSchema, createDoctorSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 import { resolveReceiverOrg, AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations } from '@/lib/network'
+import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
 
 /**
  * POST /api/receiver/staff — إضافة كادر/طبيب للجهة الصحية
@@ -40,6 +41,14 @@ export async function POST(req: NextRequest) {
           'التخصص الطبي يجب أن يكون من كتالوج التخصصات المُدار من حساب الإدارة — راجع الإدارة لإضافة التخصص',
           422
         )
+      }
+    }
+
+    // الجولة 32: المؤهل العلمي من كتالوج المؤهلات العلمية المُدار من حساب الإدارة
+    if (qualification) {
+      const audience = isSupervisor ? 'DOCTOR' : 'NURSE'
+      if (!(await isValidQualification(qualification, audience))) {
+        return jsonError(qualificationErrorMessage(audience), 422)
       }
     }
 
@@ -153,7 +162,7 @@ export async function GET() {
     // شفاء كسول: ارتباطات أُضيفت من المستلم ثم اعتُمدت الجهة وتوقفت على PENDING
     await healReceiverPendingAffiliations(org.id)
 
-    const [affiliations, favorites] = await Promise.all([
+    const [affiliations, favorites, me] = await Promise.all([
       db.nurseAffiliation.findMany({
         where: { hospitalId: org.id },
         orderBy: { createdAt: 'desc' },
@@ -178,11 +187,17 @@ export async function GET() {
         where: { receiverId: session.user.id },
         select: { nurseId: true },
       }),
+      // الجولة 32: إذن رؤية البيانات الكاملة — تُظهر الواجهة زر «السيرة الذاتية الكاملة» حسبه
+      db.user.findUnique({
+        where: { id: session.user.id },
+        select: { fullProfileAccess: true },
+      }),
     ])
     const favoriteSet = new Set(favorites.map((f) => f.nurseId))
 
     return NextResponse.json({
       org,
+      fullProfileAccess: me?.fullProfileAccess ?? false,
       nurses: affiliations.map((a) => ({
         affiliationId: a.id,
         affiliationStatus: a.status,

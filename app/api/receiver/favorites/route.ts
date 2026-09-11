@@ -57,13 +57,21 @@ export async function GET(req: NextRequest) {
       search: search ?? undefined,
     })
 
-    const favorites = await db.favoriteNurse.findMany({
-      where: { receiverId: session.user.id },
-      select: { nurseId: true, category: true, note: true, createdAt: true },
-    })
+    const [favorites, me] = await Promise.all([
+      db.favoriteNurse.findMany({
+        where: { receiverId: session.user.id },
+        select: { nurseId: true, category: true, note: true, createdAt: true },
+      }),
+      // الجولة 32: إذن رؤية البيانات الكاملة — تُظهر الواجهة زر «السيرة الذاتية الكاملة» حسبه
+      db.user.findUnique({
+        where: { id: session.user.id },
+        select: { fullProfileAccess: true },
+      }),
+    ])
     const meta = new Map(favorites.map((f) => [f.nurseId, f]))
 
     return NextResponse.json({
+      fullProfileAccess: me?.fullProfileAccess ?? false,
       favorites: matched.map((n) => ({
         ...n,
         category: meta.get(n.id)?.category ?? null,

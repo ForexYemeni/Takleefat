@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { getSettings, calcAdminFee, type PlatformSettings } from '@/lib/settings'
+import { getSettings, calcAdminFee, effectiveSharePercent, type PlatformSettings } from '@/lib/settings'
 import { formatCurrency } from '@/lib/utils'
 
 /**
@@ -47,16 +47,18 @@ export interface FeeSettlement {
 export async function settleAssignmentFees(assignmentId: string): Promise<FeeSettlement | null> {
   const assignment = await db.assignment.findUnique({
     where: { id: assignmentId },
-    include: { earning: true, receiver: { select: { role: true } } },
+    include: {
+      earning: true,
+      receiver: { select: { role: true, commissionPercent: true } },
+    },
   })
   if (!assignment) return null
 
   const settings: PlatformSettings = await getSettings()
-  // نسبة الحصة حسب دور صاحب التكليف: مشرف أطباء → نسبة المشرف | مستلم إداري → نسبة المستلم
-  const sharePercent =
-    assignment.receiver.role === 'DOCTOR_SUPERVISOR'
-      ? settings.supervisorSharePercent
-      : settings.receiverSharePercent
+  // الجولة 32 — النسبة الفعالة لحساب صاحب التكليف:
+  // نسبة مخصصة على الحساب (commissionPercent) إن عيّنتها الإدارة،
+  // وإلا النسبة التلقائية: نصف نسبة الإدارة (10٪ إدارة ← 5٪ مستلم/مشرف)
+  const sharePercent = effectiveSharePercent(assignment.receiver, settings)
   const earningAmount = calcReceiverEarning(assignment.value, sharePercent)
 
   // حصة الإدارة — تُحتسب عند الغياب فقط (لا نغيّر قيماً محسوبة سابقاً)

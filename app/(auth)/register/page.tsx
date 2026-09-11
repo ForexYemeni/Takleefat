@@ -159,6 +159,10 @@ export default function RegisterPage() {
   const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
   const [orgs, setOrgs] = useState<PublicOrg[]>([])
 
+  // كتالوج المؤهلات العلمية من حساب الإدارة (الجولة 32) — القوائم التاريخية احتياط عند تعذر الجلب
+  const [nurseQuals, setNurseQuals] = useState<readonly { value: string; label: string }[]>(QUALIFICATION_OPTIONS)
+  const [doctorQuals, setDoctorQuals] = useState<readonly { value: string; label: string }[]>(DOCTOR_QUALIFICATION_OPTIONS)
+
   // حقول مشتركة
   const [role, setRole] = useState<'NURSE' | 'RECEIVER' | 'DOCTOR'>('NURSE')
   const [name, setName] = useState('') // حقل واحد: الاسم مع اللقب
@@ -188,6 +192,20 @@ export default function RegisterPage() {
     fetch('/api/hospitals/public')
       .then((r) => r.json())
       .then((d) => setOrgs(d.hospitals ?? []))
+      .catch(() => null)
+    fetch('/api/qualifications/public?audience=NURSE')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.qualifications ?? []).map((q: { name: string }) => ({ value: q.name, label: q.name }))
+        if (list.length > 0) setNurseQuals(list)
+      })
+      .catch(() => null)
+    fetch('/api/qualifications/public?audience=DOCTOR')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.qualifications ?? []).map((q: { name: string }) => ({ value: q.name, label: q.name }))
+        if (list.length > 0) setDoctorQuals(list)
+      })
       .catch(() => null)
   }, [])
 
@@ -523,7 +541,7 @@ export default function RegisterPage() {
                       <SelectValue placeholder="اختر المؤهل" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(role === 'DOCTOR' ? DOCTOR_QUALIFICATION_OPTIONS : QUALIFICATION_OPTIONS).map((q) => (
+                      {(role === 'DOCTOR' ? doctorQuals : nurseQuals).map((q) => (
                         <SelectItem key={q.value} value={q.value}>
                           {q.label}
                         </SelectItem>

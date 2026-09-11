@@ -106,16 +106,11 @@ export const registerSchema = z
 
     // بيانات الكادر التمريضي والطبيب: المؤهل والجنس والتخصص وسنوات الخبرة كلها إلزامية
     if (data.role === 'NURSE' || data.role === 'DOCTOR') {
-      // المؤهل من قائمة الدور الصحيحة (الطبيب له خياراته الخاصة)
-      const allowedQuals: readonly string[] =
-        data.role === 'DOCTOR' ? DOCTOR_QUALIFICATION_VALUES : QUALIFICATION_VALUES
-      if (!data.qualification || !allowedQuals.includes(data.qualification)) {
+      // المؤهل إجباري — تُتحقق قيمته على الخادم من كتالوج المؤهلات العلمية المُدار من الإدارة (الجولة 32)
+      if (!data.qualification || data.qualification.trim().length === 0) {
         ctx.addIssue({
           code: 'custom',
-          message:
-            data.role === 'DOCTOR'
-              ? 'المؤهل العلمي مطلوب — اختر من القائمة (بكالوريوس طب وجراحة / ماجستير / دكتوراه / شهادة زمالة)'
-              : 'المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)',
+          message: 'المؤهل العلمي مطلوب — اختر المؤهل من القائمة',
           path: ['qualification'],
         })
       }

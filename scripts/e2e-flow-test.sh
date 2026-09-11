@@ -1680,8 +1680,8 @@ check "ui: النافذة المشتركة تدعم اختيار الجمهور 
 R29_SUPDLG=$(grep -c 'audience="DOCTOR"' app/supervisor/assignments/page.tsx | awk '{print ($1==1)?1:0}')
 check "ui: لوحة المشرف تُنشئ تكليفات أطباء حصراً (audience=DOCTOR)" "1" "$R29_SUPDLG"
 
-R29_FEES=$(grep -c "supervisorSharePercent" lib/fees.ts | awk '{print ($1>=1)?1:0}')
-check "fees: تسوية الأرباح تفرّق نسبة المشرف عن نسبة المستلم" "1" "$R29_FEES"
+R29_FEES=$(grep -c "effectiveSharePercent" lib/fees.ts | awk '{print ($1>=1)?1:0}')
+check "fees: تسوية الأرباح تستخدم النسبة الفعالة لكل حساب (الجولة 32)" "1" "$R29_FEES"
 
 # --- فحوص حية: كتالوج التخصصات ---
 R29_SPEC=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_spec.json" -w "%{http_code}" -X POST $BASE/api/admin/specialties -H "Content-Type: application/json" \
@@ -2035,6 +2035,185 @@ check "رفض تعديل مؤهل مشرف (خارج نطاق القسم) → 42
 R31_QNOAUTH=$(code -b "$DIR/nurse.jar" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
   -d "{\"userId\":\"$NURSE_QID\",\"qualification\":\"أورديلي سنة\"}")
 check "حماية الدور: الكادر ممنوع من تعديل المؤهلات → 403" "403" "$R31_QNOAUTH"
+
+# ============================================================
+# القسم 41 — الجولة 32: كتالوج المؤهلات + نِسَب الحصص لكل حساب + أذونات البيانات الكاملة
+# ============================================================
+echo "=========== 41) الجولة 32: كتالوج المؤهلات + النِسَب + الأذونات ==========="
+
+# --- فحوص ساكنة: البنية ---
+R32_SCHEMA=$(grep -cE '^model Qualification ' prisma/schema.prisma | awk '{print ($1==1)?1:0}')
+check "schema: كتالوج المؤهلات Qualification موجود" "1" "$R32_SCHEMA"
+
+R32_FIELDS=$(grep -c "commissionPercent Float\?\|fullProfileAccess Boolean" prisma/schema.prisma | awk '{print ($1==2)?1:0}')
+check "schema: حقلا commissionPercent و fullProfileAccess على User" "1" "$R32_FIELDS"
+
+R32_AUTO=$(grep -c "autoSharePercent\|effectiveSharePercent" lib/settings.ts | awk '{print ($1>=2)?1:0}')
+check "settings: دالتا autoSharePercent و effectiveSharePercent (نصف نسبة الإدارة)" "1" "$R32_AUTO"
+
+R32_OLD=$(grep -c "receiverSharePercent\|supervisorSharePercent" lib/settings.ts | awk '{print ($1==0)?1:0}')
+check "settings: الإعدادات العامة القديمة للنِسَب أزيلت بالكامل" "1" "$R32_OLD"
+
+R32_CATUI=$(grep -c "كتالوج المؤهلات\|إسناد المؤهلات" components/admin/qualifications-manager.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: قسم المؤهلات بتبويبَي كتالوج + إسناد" "1" "$R32_CATUI"
+
+R32_ACTIONS=$(grep -c "نسبة الحصة\|أذونات رؤية البيانات الكاملة" components/admin/user-actions.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: قائمة إجراءات الحساب تضم نسبة الحصة والأذونات (للمستلم/المشرف)" "1" "$R32_ACTIONS"
+
+R32_WF=$(grep -c "fullProfileAccess" app/api/workforce/\[id\]/route.ts | awk '{print ($1>=2)?1:0}')
+check "api: نقطة /api/workforce/[id] تحرسها بوابة الإذن" "1" "$R32_WF"
+
+# --- فحوص حية: كتالوج المؤهلات ---
+R32_QADD=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r32_q.json" -w "%{http_code}" -X POST $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d '{"name":"دبلوم صيدلة E2E","audience":"NURSE"}')
+check "الإدارة تضيف مؤهلاً جديداً للكتالوج → 201" "201" "$R32_QADD"
+
+R32_QDUP=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d '{"name":"دبلوم صيدلة E2E","audience":"NURSE"}')
+check "رفض تكرار المؤهل في الكتالوج → 409" "409" "$R32_QDUP"
+
+R32_QCAT=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+names=[q['name'] for q in d['catalog']]
+print('ok' if 'دبلوم صيدلة E2E' in names and len(names)>=7 else 'bad')" 2>/dev/null)
+check "الكتالوج يضم الخيارات التاريخية + المؤهل الجديد (>=7)" "ok" "$R32_QCAT"
+
+R32_QPUB=$(curl -s -b "$DIR/nurse.jar" "$BASE/api/qualifications/public?audience=NURSE" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['qualifications']
+print('yes' if any(q['name']=='دبلوم صيدلة E2E' for q in d) else 'no')" 2>/dev/null)
+check "المؤهل الجديد متاح فوراً في نقطة النماذج العامة (التسجيل)" "yes" "$R32_QPUB"
+
+R32_QID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['catalog']
+q=[x for x in d if x['name']=='دبلوم صيدلة E2E']
+print(q[0]['id'] if q else '')" 2>/dev/null)
+
+# إسناد المؤهل الجديد لكادر — من الكتالوج الجديد حصراً
+R32_ASSIGN=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$NURSE_QID\",\"qualification\":\"دبلوم صيدلة E2E\"}")
+check "إسناد المؤهل الجديد لكادر من الكتالوج → 200" "200" "$R32_ASSIGN"
+
+# تعديل اسم المؤهل يرحّل الحسابات الحاملة
+R32_RENAME=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/qualifications/$R32_QID -H "Content-Type: application/json" \
+  -d '{"name":"دبلوم صيدلة محدث E2E"}')
+check "تعديل اسم المؤهل في الكتالوج → 200" "200" "$R32_RENAME"
+
+R32_MIGRATED=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/qualifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+n=[u for u in d if u['id']=='$NURSE_QID']
+print(n[0]['qualification'] if n else '-')" 2>/dev/null)
+check "الاسم المعدل رُحّل تلقائياً لحساب الكادر الحامل" "دبلوم صيدلة محدث E2E" "$R32_MIGRATED"
+
+# الحذف متاح لأنه لم يعد قيد الاستخدام بعد إعادة إسناد الكادر
+R32_REASSIGN=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/qualifications -H "Content-Type: application/json" \
+  -d "{\"userId\":\"$NURSE_QID\",\"qualification\":\"دبلوم ثلاث سنوات\"}")
+check "إعادة إسناد الكادر لمؤهل تاريخي (تجهيزاً للحذف) → 200" "200" "$R32_REASSIGN"
+
+R32_QDEL=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X DELETE $BASE/api/admin/qualifications/$R32_QID)
+check "حذف المؤهل غير المستخدم من الكتالوج → 200" "200" "$R32_QDEL"
+
+# --- فحوص حية: نِسَب الحصص لكل مستلم/مشرف ---
+# النسبة التلقائية = نصف نسبة الإدارة (الافتراضي 10٪ ← 5٪)
+R32_AUTOPCT=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | jget "['autoSharePercent']")
+check "قائمة المستلمين تعيد النسبة التلقائية (نصف نسبة الإدارة = 5)" "5" "$R32_AUTOPCT"
+
+RCV_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+u=[x for x in d if x['phone']=='733333333']
+print(u[0]['id'] if u else '')" 2>/dev/null)
+
+R32_PCT403=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"commissionPercent":9}')
+check "حماية الدور: المستلم لا يعدّل نسبته بنفسه → 403" "403" "$R32_PCT403"
+
+R32_PCT=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"commissionPercent":9}')
+check "الإدارة تخصص نسبة 9٪ للمستلم الإداري → 200" "200" "$R32_PCT"
+
+R32_PCT_SAVED=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+u=[x for x in d if x['id']=='$RCV_ID']
+p=u[0]['commissionPercent'] if u else None
+print('9' if p==9 else 'bad')" 2>/dev/null)
+check "النسبة المخصصة 9٪ محفوظة فعلياً" "9" "$R32_PCT_SAVED"
+
+R32_DETAIL=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/users/$RCV_ID | jget "['receiver']['earnings']['summary']['sharePercent']")
+check "ملف المستلم التفصيلي يعرض النسبة الفعالة (9٪)" "9" "$R32_DETAIL"
+
+R32_EARN=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['sharePercent']")
+check "صفحة أرباحي لدى المستلم تعرض نسبته الفعالة (9٪)" "9" "$R32_EARN"
+
+R32_RESET=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"commissionPercent":null}')
+check "الإدارة تعيد النسبة للتلقائي (null) → 200" "200" "$R32_RESET"
+
+R32_EARN_AUTO=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['sharePercent']")
+check "بعد الإعادة يصبح الافتراضي تلقائياً نصف نسبة الإدارة (5٪)" "5" "$R32_EARN_AUTO"
+
+# مشرف الأطباء: نسبة مخصصة 10٪
+SUP32_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=DOCTOR_SUPERVISOR" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['users']
+u=[x for x in d if x['phone']=='791110901']
+print(u[0]['id'] if u else '')" 2>/dev/null)
+R32_SUPPCT=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$SUP32_ID -H "Content-Type: application/json" \
+  -d '{"commissionPercent":10}')
+check "الإدارة تخصص نسبة 10٪ لمشرف الأطباء → 200" "200" "$R32_SUPPCT"
+
+R32_BADPCT=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"commissionPercent":150}')
+check "رفض نسبة أعلى من 100٪ → 422" "422" "$R32_BADPCT"
+
+# --- فحوص حية: أذونات رؤية البيانات الكاملة ---
+# (قبل منح الإذن: ممنوع — بعد المنح: متاح كامل مع المستندات)
+DOC32_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=DOCTOR" | jget "['users'][0]['id']")
+NURSE32_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE" | jget "['users'][0]['id']")
+
+R32_WF403=$(code -b "$DIR/supervisor.jar" $BASE/api/workforce/$DOC32_ID)
+check "قبل المنح: مشرف الأطباء ممنوع من السيرة الكاملة → 403" "403" "$R32_WF403"
+
+R32_WFACCESS=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$SUP32_ID -H "Content-Type: application/json" \
+  -d '{"fullProfileAccess":true}')
+check "الإدارة تفتح إذن البيانات الكاملة للمشرف → 200" "200" "$R32_WFACCESS"
+
+R32_WF200=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r32_wf.json" -w "%{http_code}" $BASE/api/workforce/$DOC32_ID)
+check "بعد المنح: المشرف يرى السيرة الكاملة للطبيب → 200" "200" "$R32_WF200"
+
+R32_WFDOCS=$(python3 -c "
+import json
+d=json.load(open('$DIR/r32_wf.json'))
+p=d['profile']
+print('ok' if 'phone' in p and 'ratings' in p and 'workSpecialties' in p and 'documents' in d else 'bad')" 2>/dev/null)
+check "السيرة الكاملة تتضمن البيانات والتقييمات والمستندات" "ok" "$R32_WFDOCS"
+
+R32_WFWRONG=$(code -b "$DIR/supervisor.jar" $BASE/api/workforce/$NURSE32_ID)
+check "المشرف ممنوع من سيرة الكادر التمريضي (خارج جمهوره) → 403" "403" "$R32_WFWRONG"
+
+# المستلم الإداري: الإذن للكوادر
+R32_RCVACCESS=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"fullProfileAccess":true}')
+check "الإدارة تفتح إذن البيانات الكاملة للمستلم → 200" "200" "$R32_RCVACCESS"
+
+R32_RCV200=$(curl -s -b "$DIR/receiver.jar" -o /dev/null -w "%{http_code}" $BASE/api/workforce/$NURSE32_ID)
+check "بعد المنح: المستلم يرى السيرة الكاملة للكادر → 200" "200" "$R32_RCV200"
+
+# العلم في قائمة الجهة يعكس الإذن (زر السيرة الذاتية يظهر حسبه)
+R32_STAFFFLAG=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/staff | jget "['fullProfileAccess']")
+check "استجابة كوادر الجهة تتضمن علم fullProfileAccess=true" "True" "$R32_STAFFFLAG"
+
+# سحب الإذن — يعود المنع فوراً
+R32_REVOKE=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"fullProfileAccess":false}')
+check "الإدارة تسحب إذن المستلم → 200" "200" "$R32_REVOKE"
+
+R32_REVOKED=$(code -b "$DIR/receiver.jar" $BASE/api/workforce/$NURSE32_ID)
+check "بعد السحب: المستلم ممنوع من السيرة الكاملة مرة أخرى → 403" "403" "$R32_REVOKED"
 
 echo ""
 echo "==========================================="

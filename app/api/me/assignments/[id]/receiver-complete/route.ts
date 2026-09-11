@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { notify, notifyAdmins } from '@/lib/notifications'
-import { getSettings } from '@/lib/settings'
+import { getSettings, effectiveSharePercent } from '@/lib/settings'
 import { calcReceiverEarning } from '@/lib/fees'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 
@@ -49,7 +49,10 @@ export async function POST(
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
 
-    const assignment = await db.assignment.findUnique({ where: { id } })
+    const assignment = await db.assignment.findUnique({
+      where: { id },
+      include: { receiver: { select: { commissionPercent: true } } },
+    })
     if (!assignment) return jsonError('التكليف غير موجود', 404)
     if (assignment.receiverId !== session.user.id) {
       return jsonError('ليست لديك صلاحية على هذا التكليف', 403)
@@ -63,10 +66,10 @@ export async function POST(
 
     const { nursePaid, rating } = parsed.data
 
-    // نسبة المستلم الإداري — تُحتسب من قيمة التكليف وتُخصم من حساب الإدارة
-    // (نفس دالة الاحتساب الموحدة المستخدمة في مسارات توزيع الإدارة — lib/fees.ts)
+    // نسبة صاحب التكليف — تُحتسب من قيمة التكليف وتُخصم من حساب الإدارة
+    // الجولة 32: نسبة مخصصة على الحساب إن عيّنتها الإدارة، وإلا التلقائي (نصف نسبة الإدارة)
     const settings = await getSettings()
-    const sharePercent = settings.receiverSharePercent
+    const sharePercent = effectiveSharePercent(assignment.receiver, settings)
     const earningAmount = calcReceiverEarning(assignment.value, sharePercent)
 
     const [updated] = await db.$transaction([

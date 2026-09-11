@@ -8,18 +8,20 @@ import {
   IdCard,
   KeyRound,
   MoreHorizontal,
+  Percent,
   PlayCircle,
+  ShieldCheck,
   Trash2,
   UserX,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useForm } from 'react-hook-form'
 import { apiPatch, apiDelete } from '@/lib/api-client'
 import { USER_STATUS_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -50,6 +52,11 @@ interface ActionUser {
   role?: string
   /** عدد المستندات المرفوعة — يُستخدم لمنع اعتماد الكادر قبل رفع مستنداته */
   documentsCount?: number
+  /** نِسَب الحصة والأذونات — للمستلم الإداري ومشرف الأطباء (الجولة 32) */
+  commissionPercent?: number | null
+  fullProfileAccess?: boolean
+  /** النسبة التلقائية (نصف نسبة الإدارة) — للعرض في الحوار */
+  autoSharePercent?: number
 }
 
 export function UserActionsMenu({
@@ -67,6 +74,11 @@ export function UserActionsMenu({
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  // الجولة 32 — نِسَب الحصة وأذونات البيانات الكاملة (المستلم الإداري ومشرف الأطباء)
+  const [percentOpen, setPercentOpen] = useState(false)
+  const [percentValue, setPercentValue] = useState<string>('')
+  const [accessOpen, setAccessOpen] = useState(false)
+  const [accessValue, setAccessValue] = useState(false)
   const [confirmAction, setConfirmAction] = useState<
     | { kind: 'APPROVED' }
     | { kind: 'SUSPENDED' }
@@ -122,10 +134,47 @@ export function UserActionsMenu({
     }
   }
 
+  /** حفظ نسبة الحصة — فارغ = العودة للتلقائي (نصف نسبة الإدارة) */
+  const percentMutation = async () => {
+    setPending(true)
+    try {
+      const trimmed = percentValue.trim()
+      const payload = { commissionPercent: trimmed === '' ? null : Number(trimmed) }
+      const res = await apiPatch<{ message: string }>(`/api/admin/users/${user.id}`, payload)
+      toast.success(res.message)
+      setPercentOpen(false)
+      invalidate()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  /** فتح/إغلاق إذن رؤية البيانات الكاملة (السيرة الذاتية) */
+  const accessMutation = async (next: boolean) => {
+    setPending(true)
+    try {
+      const res = await apiPatch<{ message: string }>(`/api/admin/users/${user.id}`, {
+        fullProfileAccess: next,
+      })
+      toast.success(res.message)
+      setAccessValue(next)
+      invalidate()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
   const [pending, setPending] = useState(false)
 
   // سياسة الاعتماد: كادر تمريضي بلا مستندات مرفوعة لا يمكن اعتماده إطلاقاً
   const documentsMissing = user.role === 'NURSE' && (user.documentsCount ?? 0) === 0
+
+  // الجولة 32 — حسابات المستلمين/المشرفين: نسبة الحصة + أذونات البيانات الكاملة
+  const shareManaged = user.role === 'RECEIVER' || user.role === 'DOCTOR_SUPERVISOR'
 
   return (
     <>
@@ -188,6 +237,47 @@ export function UserActionsMenu({
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
+          {shareManaged && (
+            <DropdownMenuItem
+              className="gap-2"
+              onClick={() => {
+                setPercentValue(
+                  user.commissionPercent != null ? String(user.commissionPercent) : ''
+                )
+                setPercentOpen(true)
+              }}
+            >
+              <Percent className="size-4" />
+              <span className="flex flex-col">
+                <span>نسبة الحصة من التكليفات</span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {user.commissionPercent != null
+                    ? `مخصصة حالياً: ${user.commissionPercent}٪`
+                    : `تلقائي: ${user.autoSharePercent ?? 5}٪ (نصف نسبة الإدارة)`}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          )}
+          {shareManaged && (
+            <DropdownMenuItem
+              className="gap-2"
+              onClick={() => {
+                setAccessValue(user.fullProfileAccess ?? false)
+                setAccessOpen(true)
+              }}
+            >
+              <ShieldCheck
+                className={`size-4 ${user.fullProfileAccess ? 'text-emerald-600' : ''}`}
+              />
+              <span className="flex flex-col">
+                <span>أذونات رؤية البيانات الكاملة</span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {user.fullProfileAccess ? 'مفتوح — مع السيرة الذاتية والمستندات' : 'مغلق — البيانات المختصرة فقط'}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          )}
+          {shareManaged && <DropdownMenuSeparator />}
           {user.role === 'NURSE' && user.status === 'APPROVED' && (
             <DropdownMenuItem className="gap-2" asChild>
               <a href={`/n/${user.id}`} target="_blank" rel="noopener noreferrer">
@@ -291,6 +381,119 @@ export function UserActionsMenu({
             <Button disabled={!newPassword.trim()} onClick={passwordMutation} className="gap-2">
               <KeyRound className="size-4" />
               حفظ كلمة المرور
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* نِسَب الحصة من قيمة كل تكليف — الجولة 32 */}
+      <Dialog open={percentOpen} onOpenChange={setPercentOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Percent className="size-4 text-primary" />
+              نسبة الحصة من كل تكليف
+            </DialogTitle>
+            <DialogDescription>
+              نسبة {user.name} من قيمة كل تكليف يُنهيه — تُحتسب تلقائياً عند توزيع الرسوم.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-xl border bg-secondary/40 p-3 text-xs leading-relaxed text-muted-foreground">
+              <p>
+                <span className="font-bold text-foreground">التلقائي: {user.autoSharePercent ?? 5}٪</span>{' '}
+                — نصف نسبة الإدارة. اترك الحقل فارغاً لاستخدامها.
+              </p>
+              <p className="mt-1">
+                لتخصيص نسبة خاصة لهذا الحساب أدخل رقماً من 0 إلى 100 — مثال: 9 أو 10.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`percent-${user.id}`}>النسبة المئوية (٪) — فارغ = تلقائي</Label>
+              <Input
+                id={`percent-${user.id}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                step="0.5"
+                placeholder={`مثال: 9 — أو اتركه فارغاً للتلقائي (${user.autoSharePercent ?? 5}٪)`}
+                value={percentValue}
+                onChange={(e) => setPercentValue(e.target.value)}
+              />
+              {percentValue.trim() !== '' &&
+                (isNaN(Number(percentValue)) ||
+                  Number(percentValue) < 0 ||
+                  Number(percentValue) > 100) && (
+                  <p className="text-xs text-destructive">أدخل نسبة بين 0 و 100</p>
+                )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPercentOpen(false)}>
+              إلغاء
+            </Button>
+            <Button
+              onClick={percentMutation}
+              disabled={pending || (percentValue.trim() !== '' && (isNaN(Number(percentValue)) || Number(percentValue) < 0 || Number(percentValue) > 100))}
+              className="gap-2"
+            >
+              <Percent className="size-4" />
+              {percentValue.trim() === '' ? 'العودة للتلقائي' : 'حفظ النسبة المخصصة'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* أذونات رؤية البيانات الكاملة — الجولة 32 */}
+      <Dialog open={accessOpen} onOpenChange={setAccessOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className={`size-4 ${accessValue ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+              إذن رؤية البيانات الكاملة
+            </DialogTitle>
+            <DialogDescription>
+              يفتح لـ {user.name} إمكانية رؤية{' '}
+              {user.role === 'DOCTOR_SUPERVISOR' ? 'الأطباء' : 'الكوادر التمريضية'} كاملين مع
+              السيرة الذاتية والمستندات وكل البيانات من حسابه.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-xl border bg-secondary/40 p-3">
+              <div>
+                <p className="text-sm font-bold">
+                  {accessValue ? 'الإذن مفتوح' : 'الإذن مغلق'}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {accessValue
+                    ? 'يظهر له زر «السيرة الذاتية الكاملة» في المفضلة وكوادر/أطباء جهته'
+                    : 'يرى البيانات المهنية المختصرة فقط كما هو معتاد'}
+                </p>
+              </div>
+              <Switch
+                checked={accessValue}
+                onCheckedChange={(v) => setAccessValue(v)}
+                disabled={pending}
+                aria-label="تبديل إذن رؤية البيانات الكاملة"
+              />
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              الإذن يُفعَّل أو يُسحب في أي وقت — ويصل صاحب الحساب إشعار بالتغيير فوراً.
+              البيانات تبقى محمية بنظام الأذونات ولا تُعرض لأي حساب آخر.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAccessOpen(false)}>
+              إغلاق
+            </Button>
+            <Button
+              onClick={() => accessMutation(accessValue)}
+              disabled={pending || accessValue === (user.fullProfileAccess ?? false)}
+              className="gap-2"
+            >
+              <ShieldCheck className="size-4" />
+              {accessValue ? 'فتح الإذن' : 'سحب الإذن'}
             </Button>
           </DialogFooter>
         </DialogContent>
