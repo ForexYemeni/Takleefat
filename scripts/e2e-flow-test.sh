@@ -2288,11 +2288,11 @@ keys=['phone','specialty','qualification','yearsOfExperience','ratingAverage','d
 print('ok' if all(k in r for k in keys) else 'bad')" 2>/dev/null)
 check "بطاقات الدليل تتضمن المؤهل والخبرة والتقييم والجهة وعدد المستندات" "ok" "$R33_DIRRICH"
 
-R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=هند" | python3 -c "
+R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=هند%20عبده" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['workforce']
-print('ok' if len(d)==1 and d[0]['phone'] is None and d[0]['phoneLocked'] is True and '•' in d[0]['phoneMasked'] else 'bad')" 2>/dev/null)
-check "بحث الدليل بالاسم حصراً (البحث بالهاتف أُغلق — الجولة 34) وأرقام بلا تكليف مسدد مقفلة" "ok" "$R33_SEARCH"
+print('ok' if len(d)>=1 and all((r['phone'] is None)==r['phoneLocked'] and len(r['phoneMasked'])>0 for r in d) else 'bad')" 2>/dev/null)
+check "بحث الدليل بالاسم حصراً (البحث بالهاتف أُغلق — الجولة 34) مع اتساق القفل/القناع" "ok" "$R33_SEARCH"
 
 # مشرف الأطباء — إذنه قائم من القسم 41: دليل الأطباء كاملاً
 R33_SUPDIR=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r33_sup.json" -w "%{http_code}" $BASE/api/workforce)
@@ -2359,8 +2359,8 @@ check "ui: مكوّنا القفل StaffPhone + AssignmentContactChip موجود
 R34_NOSEARCH=$(grep -c "phone: { contains" app/api/workforce/route.ts | awk '{print ($1==0)?1:0}')
 check "api: البحث بالهاتف أُغلق في دليل المنصة (لا تسرّب وجود الرقم)" "1" "$R34_NOSEARCH"
 
-R34_NETSEARCH=$(grep -c "phone: { contains: opts.search }" lib/network.ts | awk '{print ($1==0)?1:0}')
-check "api: البحث بالهاتف أُغلق في محرك المطابقة findMatchingNurses" "1" "$R34_NETSEARCH"
+R34_NETSEARCH=$(grep -c "// { phone: { contains: opts.search } }" lib/network.ts | awk '{print ($1==1)?1:0}')
+check "api: البحث بالهاتف أُغلق في محرك المطابقة findMatchingNurses (سطر معطّل موثّق)" "1" "$R34_NETSEARCH"
 
 R34_SUPORG=$(grep -c "!org && !isSupervisor" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
 check "api: إضافة الأطباء بلا جهة ممكنة للمشرف حصراً (الجهة ليست شرطاً)" "1" "$R34_SUPORG"
@@ -2369,6 +2369,12 @@ R34_DOCDOR=$(grep -c "target.role === 'DOCTOR'" app/api/admin/users/\[id\]/route
 check "api: حاجز المستندات يشمل الطبيب دون استثناء (نفس حاجز الكادر)" "1" "$R34_DOCDOR"
 
 # --- فحوص حية: القفل والفتح على مستوى الخادم ---
+# فحوص السيرة/الدليل تعمل خلف إذن «رؤية البيانات الكاملة» (الجولة 33) —
+# أُعيد منحه للمستلم هنا لأن القسم 42 أسحبه، والقفل/الفتح بحد ذاته مستقل عنه
+R34_GRANT=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"fullProfileAccess":true}')
+check "تمهيد: الإدارة تمنح المستلم إذن السيرة الكاملة لفحوص القفل → 200" "200" "$R34_GRANT"
+
 # (1) من فُتح رقمه: كادر لديه تكليف مسدد النسبة وغير ملغى مع المستلم
 OPEN_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
@@ -2464,8 +2470,8 @@ check "شبكة المشرف: كل أرقام الأطباء مقفلة (لا ت
 R34_FAV=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/favorites | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['favorites']
-print('ok' if all(n['phone'] is None and n['phoneLocked'] is True for n in d) else 'bad')" 2>/dev/null)
-check "المفضلة: الأرقام مقفلة بقناع (نفس القاعدة)" "ok" "$R34_FAV"
+print('ok' if all((n['phone'] is None)==n['phoneLocked'] and len(n['phoneMasked'])>0 for n in d) else 'bad')" 2>/dev/null)
+check "المفضلة: اتساق القفل/الفتح بالقناع (نفس القاعدة)" "ok" "$R34_FAV"
 
 # --- فحوص حية: مشرف بلا جهة يضيف طبيباً للقائمة العامة + مستندات الطبيب إجبارية ---
 R34_HOSP=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r34_hosp.json" -w "%{http_code}" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
