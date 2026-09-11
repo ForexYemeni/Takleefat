@@ -2216,6 +2216,124 @@ check "الإدارة تسحب إذن المستلم → 200" "200" "$R32_REVOKE
 R32_REVOKED=$(code -b "$DIR/receiver.jar" $BASE/api/workforce/$NURSE32_ID)
 check "بعد السحب: المستلم ممنوع من السيرة الكاملة مرة أخرى → 403" "403" "$R32_REVOKED"
 
+# ============================================================
+# القسم 42 — الجولة 33: دليل المنصة الكامل بالإذن + السيرة الاحترافية + فصل مستندات الأطباء عن الكادر
+# ============================================================
+echo "=========== 42) الجولة 33: دليل الكوادر/الأطباء كاملين + السيرة الاحترافية + فصل المستندات ==========="
+
+# --- فحوص ساكنة: البنية الجديدة ---
+R33_DIRAPI=$(grep -c "fullProfileAccess\|audienceRole" app/api/workforce/route.ts | awk '{print ($1>=2)?1:0}')
+check "api: نقطة دليل المنصة /api/workforce خلف بوابة الإذن وواعية بالجمهور" "1" "$R33_DIRAPI"
+
+R33_DIRCOMP=$( [ -f components/shared/workforce-directory.tsx ] && grep -c "FullProfileDialog\|audience" components/shared/workforce-directory.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: مكوّن دليل الكوادر/الأطباء المشترك موجود وواعٍ بالجمهور" "1" "$R33_DIRCOMP"
+
+R33_RCVTAB=$(grep -c "كل الكوادر في المنصة" app/receiver/staff/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: صفحة المستلم بها تبويب «كل الكوادر في المنصة» (بالموافقة)" "1" "$R33_RCVTAB"
+
+R33_SUPTAB=$(grep -c "كل الأطباء في المنصة" app/supervisor/staff/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: صفحة المشرف بها تبويب «كل الأطباء في المنصة» (بالموافقة)" "1" "$R33_SUPTAB"
+
+R33_CV=$(grep -c "التحصيل العلمي\|السجل المهني\|التقييمات الاحترافية\|بطاقة الهوية والتواصل" components/shared/full-profile-dialog.tsx | awk '{print ($1>=4)?1:0}')
+check "ui: السيرة الذاتية المعاد بناؤها: ترويسة + تحصيل علمي + سجل مهني + تقييمات" "1" "$R33_CV"
+
+R33_CVCOMPACT=$(grep -c "text-sm font-bold" components/shared/full-profile-dialog.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: المؤهل العلمي في السيرة بحجم أنيق مضغوط (text-sm لا أكبر)" "1" "$R33_CVCOMPACT"
+
+R33_DOCAPI=$(grep -c "audience" app/api/admin/documents/route.ts | awk '{print ($1>=2)?1:0}')
+check "api: نقطة مستندات الإدارة تفلتر بالجمهور (NURSE/DOCTOR)" "1" "$R33_DOCAPI"
+
+R33_DOCROLE=$(grep -c "role: true" app/api/admin/documents/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: استجابة المستندات تتضمن دور صاحب الحساب (role)" "1" "$R33_DOCROLE"
+
+R33_DOCTABS=$(grep -c "الكادر التمريضي\|الأطباء" app/admin/documents/page.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: مراجعة المستندات بتبويبات فصل الأطباء عن الكادر بعدادات" "1" "$R33_DOCTABS"
+
+R33_DOCUI=$(grep -c "AUDIENCE_UI" app/admin/documents/page.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: هوية بصرية مميزة لكل جمهور في بطاقات المستندات" "1" "$R33_DOCUI"
+
+# --- فحوص حية: دليل المنصة الكامل خلف الإذن ---
+# (نهاية القسم 41: إذن المستلم مسحوب — المشرف ما زال مُصرّحاً له من القسم 41)
+R33_DIR403=$(code -b "$DIR/receiver.jar" $BASE/api/workforce)
+check "بدون إذن: المستلم ممنوع من دليل المنصة الكامل → 403" "403" "$R33_DIR403"
+
+R33_ROLE403=$(code -b "$DIR/nurse.jar" $BASE/api/workforce)
+check "حماية الدور: الكادر ممنوع من دليل المنصة → 403" "403" "$R33_ROLE403"
+
+R33_GRANT=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"fullProfileAccess":true}')
+check "الإدارة تفتح إذن البيانات الكاملة للمستلم (لدليل المنصة) → 200" "200" "$R33_GRANT"
+
+R33_RCVDIR=$(curl -s -b "$DIR/receiver.jar" -o "$DIR/r33_dir.json" -w "%{http_code}" $BASE/api/workforce)
+check "بعد المنح: المستلم يستعرض دليل الكوادر الكامل → 200" "200" "$R33_RCVDIR"
+
+R33_RCVDIR_AUD=$(python3 -c "
+import json
+d=json.load(open('$DIR/r33_dir.json'))
+rows=d['workforce']
+print('ok' if d['audience']=='NURSE' and d['fullProfileAccess'] is True and len(rows)>=1 and all(r['role']=='NURSE' for r in rows) else 'bad')" 2>/dev/null)
+check "دليل المستلم: جمهور NURSE حصراً مع بيانات مهنية كاملة لكل صف" "ok" "$R33_RCVDIR_AUD"
+
+R33_DIRRICH=$(python3 -c "
+import json
+d=json.load(open('$DIR/r33_dir.json'))
+r=d['workforce'][0]
+keys=['phone','specialty','qualification','yearsOfExperience','ratingAverage','documentsCount','orgName','isMyOrg']
+print('ok' if all(k in r for k in keys) else 'bad')" 2>/dev/null)
+check "بطاقات الدليل تتضمن المؤهل والخبرة والتقييم والجهة وعدد المستندات" "ok" "$R33_DIRRICH"
+
+R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=711111111" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['workforce']
+print('ok' if len(d)==1 and d[0]['phone']=='711111111' else 'bad')" 2>/dev/null)
+check "بحث الدليل بالهاتف يعيد الكادر المطابق حصراً" "ok" "$R33_SEARCH"
+
+# مشرف الأطباء — إذنه قائم من القسم 41: دليل الأطباء كاملاً
+R33_SUPDIR=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r33_sup.json" -w "%{http_code}" $BASE/api/workforce)
+check "المشرف المُصرّح له يستعرض دليل الأطباء الكامل → 200" "200" "$R33_SUPDIR"
+
+R33_SUPDIR_AUD=$(python3 -c "
+import json
+d=json.load(open('$DIR/r33_sup.json'))
+rows=d['workforce']
+print('ok' if d['audience']=='DOCTOR' and len(rows)>=1 and all(r['role']=='DOCTOR' for r in rows) else 'bad')" 2>/dev/null)
+check "دليل المشرف: جمهور DOCTOR حصراً — كل الأطباء في المنصة" "ok" "$R33_SUPDIR_AUD"
+
+# سحب الإذن يغلق الدليل فوراً
+R33_REVOKE2=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" \
+  -d '{"fullProfileAccess":false}')
+check "الإدارة تسحب إذن المستلم مرة أخرى → 200" "200" "$R33_REVOKE2"
+
+R33_DIRREVOKED=$(code -b "$DIR/receiver.jar" $BASE/api/workforce)
+check "بعد السحب: دليل المنصة مغلق فوراً للمستلم → 403" "403" "$R33_DIRREVOKED"
+
+# --- فحوص حية: فصل مستندات الأطباء عن الكادر التمريضي ---
+R33_DOCNURSE=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r33_dn.json" -w "%{http_code}" "$BASE/api/admin/documents?audience=NURSE")
+check "فلتر الجمهور NURSE يعمل → 200" "200" "$R33_DOCNURSE"
+
+R33_DOCNURSE_OK=$(python3 -c "
+import json
+d=json.load(open('$DIR/r33_dn.json'))['documents']
+print('ok' if len(d)>=1 and all(x['user']['role']=='NURSE' for x in d) else 'bad')" 2>/dev/null)
+check "مستندات الكادر التمريضي فقط في فلتر NURSE (>=1)" "ok" "$R33_DOCNURSE_OK"
+
+R33_DOCDOC=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r33_dd.json" -w "%{http_code}" "$BASE/api/admin/documents?audience=DOCTOR")
+check "فلتر الجمهور DOCTOR يعمل → 200" "200" "$R33_DOCDOC"
+
+R33_DOCDOC_OK=$(python3 -c "
+import json
+d=json.load(open('$DIR/r33_dd.json'))['documents']
+print('ok' if len(d)>=1 and all(x['user']['role']=='DOCTOR' for x in d) else 'bad')" 2>/dev/null)
+check "مستندات الأطباء فقط في فلتر DOCTOR (>=1 — طبيب رفع مستنداته في القسم 29)" "ok" "$R33_DOCDOC_OK"
+
+R33_DOCALL=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/documents?status=ALL" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['documents']
+n=[x for x in d if x['user']['role']=='NURSE']
+doc=[x for x in d if x['user']['role']=='DOCTOR']
+print('ok' if len(d)>=len(n)+len(doc) and len(n)>=1 and len(doc)>=1 else 'bad')" 2>/dev/null)
+check "القائمة الكاملة (status=ALL) تضم مستندات الجمهورين معاً" "ok" "$R33_DOCALL"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

@@ -8,6 +8,8 @@ import {
   FileCheck2,
   FileText,
   Search,
+  Stethoscope,
+  Users,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -49,7 +51,7 @@ interface AdminDoc {
   status: string
   reviewNote: string | null
   createdAt: string
-  user: { id: string; name: string; phone: string; specialty: string | null; status: string }
+  user: { id: string; name: string; phone: string; role: string; specialty: string | null; status: string }
 }
 
 interface DocOwner {
@@ -57,8 +59,24 @@ interface DocOwner {
   docs: AdminDoc[]
 }
 
+/** الجولة 33: ألوان وهوية كل جمهور — تيل للكادر التمريضي ونيلي للأطباء */
+const AUDIENCE_UI = {
+  NURSE: {
+    label: 'كادر تمريضي',
+    avatarClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
+    icon: Users,
+  },
+  DOCTOR: {
+    label: 'طبيب',
+    avatarClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
+    icon: Stethoscope,
+  },
+} as const
+
 export default function AdminDocumentsPage() {
   const queryClient = useQueryClient()
+  // الجولة 33: جلب دفعة واحدة + تصفية حية (الجمهور + الحالة + البحث) بعدادات فورية
+  const [audience, setAudience] = useState('ALL')
   const [status, setStatus] = useState('PENDING')
   const [search, setSearch] = useState('')
   const [openUser, setOpenUser] = useState<DocOwner | null>(null)
@@ -67,8 +85,8 @@ export default function AdminDocumentsPage() {
   const [rejectNote, setRejectNote] = useState('')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-documents', status],
-    queryFn: () => apiFetcher<{ documents: AdminDoc[] }>(`/api/admin/documents?status=${status}`),
+    queryKey: ['admin-documents', 'all'],
+    queryFn: () => apiFetcher<{ documents: AdminDoc[] }>('/api/admin/documents?status=ALL'),
   })
 
   // كل مستندات الكادر المختار (كل الحالات) — لبطاقة «جميع المستندات المرفوعة»
@@ -99,10 +117,39 @@ export default function AdminDocumentsPage() {
 
   const documents = data?.documents ?? []
 
-  // تجميع المستندات حسب الكادر — بطاقة واحدة لكل كادر
+  // ---------- التصفية الحية (الجولة 33) ----------
+  const audienceDocs = useMemo(
+    () =>
+      documents.filter(
+        (d) => audience === 'ALL' || d.user.role === audience
+      ),
+    [documents, audience]
+  )
+
+  const audienceCounts = useMemo(
+    () => ({
+      ALL: documents.length,
+      NURSE: documents.filter((d) => d.user.role === 'NURSE').length,
+      DOCTOR: documents.filter((d) => d.user.role === 'DOCTOR').length,
+    }),
+    [documents]
+  )
+
+  const statusCounts = useMemo(
+    () => ({
+      PENDING: audienceDocs.filter((d) => d.status === 'PENDING').length,
+      APPROVED: audienceDocs.filter((d) => d.status === 'APPROVED').length,
+      REJECTED: audienceDocs.filter((d) => d.status === 'REJECTED').length,
+      ALL: audienceDocs.length,
+    }),
+    [audienceDocs]
+  )
+
+  // تجميع المستندات حسب الكادر — بطاقة واحدة لكل كادر (بعد كل الفلاتر)
   const owners = useMemo<DocOwner[]>(() => {
     const map = new Map<string, DocOwner>()
-    for (const doc of documents) {
+    for (const doc of audienceDocs) {
+      if (status !== 'ALL' && doc.status !== status) continue
       const existing = map.get(doc.userId)
       if (existing) existing.docs.push(doc)
       else map.set(doc.userId, { user: doc.user, docs: [doc] })
@@ -113,7 +160,7 @@ export default function AdminDocumentsPage() {
     return list.filter(
       (o) => o.user.name.includes(term) || o.user.phone.includes(term)
     )
-  }, [documents, search])
+  }, [audienceDocs, status, search])
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -122,17 +169,51 @@ export default function AdminDocumentsPage() {
       <div>
         <h1 className="text-2xl font-extrabold">مراجعة المستندات</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          بطاقة لكل كادر — اضغط على البطاقة لعرض جميع مستنداته المرفوعة واعتمادها أو رفضها
+          فصل احترافي بين الأطباء والكادر التمريضي — بطاقة لكل صاحب حساب، اضغط عليها لعرض
+          جميع مستنداته واعتمادها أو رفضها
         </p>
       </div>
+
+      {/* ---------- الجولة 33: تبويبات الجمهور — فصل الأطباء عن الكادر التمريضي ---------- */}
+      <Tabs value={audience} onValueChange={setAudience}>
+        <TabsList className="h-auto flex-wrap justify-start gap-1">
+          <TabsTrigger value="ALL" className="gap-1.5">
+            <FileCheck2 className="size-3.5" />
+            الكل
+            <span className="text-xs text-muted-foreground">{audienceCounts.ALL}</span>
+          </TabsTrigger>
+          <TabsTrigger value="NURSE" className="gap-1.5">
+            <Users className="size-3.5 text-teal-600" />
+            الكادر التمريضي
+            <span className="text-xs text-muted-foreground">{audienceCounts.NURSE}</span>
+          </TabsTrigger>
+          <TabsTrigger value="DOCTOR" className="gap-1.5">
+            <Stethoscope className="size-3.5 text-indigo-600" />
+            الأطباء
+            <span className="text-xs text-muted-foreground">{audienceCounts.DOCTOR}</span>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={status} onValueChange={setStatus}>
           <TabsList className="h-auto flex-wrap justify-start gap-1">
-            <TabsTrigger value="PENDING">قيد المراجعة</TabsTrigger>
-            <TabsTrigger value="APPROVED">معتمد</TabsTrigger>
-            <TabsTrigger value="REJECTED">مرفوض</TabsTrigger>
-            <TabsTrigger value="ALL">الكل</TabsTrigger>
+            <TabsTrigger value="PENDING" className="gap-1.5">
+              قيد المراجعة
+              <span className="text-xs text-muted-foreground">{statusCounts.PENDING}</span>
+            </TabsTrigger>
+            <TabsTrigger value="APPROVED" className="gap-1.5">
+              معتمد
+              <span className="text-xs text-muted-foreground">{statusCounts.APPROVED}</span>
+            </TabsTrigger>
+            <TabsTrigger value="REJECTED" className="gap-1.5">
+              مرفوض
+              <span className="text-xs text-muted-foreground">{statusCounts.REJECTED}</span>
+            </TabsTrigger>
+            <TabsTrigger value="ALL" className="gap-1.5">
+              كل الحالات
+              <span className="text-xs text-muted-foreground">{statusCounts.ALL}</span>
+            </TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="relative w-full sm:w-64">
@@ -150,7 +231,13 @@ export default function AdminDocumentsPage() {
         <EmptyState
           icon={FileCheck2}
           title="لا توجد مستندات"
-          description="لا توجد مستندات ضمن هذا التصنيف حالياً."
+          description={
+            audience === 'DOCTOR'
+              ? 'لا توجد مستندات أطباء ضمن هذا التصنيف — جرّب تبويباً آخر أو حالة أخرى.'
+              : audience === 'NURSE'
+                ? 'لا توجد مستندات كادر تمريضي ضمن هذا التصنيف — جرّب تبويباً آخر أو حالة أخرى.'
+                : 'لا توجد مستندات ضمن هذا التصنيف حالياً.'
+          }
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -160,20 +247,30 @@ export default function AdminDocumentsPage() {
               APPROVED: owner.docs.filter((d) => d.status === 'APPROVED').length,
               REJECTED: owner.docs.filter((d) => d.status === 'REJECTED').length,
             }
+            const ui = AUDIENCE_UI[owner.user.role as 'NURSE' | 'DOCTOR'] ?? AUDIENCE_UI.NURSE
+            const AudienceIcon = ui.icon
             return (
               <button
                 key={owner.user.id}
                 onClick={() => setOpenUser(owner)}
-                className="group rounded-2xl border bg-card p-4 text-start transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+                className={`group rounded-2xl border bg-card p-4 text-start transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md ${
+                  owner.user.role === 'DOCTOR'
+                    ? 'border-r-4 border-r-indigo-400/60'
+                    : 'border-r-4 border-r-teal-400/60'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-teal-100 text-lg font-extrabold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+                  <span className={`flex size-12 shrink-0 items-center justify-center rounded-full text-lg font-extrabold ${ui.avatarClass}`}>
                     {owner.user.name.slice(0, 1)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-bold group-hover:text-primary">{owner.user.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {owner.user.specialty ?? 'بدون تخصص'}
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold">
+                      <AudienceIcon className={`size-3 ${owner.user.role === 'DOCTOR' ? 'text-indigo-600' : 'text-teal-600'}`} />
+                      <span className={owner.user.role === 'DOCTOR' ? 'text-indigo-700 dark:text-indigo-400' : 'text-teal-700 dark:text-teal-400'}>
+                        {ui.label}
+                      </span>
+                      <span className="font-normal text-muted-foreground">— {owner.user.specialty ?? 'بدون تخصص'}</span>
                     </p>
                     <p className="mt-0.5 truncate text-[11px] text-muted-foreground" dir="ltr">
                       {owner.user.phone}
@@ -213,10 +310,16 @@ export default function AdminDocumentsPage() {
         <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-full bg-teal-100 text-base font-extrabold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+              <span className={`flex size-9 items-center justify-center rounded-full text-base font-extrabold ${openUser ? AUDIENCE_UI[openUser.user.role as 'NURSE' | 'DOCTOR']?.avatarClass ?? AUDIENCE_UI.NURSE.avatarClass : ''}`}>
                 {openUser?.user.name.slice(0, 1)}
               </span>
               مستندات {openUser?.user.name}
+              {openUser && (
+                <Badge variant="outline" className="gap-1 text-[11px]">
+                  {openUser.user.role === 'DOCTOR' ? <Stethoscope className="size-3 text-indigo-600" /> : <Users className="size-3 text-teal-600" />}
+                  {AUDIENCE_UI[openUser.user.role as 'NURSE' | 'DOCTOR']?.label ?? 'كادر تمريضي'}
+                </Badge>
+              )}
             </DialogTitle>
             <DialogDescription>
               جميع المستندات المرفوعة (كل الحالات) — اعتمد أو ارفض كل مستند مع إشعار صاحبه

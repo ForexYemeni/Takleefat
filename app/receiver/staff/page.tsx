@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  Globe2,
   IdCard,
   Lock,
   PhoneIcon,
@@ -31,6 +32,8 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
+import { WorkforceDirectory } from '@/components/shared/workforce-directory'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -86,6 +89,8 @@ export default function ReceiverStaffPage() {
   // السيرة الذاتية الكاملة — تظهر فقط لمن مُنحه حساب الإدارة الإذن (الجولة 32)
   const [profileUserId, setProfileUserId] = useState<string | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
+  // الجولة 33: تبويب دليل المنصة الكامل — يظهر عند توفر الإذن
+  const [view, setView] = useState<'org' | 'all'>('org')
 
   // كتالوج المؤهلات العلمية من حساب الإدارة — القوائم التاريخية احتياط
   const [qualOptions, setQualOptions] = useState<readonly { value: string; label: string }[]>(QUALIFICATION_OPTIONS)
@@ -197,7 +202,26 @@ export default function ReceiverStaffPage() {
         </div>
       )}
 
-      {!org ? (
+      {/* ---------- الجولة 33: تبويبات «كوادر جهتي» / «كل الكوادر» — يظهران بالإذن ---------- */}
+      {fullProfileAccess && (
+        <Tabs value={view} onValueChange={(v) => setView(v as 'org' | 'all')}>
+          <TabsList className="h-auto flex-wrap justify-start gap-1">
+            <TabsTrigger value="org" className="gap-1.5">
+              <Building2 className="size-3.5" />
+              كوادر جهتي
+              <span className="text-xs text-muted-foreground">{nurses.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="all" className="gap-1.5 text-emerald-700 dark:text-emerald-400">
+              <Globe2 className="size-3.5" />
+              كل الكوادر في المنصة
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {view === 'all' && fullProfileAccess ? (
+        <WorkforceDirectory audience="NURSE" />
+      ) : !org ? (
         <EmptyState
           icon={Building2}
           title="لا توجد جهة صحية مرتبطة بحسابك"
