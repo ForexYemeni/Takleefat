@@ -40,17 +40,24 @@ export async function ensureQualificationDefaults(): Promise<void> {
     ])
 
     if (nurseCount === 0) {
-      await db.qualification.createMany({
-        data: LEGACY_NURSE_QUALIFICATIONS.map((name) => ({ name, audience: 'NURSE' })),
-        skipDuplicates: true,
-      })
+      for (const name of LEGACY_NURSE_QUALIFICATIONS) {
+        // upsert بدل createMany(skipDuplicates) — skipDuplicates غير مدعوم في SQLite
+        await db.qualification.upsert({
+          where: { name },
+          update: {},
+          create: { name, audience: 'NURSE' },
+        })
+      }
     }
 
     if (doctorCount === 0) {
-      await db.qualification.createMany({
-        data: LEGACY_DOCTOR_QUALIFICATIONS.map((name) => ({ name, audience: 'DOCTOR' })),
-        skipDuplicates: true,
-      })
+      for (const name of LEGACY_DOCTOR_QUALIFICATIONS) {
+        await db.qualification.upsert({
+          where: { name },
+          update: {},
+          create: { name, audience: 'DOCTOR' },
+        })
+      }
     }
   } catch {
     // جدول غير جاهز بعد (قاعدة قديمة قبل الترقية) — لا نعطّل الخدمة
