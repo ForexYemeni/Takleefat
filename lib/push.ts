@@ -81,11 +81,6 @@ export async function deliverPushToUser(userId: string, payload: PushPayload): P
   }
 }
 
-/** نسخة لا تنتظر النتيجة — تُستخدم داخل notify() حتى لا تلمس أي مسار حرج */
-export function deliverPushInBackground(userId: string, payload: PushPayload): void {
-  void deliverPushToUser(userId, payload)
-}
-
 /**
  * إشعار تجريبي مُعُدّ النتيجة — الجولة السابعة عشرة:
  * يُرسل إشعاراً حقيقياً إلى كل أجهزة المستخدم ويعيد عدد الأجهزة التي

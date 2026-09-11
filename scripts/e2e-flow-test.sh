@@ -1304,6 +1304,17 @@ check "notification-realtime: isLoading ضمن معتمدات الأثر" "1" "$
   grep -cF 'notifications, markRead, router, isLoading' components/shared/notification-realtime.tsx | awk '{print ($1>=1)?1:0}'
 )"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 30 — الجولة 19: الإرسال الفوري الحقيقي عبر after()
+# الجذر: fire-and-forget كان يموت على السيرفرلس فور إرجاع الاستجابة — الإشعار
+# التجريبي (المُنتظَر) يصل والحقيقي لا يصل. الآن الإرسال مُجدول بـ after().
+# ─────────────────────────────────────────────────────────────────────────────
+R19_AFTER=$(awk '/after\(deliverPushToUser/{p1=1} /await deliverPushToUser/{p2=1} END{print p1+p2}' lib/notifications.ts)
+check "notify: الإرسال مُجدول بـ after() مع بديل انتظار مباشر" "2" "$R19_AFTER"
+check "لا إرسال fire-and-forget متبقٍ (deliverPushInBackground محذوف)" "0" "$(
+  grep -cF 'deliverPushInBackground' lib/push.ts lib/notifications.ts | awk -F: '{s+=$2} END{print s+0}'
+)"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
