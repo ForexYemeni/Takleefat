@@ -24,7 +24,10 @@ export async function GET(
       },
     })
     if (!post) return jsonError('التكليف غير موجود', 404)
-    if (session.user.role === 'RECEIVER' && post.receiverId !== session.user.id) {
+    if (
+      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      post.receiverId !== session.user.id
+    ) {
       throw new ApiError('يمكنك مطابقة الكوادر لتكليفاتك فقط', 403)
     }
 

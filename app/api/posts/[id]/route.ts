@@ -107,8 +107,10 @@ export async function PATCH(
     })
     if (!post) return jsonError('التكليف غير موجود', 404)
 
-    const isOwner = session.user.role === 'RECEIVER' && post.receiverId === session.user.id
-    if (session.user.role === 'RECEIVER' && !isOwner) {
+    const isOwner =
+      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      post.receiverId === session.user.id
+    if ((session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') && !isOwner) {
       throw new ApiError('يمكنك إدارة تكليفاتك المُعلنة فقط', 403)
     }
 
@@ -269,8 +271,10 @@ export async function DELETE(
     })
     if (!post) return jsonError('التكليف غير موجود', 404)
 
-    const isOwner = session.user.role === 'RECEIVER' && post.receiverId === session.user.id
-    if (session.user.role === 'RECEIVER' && !isOwner) {
+    const isOwner =
+      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      post.receiverId === session.user.id
+    if ((session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') && !isOwner) {
       throw new ApiError('يمكنك حذف تكليفاتك المُعلنة فقط', 403)
     }
 

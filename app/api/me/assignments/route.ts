@@ -11,11 +11,13 @@ import { getSettings } from '@/lib/settings'
 export async function GET() {
   try {
     const session = await requireRole('NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
-    const isNurse = session.user.role === 'NURSE'
+    // الكادر والطبيب يرَون تكليفاتهم كطرف منفّذ — المستلم والمشرف كطرف مسانِد
+    const isWorker =
+      session.user.role === 'NURSE' || session.user.role === 'DOCTOR'
 
     const [assignments, settings] = await Promise.all([
       db.assignment.findMany({
-        where: isNurse ? { nurseId: session.user.id } : { receiverId: session.user.id },
+        where: isWorker ? { nurseId: session.user.id } : { receiverId: session.user.id },
         orderBy: { createdAt: 'desc' },
         include: {
           nurse: { select: { id: true, name: true, specialty: true, phone: true } },

@@ -26,7 +26,10 @@ export async function POST(
       include: { hospital: { select: { name: true } } },
     })
     if (!post) return jsonError('التكليف غير موجود', 404)
-    if (session.user.role === 'RECEIVER' && post.receiverId !== session.user.id) {
+    if (
+      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      post.receiverId !== session.user.id
+    ) {
       throw new ApiError('يمكنك استدعاء الكوادر لتكليفاتك المُعلنة فقط', 403)
     }
     if (post.status !== 'OPEN') {

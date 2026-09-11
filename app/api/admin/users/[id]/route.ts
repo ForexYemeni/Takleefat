@@ -258,7 +258,14 @@ export async function PATCH(
         title: 'تم اعتماد حسابك',
         body: 'تهانينا! تم اعتماد حسابك في منصة تكليفات ويمكنك الآن استخدام جميع الخدمات.',
         type: 'ACCOUNT_APPROVED',
-        link: target.role === 'NURSE' ? '/nurse' : '/receiver',
+        link:
+          target.role === 'NURSE'
+            ? '/nurse'
+            : target.role === 'DOCTOR'
+              ? '/doctor'
+              : target.role === 'DOCTOR_SUPERVISOR'
+                ? '/supervisor'
+                : '/receiver',
       })
     } else if (status === 'REJECTED') {
       await notify(id, {
