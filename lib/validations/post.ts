@@ -11,7 +11,7 @@ export const createPostSchema = z.object({
   // الجهة الصحية تُختار من المستشفيات المضافة من حساب الإدارة
   hospitalId: z.string({ error: 'الجهة الصحية مطلوبة' }).min(1, 'الجهة الصحية مطلوبة'),
   department: z.string().max(120).optional().or(z.literal('')),
-  location: z.string().max(120).optional().or(z.literal('')),
+  location: z.string().max(150, 'الموقع طويل جداً').optional().or(z.literal('')),
   startDate: z.string({ error: 'تاريخ البدء مطلوب' }).min(1, 'تاريخ البدء مطلوب'),
   nursesNeeded: z.coerce
     .number({ error: 'عدد الكادر المطلوب غير صحيح' })
@@ -41,12 +41,15 @@ export const createPostSchema = z.object({
   // الكوادر المستدعون مباشرة (استدعاء محدد أو من المفضلة/الجهة/المعتمدين)
   invitedNurseIds: z.array(z.string().min(1)).max(100).optional(),
   // مدة كل مرحلة بالساعات في النشر التدريجي (افتراضي 24 ساعة)
+  // .or(z.literal('')) حتمية: النموذج يرسل نصاً فارغاً افتراضياً — بدونها يفشل التحقق
+  // صامتاً («مدة المرحلة ساعة واحدة على الأقل») ويُحجب النشر بلا أي سبب ظاهر للمستخدم
   progressiveStageHours: z.coerce
     .number()
     .int()
     .min(1, 'مدة المرحلة ساعة واحدة على الأقل')
     .max(720, 'الحد الأقصى 720 ساعة (30 يوماً)')
-    .optional(),
+    .optional()
+    .or(z.literal('')),
 })
 
 /** تحديث التكليف المُعلن — الإدارة (أي تكليف) أو المالك (تكليفه وهو مفتوح) */
@@ -77,9 +80,9 @@ export const updatePostSchema = z.object({
     .max(999_999_999, 'قيمة التكليف كبيرة جداً')
     .optional(),
   status: z.enum(['OPEN', 'CANCELLED'], { error: 'الحالة غير صحيحة' }).optional(),
-  // ترقية مرحلة النشر التدريجي يدوياً + مدة المرحلة التالية بالساعات
+  // ترقية مرحلة النشر التدريجي يدوياً + مدة المرحلة التالية بالساعات (النص الفارغ = الافتراضي 24)
   escalateStage: z.boolean().optional(),
-  progressiveStageHours: z.coerce.number().int().min(1).max(720).optional(),
+  progressiveStageHours: z.coerce.number().int().min(1).max(720).optional().or(z.literal('')),
 })
 
 export const reviewApplicationSchema = z.object({

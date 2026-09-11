@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useForm, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   BadgeCheck,
@@ -248,6 +248,16 @@ export function CreatePostDialog({
     setSelectedNurseIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  // ---------- ضمانة احترافية: لا فشل صامت أبداً ----------
+  // إذا حجب التحقق النشر لأي سبب، يظهر فوراً تنبيه واضح برسالة الحقل المسبّب —
+  // المستخدم يرى دائماً سبب عدم النشر بدل زر لا يستجيب
+  const onInvalid = (errors: FieldErrors<CreatePostFormValues>) => {
+    const first = Object.values(errors).find((e) => e && 'message' in e && e.message) as
+      | { message?: string }
+      | undefined
+    toast.error(first?.message ?? 'تحقق من الحقول المطلوبة قبل النشر')
+  }
+
   const submitMutation = async (values: CreatePostInput) => {
     try {
       const res = await apiPost<{ message: string; post: { id: string; title: string; number: number } }>(
@@ -281,7 +291,7 @@ export function CreatePostDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(submitMutation)} className="space-y-4" noValidate>
+        <form onSubmit={form.handleSubmit(submitMutation, onInvalid)} className="space-y-4" noValidate>
           {/* العنوان الاختياري — وضع المستلم الإداري (الترقيم التسلسلي التلقائي) */}
           {nextNumber != null && (
             <div className="space-y-2">
@@ -306,8 +316,8 @@ export function CreatePostDialog({
               value={selectedHospitalId || undefined}
               onValueChange={(v) => {
                 form.setValue('hospitalId', v, { shouldValidate: true })
-                // الموقع يُعبأ تلقائياً من الجهة الصحية المختارة
-                form.setValue('location', hospitals.find((h) => h.id === v)?.location ?? '')
+                // الموقع الفعلي يُشتق على الخادم من الجهة الصحية حصراً (location: hospital.location) —
+                // لا نُرسل الموقع من النموذج إطلاقاً لتفادي أي حجب صامت لاختلاف حدود التحقق
               }}
             >
               <SelectTrigger>
@@ -503,6 +513,9 @@ export function CreatePostDialog({
               <div className="max-w-48">
                 <Label htmlFor="cp-stage-hours">مدة كل مرحلة (ساعات)</Label>
                 <Input id="cp-stage-hours" type="number" min={1} max={720} placeholder="24" {...form.register('progressiveStageHours')} />
+                {form.formState.errors.progressiveStageHours && (
+                  <p className="mt-1 text-xs text-destructive">{form.formState.errors.progressiveStageHours.message}</p>
+                )}
               </div>
             )}
 

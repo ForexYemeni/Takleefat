@@ -176,7 +176,18 @@ export async function PATCH(
         where: { id },
         data: {
           progressiveStage: nextStage,
-          progressiveNextAt: nextStage >= 3 ? null : new Date(Date.now() + (data.progressiveStageHours ?? 24) * 60 * 60 * 1000),
+          progressiveNextAt:
+            nextStage >= 3
+              ? null
+              : new Date(
+                  Date.now() +
+                  (typeof data.progressiveStageHours === 'number' && data.progressiveStageHours >= 1
+                    ? data.progressiveStageHours
+                    : 24) *
+                    60 *
+                    60 *
+                    1000
+                ),
         },
       })
       const fresh = await db.post.findUnique({ where: { id } })

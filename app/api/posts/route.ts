@@ -163,7 +163,15 @@ export async function POST(req: NextRequest) {
         progressiveStage: 0,
         progressiveNextAt:
           distribution === 'PROGRESSIVE'
-            ? new Date(Date.now() + (parsed.data.progressiveStageHours ?? 24) * 60 * 60 * 1000)
+            ? new Date(
+                Date.now() +
+                (typeof parsed.data.progressiveStageHours === 'number' && parsed.data.progressiveStageHours >= 1
+                  ? parsed.data.progressiveStageHours
+                  : 24) *
+                  60 *
+                  60 *
+                  1000
+              )
             : null,
       },
       select: { id: true, title: true, number: true, status: true, distribution: true, gender: true, receiverId: true, hospitalId: true, progressiveStage: true },

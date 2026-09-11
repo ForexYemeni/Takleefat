@@ -1574,6 +1574,51 @@ curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R35_HOSP_ID -o 
 curl -s -b "$DIR/nurse.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
   -d '{"departmentIds":[]}' -o /dev/null
 
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 36 — الجولة 27: إصلاح فشل النشر الصامت في نافذة الإنشاء المشتركة
+# النافذة المشتركة تُرسل progressiveStageHours: '' افتراضياً — كان z.coerce يحوّله
+# إلى 0 فيفشل min(1) صامتاً («مدة المرحلة ساعة واحدة على الأقل») بلا أي عرض للسبب
+# ويُحجب النشر للمستلم الإداري والإدارة معاً في كل طرق التوزيع
+# ─────────────────────────────────────────────────────────────────────────────
+echo "=========== 36) الجولة 27: لا فشل صامت في نشر التكليف ==========="
+
+# فحوص ساكنة: التحقق يتقبّل النص الفارغ + ضمانة onInvalid تُظهر السبب دائماً
+P27_SCH=$(grep -A6 'progressiveStageHours' lib/validations/post.ts | grep -c "or(z.literal(''))" | awk '{print $1+0}')
+check "validations: مدة المرحلة التدريجية تتقبّل النص الفارغ (إنشاء + تحديث)" "2" "$P27_SCH"
+P27_INV=$(grep -c 'onInvalid' components/shared/create-post-dialog.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: ضمانة onInvalid — أي خطأ تحقق يظهر كتنبيه واضح بالسبب (لا فشل صامت)" "1" "$P27_INV"
+P27_LOC=$(grep -c "setValue('location'" components/shared/create-post-dialog.tsx | awk '{print $1+0}')
+check "ui: الموقع يُشتق على الخادم من الجهة الصحية (لا إرسال موقع من النموذج)" "0" "$P27_LOC"
+
+# فحص حي: خادم يطابق سلوك النموذج — النص الفارغ لمدة المرحلة يُقبل (الجذر الحقيقي لشكوى المستلم)
+R36_HOSP=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى الجولة 27","location":"صنعاء - شارع حدة - بجانب الجامع"}')
+R36_HOSP_ID=$(echo "$R36_HOSP" | jget "['hospital']['id']")
+
+P27_R=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"title\":\"\",\"description\":\"\",\"hospitalId\":\"$R36_HOSP_ID\",\"department\":\"\",\"location\":\"\",\"startDate\":\"$TODAY\",\"nursesNeeded\":\"1\",\"hours\":\"8\",\"gender\":\"ANY\",\"value\":\"50000\",\"distribution\":\"ALL_MATCHING\",\"progressiveStageHours\":\"\"}")
+P27_CODE=$(echo "$P27_R" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d['post']['number'])" 2>/dev/null)
+check "receiver: نشر تكليف بحمولة النافذة الكاملة (progressiveStageHours فارغ) → 201" "ok" "$([ -n "$P27_CODE" ] && echo ok || echo fail)"
+
+# النشر التدريجي بمدة مرحلة فارغة → يُقبل ويُعتمد الافتراضي 24 ساعة
+P27_PR=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R36_HOSP_ID\",\"department\":\"\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":20000,\"distribution\":\"PROGRESSIVE\",\"progressiveStageHours\":\"\"}")
+P27_NEXT=$(echo "$P27_PR" | python3 -c "
+import json,sys,datetime
+d=json.load(sys.stdin)
+n=d['post']['progressiveNextAt']
+dt=datetime.datetime.fromisoformat(n.replace('Z','+00:00'))
+hours=(dt-datetime.datetime.now(datetime.timezone.utc)).total_seconds()/3600
+print('ok' if 23<=hours<=25 else f'bad:{hours:.1f}')" 2>/dev/null)
+check "PROGRESSIVE بمدة فارغة: progressiveNextAt = +24 ساعة (الافتراضي مُطبّق)" "ok" "$P27_NEXT"
+
+# تنظيف القسم 36 — حذف الجهة يفكّ ارتباط التكليفات ويحذفها نهائياً
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R36_HOSP_ID -o /dev/null
+R36_GONE=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/hospitals | python3 -c "
+import json,sys
+print('no' if not any(h['id']=='$R36_HOSP_ID' for h in json.load(sys.stdin)['hospitals']) else 'yes')")
+check "تنظيف الجولة 27: الجهة المحذوفة اختفت من القوائم" "no" "$R36_GONE"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
