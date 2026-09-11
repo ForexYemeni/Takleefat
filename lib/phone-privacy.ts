@@ -2,13 +2,18 @@ import type { AssignmentStatus, PaymentStatus } from '@prisma/client'
 import { db } from '@/lib/db'
 
 /**
- * خصوصية أرقام تواصل الكادر — الجولة 34
+ * خصوصية أرقام تواصل الكادر — الجولتان 34 و35
  * =====================================================================
- * القاعدة المعتمدة من صاحب المنصة:
+ * القاعدة المعتمدة من صاحب المنصة (محدّثة في الجولة 35 — قفل تبادلي):
  *  - رقم الكادر التمريضي/الطبيب مخفي عن المستلم الإداري ومشرف الأطباء،
- *    ولا يُفتح إلا بعد سداد نسبة الإدارة من تكليف فعلي بين الطرفين.
- *  - كل تكليف يُسدَّد يفتح رقم صاحبه ويبقى مفتوحاً بعدها (مرتبط بكل تكليف على حدة).
- *  - الكادر (تمريضي/طبيب) لا يرى رقم المستلم الإداري إطلاقاً.
+ *    ولا يُفتح إلا بعد سداد نسبة الإدارة وتأكيد الدفع من حساب الإدارة
+ *    من تكليف فعلي بين الطرفين.
+ *  - رقم المستلم الإداري مخفي عن الكادر التمريضي/الطبيب بنفس القاعدة
+ *    تماماً: يُفتح للكادر بعد تأكيد الإدارة سداد نسبة الإدارة من تكليفهم
+ *    المشترك — قبل إنهاء التكليف — ليتمكن الكادر من التواصل والذهاب
+ *    لموقع التكليف (القفل تبادلي وليس دائماً باتجاه واحد).
+ *  - كل تكليف يُسدَّد يفتح الرقمين للطرفين ويبقى مفتوحاً بعدها
+ *    (مرتبط بكل تكليف على حدة).
  *  - الإدارة ترى كل الأرقام دائماً دون استثناء.
  *
  * الإخفاء يتم على مستوى الخادم (API) حصراً — لا يُرسل الرقم الكامل إلى
@@ -87,11 +92,35 @@ export function phoneView(
     : { phone: null, phoneMasked: masked, phoneLocked: true }
 }
 
-/** إخفاء رقم المستلم الإداري عن الكادر/الطبيب — قاعدة دائمة بلا استثناء */
-export function receiverPhoneHiddenFromStaff(phone: string | null | undefined): {
-  phone: null
-  phoneMasked: string
-  phoneLocked: boolean
-} {
-  return { phone: null, phoneMasked: maskPhone(phone), phoneLocked: true }
+/**
+ * معرّفات المستلمين الإداريين الذين فُتحت أرقامهم لكادر/طبيب معين:
+ * استعلام واحد لكل قائمة — تكليفات غير ملغاة مسددة النسبة بين الكادر وكل مستلم.
+ * (الجولة 35 — القفل التبادلي: نفس قاعدة revealedStaffIds بالاتجاه المعاكس)
+ */
+export async function revealedReceiverIds(
+  workerId: string,
+  receiverIds: string[]
+): Promise<Set<string>> {
+  const ids = receiverIds.filter(Boolean)
+  if (ids.length === 0) return new Set()
+  const rows = await db.assignment.findMany({
+    where: {
+      nurseId: workerId,
+      receiverId: { in: ids },
+      paymentStatus: 'PAID',
+      status: { not: 'CANCELLED' },
+    },
+    select: { receiverId: true },
+    distinct: ['receiverId'],
+  })
+  return new Set(rows.map((r) => r.receiverId))
+}
+
+/**
+ * رقم المستلم الإداري كما يراه الكادر التمريضي/الطبيب — الجولة 35 (قفل تبادلي):
+ *  - مفتوح (تكليف مشترك مسدد النسبة أكده الإدارة): الرقم الكامل
+ *  - مقفل (لا تكليف مسدد بينهما بعد): القناع فقط — لا يُرسل الرقم الكامل إطلاقاً
+ */
+export function receiverPhoneForStaff(phone: string | null | undefined, revealed: boolean) {
+  return phoneView('NURSE', phone, revealed)
 }

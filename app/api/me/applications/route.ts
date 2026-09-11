@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
-import { receiverPhoneHiddenFromStaff } from '@/lib/phone-privacy'
+import {
+  receiverPhoneForStaff,
+  revealedReceiverIds,
+} from '@/lib/phone-privacy'
 
 /**
  * GET /api/me/applications — تقديمات الكادر التمريضي/الطبيب الحالي
  * تشمل بيانات التكليف المُعلن + تفاصيل الدفع بعد الاعتماد.
- * الجولة 34: الكادر لا يرى رقم المستلم الإداري إطلاقاً (lib/phone-privacy).
+ * الجولة 35 (القفل التبادلي): رقم المستلم مقفل عن الكادر حتى يوجد تكليف
+ * مشترك مسدّد النسبة أكده الإدارة — عندها يُفتح بنفس قاعدة التكليفات.
  */
 export async function GET() {
   try {
@@ -53,6 +57,12 @@ export async function GET() {
       }
     })
 
+    // الجولة 35: فتح تبادلي — المستلمون الذين لهم تكليف مسدّد مع الكادر الحالي
+    const revealedReceivers = await revealedReceiverIds(
+      session.user.id,
+      applications.map((app) => app.post.receiver.id)
+    )
+
     return NextResponse.json({
       applications: enriched.map((app) => ({
         ...app,
@@ -60,7 +70,10 @@ export async function GET() {
           ...app.post,
           receiver: {
             ...app.post.receiver,
-            ...receiverPhoneHiddenFromStaff(app.post.receiver.phone),
+            ...receiverPhoneForStaff(
+              app.post.receiver.phone,
+              revealedReceivers.has(app.post.receiver.id)
+            ),
           },
         },
       })),

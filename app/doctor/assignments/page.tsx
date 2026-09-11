@@ -40,6 +40,7 @@ import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { PaymentCard } from '@/components/shared/payment-card'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { StaffPhone } from '@/components/shared/staff-phone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -111,7 +112,14 @@ interface MyApplication {
     department: string | null
     value: number
     status: string
-    receiver: { id: string; name: string; phone: string | null /** الجولة 34: رقم المستلم مخفي عن الكادر دائماً */ }
+    receiver: {
+      id: string
+      name: string
+      phone: string | null
+      phoneMasked: string
+      phoneLocked: boolean
+      /** الجولة 35 — قفل تبادلي: يُفتح رقم المستلم للطبيب بعد تأكيد الإدارة سداد النسبة */
+    }
   }
   fees: FeeBreakdown
 }
@@ -134,7 +142,13 @@ interface MyAssignment {
   paymentScreenshotUrl: string | null
   paymentScreenshotName: string | null
   receiverDoneAt: string | null
-  receiver: { name: string }
+  receiver: {
+    id: string
+    name: string
+    phone: string | null
+    phoneMasked: string
+    phoneLocked: boolean
+  }
 }
 
 function computeFees(value: number, settings: PlatformSettings): FeeBreakdown {
@@ -688,6 +702,8 @@ function ApplicationCard({
         {/* شرائح مصغّرة: الجهة + القيمة + التاريخ */}
         <div className="flex flex-wrap items-center gap-1.5">
           <MiniChip icon={UserRound}>{app.post.receiver.name}</MiniChip>
+          {/* الجولة 35: تواصل المستلم — مقفل حتى يُسدّد تكليف مشترك ويؤكده الإدارة */}
+          <StaffPhone data={app.post.receiver} personName={app.post.receiver.name} />
           <MiniChip icon={Banknote} ltr>
             {formatCurrency(app.fees.value)}
           </MiniChip>
@@ -876,6 +892,8 @@ function NurseAssignmentCard({
             </MiniChip>
           )}
           <MiniChip icon={UserRound}>{a.receiver.name}</MiniChip>
+          {/* الجولة 35: تواصل المستلم — يُفتح تلقائياً بعد تأكيد الإدارة للسداد */}
+          <StaffPhone data={a.receiver} personName={a.receiver.name} />
           {a.receivedAt && (
             <MiniChip icon={BadgeCheck} tone="emerald">
               تم الاستلام ✓

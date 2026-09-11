@@ -2446,18 +2446,24 @@ ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['sta
 print('ok' if d and ok else 'bad')" 2>/dev/null)
 check "تكليفات المستلم: الرقم مفتوح حصراً في التكليفات المسددة (مرتبط بكل تكليف على حدة)" "ok" "$R34_MEASSIGN"
 
-# (6) الكادر لا يرى رقم المستلم إطلاقاً
-R34_NURSE_NORCV=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+# (6) الجولة 35 — القفل التبادلي: رقم المستلم يُفتح للكادر حصراً بتكليف مسدد أكده الإدارة
+R35_NURSE_CONS=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-print('ok' if d and all(a['receiver']['phone'] is None and a['receiver']['phoneLocked'] is True for a in d) else 'bad')" 2>/dev/null)
-check "الكادر: رقم المستلم الإداري مخفي دائماً في تكليفاته (قاعدة دائمة)" "ok" "$R34_NURSE_NORCV"
+ok=all((a['receiver']['phone'] is not None and a['receiver']['phoneLocked'] is False)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+print('ok' if d and ok else 'bad')" 2>/dev/null)
+check "الكادر: رقم المستلم مفتوح حصراً في التكليفات المسددة (القفل التبادلي — الجولة 35)" "ok" "$R35_NURSE_CONS"
 
-R34_NURSE_APPS=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/applications | python3 -c "
-import json,sys
-d=json.load(sys.stdin)['applications']
-print('ok' if all(a['post']['receiver']['phone'] is None for a in d) else 'bad')" 2>/dev/null)
-check "الكادر: رقم المستلم مخفي في تقديماته أيضاً" "ok" "$R34_NURSE_APPS"
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_assign.json" 2>/dev/null
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/applications -o "$DIR/r35_apps.json" 2>/dev/null
+R35_NURSE_APPS=$(python3 -c "
+import json
+asg=json.load(open('$DIR/r35_assign.json'))['assignments']
+paid_receivers={a['receiver']['id'] for a in asg if a['paymentStatus']=='PAID' and a['status']!='CANCELLED'}
+apps=json.load(open('$DIR/r35_apps.json'))['applications']
+ok=all((a['post']['receiver']['phone'] is not None)==(a['post']['receiver']['id'] in paid_receivers) for a in apps)
+print('ok' if apps and ok else 'bad')" 2>/dev/null)
+check "الكادر: تقديماته بنفس القاعدة — رقم المستلم مفتوح فقط لمن له تكليف مسدد معه" "ok" "$R35_NURSE_APPS"
 
 # (7) المشرف: رقم الطبيب مقفل في تكليفه غير المسدد + شبكته كلها مقفلة
 R34_SUP_LOCKED=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
@@ -2537,6 +2543,84 @@ import json,sys
 p=json.load(sys.stdin)['profile']
 print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/dev/null)
 check "رقم الطبيب مقفل للمشرف (جمهوره الأطباء — لا تكليف مسدد بينهما)" "ok" "$R34_DOC_DOCNUM"
+
+echo ""
+echo "=========== 44) الجولة 35 — القفل التبادلي: بيانات الاتصال للطرفين بعد تأكيد السداد ==========="
+# بعد دفع الكادر للإدارة وتأكيد الدفع من حساب الإدارة، تظهر بيانات الاتصال
+# للمستلم الإداري والكادر التمريضي/الطبيب (ومشرف الأطباء) قبل إنهاء التكليف
+
+# مصدر الحقيقة: أول تكليف مسدد غير ملغى للكادر الحالي
+N35_PAID_ROW=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_assign.json'))['assignments']
+rows=[a for a in d if a['paymentStatus']=='PAID' and a['status']!='CANCELLED']
+print(rows[0]['id']+'|'+rows[0]['receiver']['id'] if rows else '')" 2>/dev/null)
+N35_AID=$(echo "$N35_PAID_ROW" | cut -d'|' -f1)
+N35_RCVID=$(echo "$N35_PAID_ROW" | cut -d'|' -f2)
+[ -n "$N35_AID" ] && check "سياق: يوجد تكليف مسدد للكادر مع مستلم (سياق الفحص)" "id" "id" || check "سياق: يوجد تكليف مسدد للكادر (سياق مطلوب)" "id" "null"
+
+# (أ) الفتح للكادر: رقم المستلم كامل وغير مقفل في التكليف المسدد — قبل إنهاء التكليف
+N35_OPEN=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_assign.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['receiver']['phone'] and rows[0]['receiver']['phoneLocked'] is False else 'bad')" 2>/dev/null)
+check "الكادر: رقم المستلم ظهر كاملاً في التكليف المسدد (فتح تبادلي قبل إنهاء التكليف)" "ok" "$N35_OPEN"
+
+# (ب) الرقم الذي يراه الكادر يطابق سجل الإدارة حرفياً
+curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users/$N35_RCVID" -o "$DIR/r35_rcv_admin.json" 2>/dev/null
+N35_ADMIN_PHONE=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_rcv_admin.json'))
+print(d['user']['phone'])" 2>/dev/null)
+N35_SEEN_PHONE=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_assign.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print(rows[0]['receiver']['phone'] if rows else '')" 2>/dev/null)
+[ -n "$N35_ADMIN_PHONE" ] && check "رقم المستلم الذي يراه الكادر يطابق سجل الإدارة حرفياً ($N35_ADMIN_PHONE)" "$N35_ADMIN_PHONE" "$N35_SEEN_PHONE"
+
+# (ج) مفتاح الفتح هو تأكيد السداد: إلغاؤه يغلق، وإعادته تفتح — مرتبط بكل تكليف على حدة
+TOG_OFF=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N35_AID -H "Content-Type: application/json" -d '{"paymentStatus":"UNPAID"}')
+check "الإدارة تلغي تأكيد السداد → 200" "200" "$TOG_OFF"
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_n_off.json" 2>/dev/null
+N35_LOCKED=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_n_off.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['receiver']['phone'] is None and rows[0]['receiver']['phoneLocked'] is True and '•' in rows[0]['receiver']['phoneMasked'] else 'bad')" 2>/dev/null)
+check "بعد إلغاء التأكيد: رقم المستلم مقفل مجدداً للكادر (قناع ••• بلا رقم)" "ok" "$N35_LOCKED"
+TOG_ON=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N35_AID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "الإدارة تعيد تأكيد السداد → 200" "200" "$TOG_ON"
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_n_on.json" 2>/dev/null
+N35_REOPEN=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_n_on.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['receiver']['phone'] and rows[0]['receiver']['phoneLocked'] is False else 'bad')" 2>/dev/null)
+check "بعد إعادة التأكيد: رقم المستلم انفتح مجدداً (الفتح مرتبط بكل تكليف على حدة)" "ok" "$N35_REOPEN"
+
+# (د) الاتجاه المعاكس سليم بعد كل ذلك: المستلم ما زال يرى رقم الكادر في المسدد فقط
+N35_RCV_CONS=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+print('ok' if d and ok else 'bad')" 2>/dev/null)
+check "المستلم: قاعدة فتح رقم الكادر سليمة بعد اختبار التبديل (التبادلية مكتملة)" "ok" "$N35_RCV_CONS"
+
+# (هـ) المشرف: نفس القاعدة التبادلية في تكليفاته
+N35_SUP_CONS=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+print('ok' if not d or ok else 'bad')" 2>/dev/null)
+check "مشرف الأطباء: فتح رقم الطبيب حصراً بالتكليف المسدد (نفس القاعدة التبادلية)" "ok" "$N35_SUP_CONS"
+
+# (و) الواجهة: صفحتا الكادر (تمريضي/طبيب) تعرضان شريحة تواصل المستلم — قناع+قفل قبل السداد، اتصال وواتساب بعده
+N35_UI_N=$(grep -c 'StaffPhone data=' app/nurse/assignments/page.tsx)
+check "صفحة تكليفات التمريضي تعرض تواصل المستلم في التكليف والتقديم (StaffPhone)" "2" "$N35_UI_N"
+N35_UI_D=$(grep -c 'StaffPhone data=' app/doctor/assignments/page.tsx)
+check "صفحة تكليفات الطبيب تعرض تواصل المستلم في التكليف والتقديم (StaffPhone)" "2" "$N35_UI_D"
 
 echo ""
 echo "==========================================="
