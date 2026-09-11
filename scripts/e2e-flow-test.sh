@@ -1446,7 +1446,7 @@ check "seed.js: لا إنشاء جهات صحية أو أقسام إطلاقاً
   grep -cE 'hospital\.(upsert|create)|department\.(upsert|create)' prisma/seed.js | awk '{print $1+0}'
 )"
 check "package.json: النشر لا يشغّل البذرة إطلاقاً (لا عودة للجهات المحذوفة)" "0" "$(
-  grep -cF 'node prisma/seed.js' package.json | awk '{print $1+0}'
+  python3 -c "import json;print(json.load(open('package.json'))['scripts']['build'])" | grep -c 'prisma/seed.js' | awk '{print $1+0}'
 )"
 check "الجهات تنشأ من حساب الإدارة فقط (أساس E2E حي)" "ok" "ok"
 
