@@ -1583,8 +1583,10 @@ curl -s -b "$DIR/nurse.jar" -X PUT $BASE/api/me/work-departments -H "Content-Typ
 echo "=========== 36) الجولة 27: لا فشل صامت في نشر التكليف ==========="
 
 # فحوص ساكنة: التحقق يتقبّل النص الفارغ + ضمانة onInvalid تُظهر السبب دائماً
-P27_SCH=$(grep -A6 'progressiveStageHours' lib/validations/post.ts | grep -c "or(z.literal(''))" | awk '{print $1+0}')
-check "validations: مدة المرحلة التدريجية تتقبّل النص الفارغ (إنشاء + تحديث)" "2" "$P27_SCH"
+# (نمطان مثبّتان: كتلة الإنشاء المتعددة الأسطر + سطر التحديث المفرد — بلا تسرب لخطوط المخططات الأخرى)
+P27_CREATE=$(grep -A6 "^  progressiveStageHours: z.coerce$" lib/validations/post.ts | grep -c "or(z.literal(''))" | awk '{print $1+0}')
+P27_UPDATE=$(grep -c "progressiveStageHours.*or(z.literal(''))" lib/validations/post.ts | awk '{print $1+0}')
+check "validations: مدة المرحلة التدريجية تتقبّل النص الفارغ (إنشاء + تحديث)" "2" "$((P27_CREATE + P27_UPDATE))"
 P27_INV=$(grep -c 'onInvalid' components/shared/create-post-dialog.tsx | awk '{print ($1>=2)?1:0}')
 check "ui: ضمانة onInvalid — أي خطأ تحقق يظهر كتنبيه واضح بالسبب (لا فشل صامت)" "1" "$P27_INV"
 P27_LOC=$(grep -c "setValue('location'" components/shared/create-post-dialog.tsx | awk '{print $1+0}')

@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
               )
             : null,
       },
-      select: { id: true, title: true, number: true, status: true, distribution: true, gender: true, receiverId: true, hospitalId: true, progressiveStage: true },
+      select: { id: true, title: true, number: true, status: true, distribution: true, gender: true, receiverId: true, hospitalId: true, progressiveStage: true, progressiveNextAt: true },
     })
 
     // ---------- جمهور الإشعار حسب طريقة التوزيع + فلتر الجنس (مستوى قاعدة البيانات) ----------
