@@ -2288,7 +2288,7 @@ keys=['phone','specialty','qualification','yearsOfExperience','ratingAverage','d
 print('ok' if all(k in r for k in keys) else 'bad')" 2>/dev/null)
 check "بطاقات الدليل تتضمن المؤهل والخبرة والتقييم والجهة وعدد المستندات" "ok" "$R33_DIRRICH"
 
-R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=هند%20عبده" | python3 -c "
+R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=سارة" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['workforce']
 print('ok' if len(d)>=1 and all((r['phone'] is None)==r['phoneLocked'] and len(r['phoneMasked'])>0 for r in d) else 'bad')" 2>/dev/null)
@@ -2402,12 +2402,17 @@ import json
 print(json.load(open('$DIR/r34_open.json'))['profile']['phone'])" 2>/dev/null)
 [ -n "$OPEN_ADMIN_PHONE" ] && check "الرقم المفتوح للمستلم يطابق رقم الإدارة حرفياً ($OPEN_ADMIN_PHONE)" "$OPEN_ADMIN_PHONE" "$OPEN_CV_PHONE"
 
-# (2) رقم مقفل: كادر بلا أي تكليف مسدد مع المستلم
-LOCKED_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?search=788880303" | python3 -c "
+# (2) رقم مقفل: أول كادر مقفل من الدليل نفسه (لا تكليف مسدد مع المستلم)
+LOCKED_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/workforce | python3 -c "
 import json,sys
-us=json.load(sys.stdin)['users']
-n=[u for u in us if u['phone']=='788880303']
-print(n[0]['id'] if n else '')" 2>/dev/null)
+rows=json.load(sys.stdin)['workforce']
+locked=[r for r in rows if r['phoneLocked']]
+print(locked[0]['id'] if locked else '')" 2>/dev/null)
+
+curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users/$LOCKED_ID" -o "$DIR/r34_locked_admin.json" 2>/dev/null
+LOCKED_ADMIN_PHONE=$(python3 -c "
+import json
+print(json.load(open('$DIR/r34_locked_admin.json'))['user']['phone'])" 2>/dev/null)
 
 R34_LOCKED_CV=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$LOCKED_ID" | python3 -c "
 import json,sys
@@ -2425,12 +2430,13 @@ open_rows=[r for r in rows if r['phone'] is not None]
 print('ok' if ok_lock and ok_mask and len(rows)>=2 and len(open_rows)>=1 else 'bad')" 2>/dev/null)
 check "الدليل: اتساق القفل/الفتح لكل الصفوف + قناع موحد + صف مفتوح واحد على الأقل (تكليف مسدد)" "ok" "$R34_WF_MIXED"
 
-# (4) الإدارة ترى كل الأرقام دائماً دون استثناء
+# (4) الإدارة ترى كل الأرقام دائماً دون استثناء — وتطابق رقم الإدارة حرفياً
 R34_ADMIN_CV=$(curl -s -b "$DIR/admin.jar" "$BASE/api/workforce/$LOCKED_ID" | python3 -c "
-import json,sys
+import json,sys,os
 p=json.load(sys.stdin)['profile']
-print('ok' if p['phone']=='788880303' and p['phoneLocked'] is False else 'bad')" 2>/dev/null)
-check "الإدارة ترى الرقم الكامل في السيرة حتى بدون أي تكليف (دون استثناء)" "ok" "$R34_ADMIN_CV"
+admin_phone=open('$DIR/r34_locked_admin.json') and json.load(open('$DIR/r34_locked_admin.json'))['user']['phone']
+print('ok' if p['phone']==admin_phone and p['phoneLocked'] is False else 'bad')" 2>/dev/null)
+check "الإدارة ترى الرقم الكامل في السيرة حتى بدون أي تكليف (دون استثناء — مطابق لرقم الإدارة)" "ok" "$R34_ADMIN_CV"
 
 # (5) تكليفات المستلم: كل صف مفتوح فقط إذا سُدد تكليفه
 R34_MEASSIGN=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
@@ -2526,11 +2532,11 @@ R34_APPROVE=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATC
   -d '{"status":"APPROVED"}')
 check "بعد رفع المستند: الإدارة تعتمد الطبيب → 200" "200" "$R34_APPROVE"
 
-R34_DOC_DOCNUM=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$R34_DOC_ID" | python3 -c "
+R34_DOC_DOCNUM=$(curl -s -b "$DIR/supervisor.jar" "$BASE/api/workforce/$R34_DOC_ID" | python3 -c "
 import json,sys
 p=json.load(sys.stdin)['profile']
 print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/dev/null)
-check "رقم الطبيب المعتمد حديثاً مقفل للمستلم (لا تكليف مسدد بينهما)" "ok" "$R34_DOC_DOCNUM"
+check "رقم الطبيب مقفل للمشرف (جمهوره الأطباء — لا تكليف مسدد بينهما)" "ok" "$R34_DOC_DOCNUM"
 
 echo ""
 echo "==========================================="
