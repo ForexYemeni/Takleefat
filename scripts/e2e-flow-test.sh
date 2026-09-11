@@ -154,7 +154,9 @@ APPS_JSON=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$POST_ID/applications
 APP_NAME=$(echo "$APPS_JSON" | jget "['applications'][0]['nurse']['name']")
 check "رؤية بيانات المتقدم (الاسم: سارة أحمد)" "سارة أحمد" "$APP_NAME"
 APP_PHONE=$(echo "$APPS_JSON" | jget "['applications'][0]['nurse']['phone']")
-check "بيانات التواصل ظاهرة للجهة (711111111)" "711111111" "$APP_PHONE"
+check "رقم المتقدم مقفل عن الجهة قبل أي تكليف مسدد (الجولة 34) — phone=None" "None" "$APP_PHONE"
+APP_LOCKED=$(echo "$APPS_JSON" | jget "['applications'][0]['nurse']['phoneLocked']")
+check "المتقدم: راية القفل مرفوعة (phoneLocked=True) مع القناع" "True" "$APP_LOCKED"
 APP_SPEC=$(echo "$APPS_JSON" | jget "['applications'][0]['nurse']['specialty']")
 check "التخصص ظاهر في السيرة (تمريض طوارئ)" "تمريض طوارئ" "$APP_SPEC"
 APP_ID=$(echo "$APPS_JSON" | jget "['applications'][0]['applicationId']")
@@ -915,9 +917,13 @@ check "الكادر المضاف يظهر مباشرة في قائمة كواد�
 R8_STAFF_LIST=$(curl -s -b "$DIR/r8receiver.jar" $BASE/api/receiver/staff | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-n=[x for x in d['nurses'] if x['nurse']['phone']=='788880303']
-print(n[0]['affiliationStatus'], n[0]['nurse']['status'], n[0]['nurse']['_count']['documents'])" 2>/dev/null)
-check "كوادر الجهة: ارتباط WORKING + حساب PENDING + 0 مستندات (الحاجز على مستوى الحساب)" "WORKING PENDING 0" "$R8_STAFF_LIST"
+n=[x for x in d['nurses'] if x['nurse']['name']=='هند عبده']
+if not n:
+    print('')
+else:
+    r=n[0]['nurse']
+    print(n[0]['affiliationStatus'], r['status'], r['_count']['documents'], r['phoneLocked'], '•' in r['phoneMasked'])" 2>/dev/null)
+check "كوادر الجهة: WORKING + PENDING + 0 مستندات + الرقم مقفل بقناع (الجولة 34)" "WORKING PENDING 0 True True" "$R8_STAFF_LIST"
 
 # الكادر المضاف لا يستقبل أي تكليف قبل الاعتماد — حتى مع ارتباط WORKING (الحاجز = حالة الحساب)
 login "$DIR/r8staff.jar" "788880303" "Staff@12345"
@@ -2282,11 +2288,11 @@ keys=['phone','specialty','qualification','yearsOfExperience','ratingAverage','d
 print('ok' if all(k in r for k in keys) else 'bad')" 2>/dev/null)
 check "بطاقات الدليل تتضمن المؤهل والخبرة والتقييم والجهة وعدد المستندات" "ok" "$R33_DIRRICH"
 
-R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=711111111" | python3 -c "
+R33_SEARCH=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce?search=هند" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['workforce']
-print('ok' if len(d)==1 and d[0]['phone']=='711111111' else 'bad')" 2>/dev/null)
-check "بحث الدليل بالهاتف يعيد الكادر المطابق حصراً" "ok" "$R33_SEARCH"
+print('ok' if len(d)==1 and d[0]['phone'] is None and d[0]['phoneLocked'] is True and '•' in d[0]['phoneMasked'] else 'bad')" 2>/dev/null)
+check "بحث الدليل بالاسم حصراً (البحث بالهاتف أُغلق — الجولة 34) وأرقام بلا تكليف مسدد مقفلة" "ok" "$R33_SEARCH"
 
 # مشرف الأطباء — إذنه قائم من القسم 41: دليل الأطباء كاملاً
 R33_SUPDIR=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r33_sup.json" -w "%{http_code}" $BASE/api/workforce)
@@ -2333,6 +2339,192 @@ n=[x for x in d if x['user']['role']=='NURSE']
 doc=[x for x in d if x['user']['role']=='DOCTOR']
 print('ok' if len(d)>=len(n)+len(doc) and len(n)>=1 and len(doc)>=1 else 'bad')" 2>/dev/null)
 check "القائمة الكاملة (status=ALL) تضم مستندات الجمهورين معاً" "ok" "$R33_DOCALL"
+
+# ============================================================
+# القسم 43 — الجولة 34: خصوصية أرقام الكادر (القفل حتى سداد نسبة الإدارة)
+#             + مشرف بلا جهة يضيف أطباء للقائمة العامة + مستندات الطبيب إجبارية
+# ============================================================
+echo "=========== 43) الجولة 34: قفل أرقام الكادر حتى سداد نسبة الإدارة + أطباء القائمة العامة ==========="
+
+# --- فحوص ساكنة: البنية الجديدة ---
+R34_LIB=$([ -f lib/phone-privacy.ts ] && grep -c "revealedStaffIds\|phoneView\|maskPhone" lib/phone-privacy.ts | awk '{print ($1>=3)?1:0}')
+check "api: مكتبة الخصوصية المركزية lib/phone-privacy.ts موجودة بالقواعد الثلاث" "1" "$R34_LIB"
+
+R34_MASKED=$(grep -rl "phone-privacy" app/api --include="*.ts" | wc -l | tr -d ' ')
+check "api: قناع الأرقام مطبق في 11 مسار API على الأقل (المفضلة/الشبكة/الدليل/التقديمات/التكليفات)" "11" "$R34_MASKED"
+
+R34_COMP=$([ -f components/shared/staff-phone.tsx ] && grep -c "StaffPhone\|AssignmentContactChip" components/shared/staff-phone.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: مكوّنا القفل StaffPhone + AssignmentContactChip موجودان (قناع + قفل + اتصال + واتساب)" "1" "$R34_COMP"
+
+R34_NOSEARCH=$(grep -c "phone: { contains" app/api/workforce/route.ts | awk '{print ($1==0)?1:0}')
+check "api: البحث بالهاتف أُغلق في دليل المنصة (لا تسرّب وجود الرقم)" "1" "$R34_NOSEARCH"
+
+R34_NETSEARCH=$(grep -c "phone: { contains: opts.search }" lib/network.ts | awk '{print ($1==0)?1:0}')
+check "api: البحث بالهاتف أُغلق في محرك المطابقة findMatchingNurses" "1" "$R34_NETSEARCH"
+
+R34_SUPORG=$(grep -c "!org && !isSupervisor" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: إضافة الأطباء بلا جهة ممكنة للمشرف حصراً (الجهة ليست شرطاً)" "1" "$R34_SUPORG"
+
+R34_DOCDOR=$(grep -c "target.role === 'DOCTOR'" app/api/admin/users/\[id\]/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: حاجز المستندات يشمل الطبيب دون استثناء (نفس حاجز الكادر)" "1" "$R34_DOCDOR"
+
+# --- فحوص حية: القفل والفتح على مستوى الخادم ---
+# (1) من فُتح رقمه: كادر لديه تكليف مسدد النسبة وغير ملغى مع المستلم
+OPEN_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+rows=[a for a in d if a['paymentStatus']=='PAID' and a['status']!='CANCELLED']
+print(rows[0]['nurse']['id'] if rows else '')" 2>/dev/null)
+
+[ -n "$OPEN_ID" ] && check "يوجد كادر بتكليف مسدد مع المستلم (سياق الفحص)" "id" "id" || check "يوجد كادر بتكليف مسدد مع المستلم (سياق مطلوب)" "id" "null"
+
+curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$OPEN_ID" -o "$DIR/r34_open.json" 2>/dev/null
+check "المستلم يرى رقم الكادر الكامل في السيرة بعد سداد تكليفه (فتح تلقائي)" "ok" "$(python3 -c "
+import json
+p=json.load(open('$DIR/r34_open.json'))['profile']
+print('ok' if p['phone'] and not p['phoneLocked'] else 'bad')" 2>/dev/null)"
+
+# الرقم المفتوح يطابق رقم الإدارة حرفياً (لا تحريف)
+curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users/$OPEN_ID" -o "$DIR/r34_admin_u.json" 2>/dev/null
+python3 -c "
+import json
+d=json.load(open('$DIR/r34_admin_u.json'))
+open('$DIR/r34_admin_phone.txt','w').write(d['user']['phone'])" 2>/dev/null
+OPEN_ADMIN_PHONE=$(cat "$DIR/r34_admin_phone.txt" 2>/dev/null)
+OPEN_CV_PHONE=$(python3 -c "
+import json
+print(json.load(open('$DIR/r34_open.json'))['profile']['phone'])" 2>/dev/null)
+[ -n "$OPEN_ADMIN_PHONE" ] && check "الرقم المفتوح للمستلم يطابق رقم الإدارة حرفياً ($OPEN_ADMIN_PHONE)" "$OPEN_ADMIN_PHONE" "$OPEN_CV_PHONE"
+
+# (2) رقم مقفل: كادر بلا أي تكليف مسدد مع المستلم
+LOCKED_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?search=788880303" | python3 -c "
+import json,sys
+us=json.load(sys.stdin)['users']
+n=[u for u in us if u['phone']=='788880303']
+print(n[0]['id'] if n else '')" 2>/dev/null)
+
+R34_LOCKED_CV=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$LOCKED_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] is None and p['phoneLocked'] is True and '•' in p['phoneMasked'] else 'bad')" 2>/dev/null)
+check "سيرة كادر بلا تكليف مسدد: phone=None + phoneLocked=True + قناع «•••»" "ok" "$R34_LOCKED_CV"
+
+# (3) الدليل المختلط: مفتوح لمن سدد ومقفل لمن لم يسدد — والقناع بصيغة موحدة
+R34_WF_MIXED=$(curl -s -b "$DIR/receiver.jar" $BASE/api/workforce | python3 -c "
+import json,sys,re
+rows=json.load(sys.stdin)['workforce']
+ok_lock=all((r['phone'] is None) == r['phoneLocked'] for r in rows)
+ok_mask=all(re.match(r'^\d{3} ••• •• \d{2}$', r['phoneMasked']) for r in rows if r['phoneMasked']!='••• ••• •••')
+open_rows=[r for r in rows if r['phone'] is not None]
+print('ok' if ok_lock and ok_mask and len(rows)>=2 and len(open_rows)>=1 else 'bad')" 2>/dev/null)
+check "الدليل: اتساق القفل/الفتح لكل الصفوف + قناع موحد + صف مفتوح واحد على الأقل (تكليف مسدد)" "ok" "$R34_WF_MIXED"
+
+# (4) الإدارة ترى كل الأرقام دائماً دون استثناء
+R34_ADMIN_CV=$(curl -s -b "$DIR/admin.jar" "$BASE/api/workforce/$LOCKED_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone']=='788880303' and p['phoneLocked'] is False else 'bad')" 2>/dev/null)
+check "الإدارة ترى الرقم الكامل في السيرة حتى بدون أي تكليف (دون استثناء)" "ok" "$R34_ADMIN_CV"
+
+# (5) تكليفات المستلم: كل صف مفتوح فقط إذا سُدد تكليفه
+R34_MEASSIGN=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+print('ok' if d and ok else 'bad')" 2>/dev/null)
+check "تكليفات المستلم: الرقم مفتوح حصراً في التكليفات المسددة (مرتبط بكل تكليف على حدة)" "ok" "$R34_MEASSIGN"
+
+# (6) الكادر لا يرى رقم المستلم إطلاقاً
+R34_NURSE_NORCV=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+print('ok' if d and all(a['receiver']['phone'] is None and a['receiver']['phoneLocked'] is True for a in d) else 'bad')" 2>/dev/null)
+check "الكادر: رقم المستلم الإداري مخفي دائماً في تكليفاته (قاعدة دائمة)" "ok" "$R34_NURSE_NORCV"
+
+R34_NURSE_APPS=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/applications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['applications']
+print('ok' if all(a['post']['receiver']['phone'] is None for a in d) else 'bad')" 2>/dev/null)
+check "الكادر: رقم المستلم مخفي في تقديماته أيضاً" "ok" "$R34_NURSE_APPS"
+
+# (7) المشرف: رقم الطبيب مقفل في تكليفه غير المسدد + شبكته كلها مقفلة
+R34_SUP_LOCKED=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+rows=[a for a in d if a['paymentStatus']!='PAID']
+print('ok' if rows and all(a['nurse']['phone'] is None and a['nurse']['phoneLocked'] is True for a in rows) else 'bad')" 2>/dev/null)
+check "المشرف: رقم الطبيب مقفل في التكليف غير المسدد" "ok" "$R34_SUP_LOCKED"
+
+R34_SUPNET=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/nurses | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['nurses']
+print('ok' if d and all(n['phone'] is None and n['phoneLocked'] is True for n in d) else 'bad')" 2>/dev/null)
+check "شبكة المشرف: كل أرقام الأطباء مقفلة (لا تكليفات مسددة بعد)" "ok" "$R34_SUPNET"
+
+R34_FAV=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/favorites | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['favorites']
+print('ok' if all(n['phone'] is None and n['phoneLocked'] is True for n in d) else 'bad')" 2>/dev/null)
+check "المفضلة: الأرقام مقفلة بقناع (نفس القاعدة)" "ok" "$R34_FAV"
+
+# --- فحوص حية: مشرف بلا جهة يضيف طبيباً للقائمة العامة + مستندات الطبيب إجبارية ---
+R34_HOSP=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r34_hosp.json" -w "%{http_code}" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى مشرف 34","type":"HOSPITAL","city":"صنعاء","status":"ACTIVE"}')
+check "الإدارة تنشئ جهة صحية للمشرف المؤقت → 201" "201" "$R34_HOSP"
+R34_HOSP_ID=$(python3 -c "
+import json
+print(json.load(open('$DIR/r34_hosp.json'))['hospital']['id'])" 2>/dev/null)
+
+R34_SUP2=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r34_sup2.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR_SUPERVISOR","name":"مشرف بلا جهة 34","phone":"791110934","password":"Super34@123","hospitalName":"مستشفى مشرف 34"}')
+check "الإدارة تنشئ مشرف أطباء مرتبطاً بالجهة → 201" "201" "$R34_SUP2"
+
+R34_HOSP_OFF=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/hospitals/$R34_HOSP_ID -H "Content-Type: application/json" \
+  -d '{"status":"INACTIVE"}')
+check "الإدارة توقف الجهة → يصبح المشرف بلا جهة مصرّح بها → 200" "200" "$R34_HOSP_OFF"
+
+login "$DIR/sup34.jar" "791110934" "Super34@123"
+R34_ADD=$(curl -s -b "$DIR/sup34.jar" -o "$DIR/r34_add.json" -w "%{http_code}" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
+  -d '{"name":"طبيب القائمة 34","phone":"777770034","password":"Doctor34@123","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","gender":"MALE","yearsOfExperience":4}')
+check "مشرف بلا جهة: يضيف طبيباً للقائمة العامة بنجاح → 201 (الجولة 34)" "201" "$R34_ADD"
+
+R34_ADD_MSG=$(python3 -c "
+import json
+m=json.load(open('$DIR/r34_add.json')).get('message','')
+print('ok' if 'قائمة' in m else 'bad')" 2>/dev/null)
+check "رسالة الإضافة تشير إلى القائمة العامة وليس جهة" "ok" "$R34_ADD_MSG"
+
+R34_DOC_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=DOCTOR&status=PENDING&search=777770034" | python3 -c "
+import json,sys
+us=json.load(sys.stdin)['users']
+n=[u for u in us if u['phone']=='777770034']
+print(n[0]['id'] if n else '')" 2>/dev/null)
+[ -n "$R34_DOC_ID" ] && check "الطبيب المضاف ظهر في حساب الإدارة بحالة PENDING" "id" "id" || check "الطبيب المضاف ظهر في حساب الإدارة" "id" "null"
+
+# حاجز المستندات للطبيب — دون استثناء
+R34_NOBDOCS=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r34_nodocs.json" -w "%{http_code}" -X PATCH $BASE/api/admin/users/$R34_DOC_ID -H "Content-Type: application/json" \
+  -d '{"status":"APPROVED"}')
+check "رفض اعتماد الطبيب بلا مستندات → 422 (رفع المستندات إجباري دون استثناء)" "422" "$R34_NOBDOCS"
+R34_NOBDOCS_MSG=$(python3 -c "
+import json
+m=json.load(open('$DIR/r34_nodocs.json')).get('error','')
+print('ok' if 'الطبيب' in m else 'bad')" 2>/dev/null)
+check "رسالة الرفض تعبر صراحة عن حاجز مستندات الطبيب" "ok" "$R34_NOBDOCS_MSG"
+
+# الطبيب يرفع مستنداته ثم تُعتمد من الإدارة
+login "$DIR/doc34.jar" "777770034" "Doctor34@123"
+R34_DOCUP=$(curl -s -b "$DIR/doc34.jar" -o /dev/null -w "%{http_code}" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "الطبيب يرفع مستنده (بطاقة الهوية) → 201" "201" "$R34_DOCUP"
+
+R34_APPROVE=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$R34_DOC_ID -H "Content-Type: application/json" \
+  -d '{"status":"APPROVED"}')
+check "بعد رفع المستند: الإدارة تعتمد الطبيب → 200" "200" "$R34_APPROVE"
+
+R34_DOC_DOCNUM=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$R34_DOC_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "رقم الطبيب المعتمد حديثاً مقفل للمستلم (لا تكليف مسدد بينهما)" "ok" "$R34_DOC_DOCNUM"
 
 echo ""
 echo "==========================================="
