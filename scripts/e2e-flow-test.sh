@@ -1469,17 +1469,17 @@ check "schema: نموذج أقسام العمل WorkDepartment موجود" "1" "
 check "api: مسار /api/me/work-departments موجود" "1" "$(
   [ -f app/api/me/work-departments/route.ts ] && echo 1 || echo 0
 )"
-check "ui: منتقي الجمهور الفاخر (بطاقات التوزيع) في نافذة الإنشاء" "1" "$(
-  grep -c 'DISTRIBUTION_CARDS' components/shared/create-post-dialog.tsx | awk '{print $1+0}'
+check "ui: منتقي الجمهور الفاخر (بطاقات التوزيع) في نافذة الإنشاء" "ok" "$(
+  grep -c 'DISTRIBUTION_CARDS' components/shared/create-post-dialog.tsx | awk '{print ($1>=1)?"ok":"0"}'
 )"
-check "ui: بطاقة أقسام العمل في ملف الكادر" "1" "$(
-  grep -c 'WorkDepartmentsManager' app/nurse/profile/page.tsx | awk '{print $1+0}'
+check "ui: بطاقة أقسام العمل في ملف الكادر" "ok" "$(
+  grep -c 'WorkDepartmentsManager' app/nurse/profile/page.tsx | awk '{print ($1>=1)?"ok":"0"}'
 )"
 check "ui: معاينة الجمهور تُبرز مطابقة القسم" "1" "$(
   grep -c 'departmentMatch' components/shared/audience-preview-card.tsx | awk '{print $1+0}'
 )"
-check "ui: قائمة اختيار الكوادر تستقبل القسم" "1" "$(
-  grep -c 'department?: string | null' components/shared/nurse-pick-list.tsx | awk '{print $1+0}'
+check "ui: قائمة اختيار الكوادر تستقبل القسم" "ok" "$(
+  grep -c 'department?: string | null' components/shared/nurse-pick-list.tsx | awk '{print ($1>=1)?"ok":"0"}'
 )"
 
 # فحص حي: الصلاحيات والتحقق
