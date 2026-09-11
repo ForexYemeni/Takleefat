@@ -32,6 +32,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
+import { StaffPhone, type StaffPhoneData } from '@/components/shared/staff-phone'
 import { WorkforceDirectory } from '@/components/shared/workforce-directory'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -71,7 +72,10 @@ interface StaffNurse {
   nurse: {
     id: string
     name: string
-    phone: string
+    /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
+    phone: string | null
+    phoneMasked: string
+    phoneLocked: boolean
     gender: string | null
     specialty: string | null
     qualification: string | null
@@ -253,7 +257,7 @@ export default function ReceiverStaffPage() {
                   <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
                 </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                  <span dir="ltr">{n.nurse.phone}</span>
+                  <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
                   {n.nurse.gender && <span>{GENDER_LABELS[n.nurse.gender] ?? n.nurse.gender}</span>}
                   {n.nurse.specialty && <span>{n.nurse.specialty}</span>}
                   {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
@@ -462,8 +466,10 @@ export default function ReceiverStaffPage() {
                   <p className="font-bold">{details.nurse.name}</p>
                 </div>
                 <div className="rounded-xl border bg-background p-2.5">
-                  <p className="text-[11px] text-muted-foreground">الهاتف</p>
-                  <p className="font-bold" dir="ltr">{details.nurse.phone}</p>
+                  <p className="text-[11px] text-muted-foreground">رقم التواصل</p>
+                  <div className="mt-1">
+                    <StaffPhone data={details.nurse as StaffPhoneData} personName={details.nurse.name} />
+                  </div>
                 </div>
                 <div className="rounded-xl border bg-background p-2.5">
                   <p className="text-[11px] text-muted-foreground">المؤهل</p>

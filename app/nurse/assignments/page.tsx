@@ -111,7 +111,7 @@ interface MyApplication {
     department: string | null
     value: number
     status: string
-    receiver: { id: string; name: string; phone: string }
+    receiver: { id: string; name: string; phone: string | null /** الجولة 34: رقم المستلم مخفي عن الكادر دائماً */ }
   }
   fees: FeeBreakdown
 }

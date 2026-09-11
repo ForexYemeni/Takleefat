@@ -30,12 +30,17 @@ import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
  *  - audience="NURSE" (المستلم الإداري) → كل الكادر التمريضي في المنصة
  *  - audience="DOCTOR" (مشرف الأطباء) → كل الأطباء في المنصة
  * بحث + تصفية بالتخصص/الحالة + بطاقات غنية + زر السيرة الذاتية الكاملة لكل شخص.
+ * الجولة 34: البحث بالاسم حصراً — البحث بالهاتف أُغلق لحماية الخصوصية،
+ * وأرقام التواصل تُدار من الخادم وفق قاعدة سداد نسبة الإدارة (StaffPhone).
  */
 
 interface WorkforceRow {
   id: string
   name: string
-  phone: string
+  /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
+  phone: string | null
+  phoneMasked: string
+  phoneLocked: boolean
   gender: string | null
   role: string
   status: string
@@ -56,7 +61,7 @@ const COPY = {
   NURSE: {
     title: 'دليل الكادر التمريضي في المنصة',
     subtitle: 'جميع الكوادر المعتمدين في المنصة — بياناتهم المهنية كاملة بإذن من حساب الإدارة',
-    searchPlaceholder: 'ابحث بالاسم أو رقم الهاتف...',
+    searchPlaceholder: 'ابحث بالاسم...',
     specialtyLabel: 'كل التخصصات',
     personLabel: 'بلا تخصص',
     emptyTitle: 'لا يوجد كادر مطابق',
@@ -65,7 +70,7 @@ const COPY = {
   DOCTOR: {
     title: 'دليل الأطباء في المنصة',
     subtitle: 'جميع الأطباء المعتمدين في المنصة — بياناتهم المهنية كاملة بإذن من حساب الإدارة',
-    searchPlaceholder: 'ابحث بالاسم أو رقم الهاتف...',
+    searchPlaceholder: 'ابحث بالاسم...',
     specialtyLabel: 'كل التخصصات الطبية',
     personLabel: 'بلا تخصص طبي',
     emptyTitle: 'لا يوجد أطباء مطابقون',
@@ -97,7 +102,8 @@ export function WorkforceDirectory({ audience }: { audience: 'NURSE' | 'DOCTOR' 
     () =>
       rows.filter((r) => {
         const term = search.trim()
-        const matchesSearch = !term || r.name.includes(term) || r.phone.includes(term)
+        // الجولة 34: البحث بالاسم حصراً — لا بحث بالهاتف (حماية الخصوصية)
+        const matchesSearch = !term || r.name.includes(term)
         const matchesSpecialty = specialty === 'ALL' || r.specialty === specialty
         const matchesStatus = status === 'ALL' || r.status === status
         return matchesSearch && matchesSpecialty && matchesStatus

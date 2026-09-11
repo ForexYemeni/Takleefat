@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/workforce — دليل الكوادر/الأطباء في كامل المنصة — الجولة 33
@@ -12,8 +13,11 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
  *  - مشرف الأطباء الحاصل على الإذن → دليل كامل الأطباء (DOCTOR)
  *  - بدون الإذن → 403 برسالة واضحة
  *
- * التصفيح: search (الاسم/الهاتف) + specialty (التخصص) + status
+ * التصفيح: search (الاسم فقط — البحث بالهاتف أُغلق لحماية الخصوصية في الجولة 34)
+ * + specialty (التخصص) + status
  * كل صف: الهوية المهنية + التقييم + عدد المستندات + الجهة الحالية.
+ * الجولة 34: أرقام التواصل مخفية عن المستلم/المشرف — تُفتح فقط لمن لديه
+ * تكليف مسدد النسبة مع صاحب الرقم (lib/phone-privacy).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -47,12 +51,10 @@ export async function GET(req: NextRequest) {
             ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
             : {}),
           ...(specialty ? { specialty } : {}),
+          // الجولة 34: البحث بالاسم حصراً — البحث بالهاتف كان يسرّب وجود الرقم في المنصة
           ...(search
             ? {
-                OR: [
-                  { name: { contains: search, mode: 'insensitive' } },
-                  { phone: { contains: search } },
-                ],
+                name: { contains: search, mode: 'insensitive' },
               }
             : {}),
         },
@@ -93,6 +95,9 @@ export async function GET(req: NextRequest) {
     })
     const ratingMap = new Map(ratings.map((r) => [r.nurseId, r]))
 
+    // الجولة 34: من فُتح رقمه للمشاهد؟ — تكليفات مسددة النسبة وغير ملغاة بين الطرفين
+    const revealed = await revealedStaffIds(session.user.id, users.map((u) => u.id))
+
     return NextResponse.json({
       audience: audienceRole,
       fullProfileAccess: true,
@@ -102,7 +107,8 @@ export async function GET(req: NextRequest) {
         return {
           id: u.id,
           name: u.name,
-          phone: u.phone,
+          // الجولة 34: الرقم الكامل يُرسل فقط لمن تحقق شرط السداد — وإلا القناع حصراً
+          ...phoneView(session.user.role, u.phone, revealed.has(u.id)),
           gender: u.gender,
           role: u.role,
           status: u.status,

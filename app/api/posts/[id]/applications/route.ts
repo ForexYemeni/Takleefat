@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/posts/[id]/applications — تقديمات التكليف المُعلن
  * للمستلم الإداري المالك (وللإدارة) — تشمل السيرة الذاتية الاحترافية:
  * البيانات، بيانات التواصل، المستندات (البطاقة والمزاولة) لكل متقدم.
+ * الجولة 34: أرقام المتقدمين تُقنّع للمالك — تُفتح بتكليف مسدد النسبة
+ * بين الطرفين (lib/phone-privacy) — الإدارة ترى الأرقام دائماً.
  */
 export async function GET(
   _req: NextRequest,
@@ -140,8 +143,23 @@ export async function GET(
     })
 
     // applicationId = معرّف التقديم (تتوقعه بطاقة السيرة الذاتية في الواجهة)
+    // الجولة 34: قناع أرقام المتقدمين للمالك — الإدارة ترى الأرقام كاملة
+    let revealed: Set<string> = new Set()
+    if (session.user.role !== 'ADMIN') {
+      revealed = await revealedStaffIds(
+        session.user.id,
+        applicationsWithRatings.map((a) => a.nurse.id)
+      )
+    }
     return NextResponse.json({
-      applications: applicationsWithRatings.map((a) => ({ ...a, applicationId: a.id })),
+      applications: applicationsWithRatings.map((a) => ({
+        ...a,
+        applicationId: a.id,
+        nurse: {
+          ...a.nurse,
+          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+        },
+      })),
     })
   } catch (error) {
     return handleApiError(error)

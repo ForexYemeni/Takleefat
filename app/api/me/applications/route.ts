@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
+import { receiverPhoneHiddenFromStaff } from '@/lib/phone-privacy'
 
 /**
- * GET /api/me/applications — تقديمات الكادر التمريضي الحالي
+ * GET /api/me/applications — تقديمات الكادر التمريضي/الطبيب الحالي
  * تشمل بيانات التكليف المُعلن + تفاصيل الدفع بعد الاعتماد.
+ * الجولة 34: الكادر لا يرى رقم المستلم الإداري إطلاقاً (lib/phone-privacy).
  */
 export async function GET() {
   try {
@@ -51,7 +53,19 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json({ applications: enriched, settings })
+    return NextResponse.json({
+      applications: enriched.map((app) => ({
+        ...app,
+        post: {
+          ...app.post,
+          receiver: {
+            ...app.post.receiver,
+            ...receiverPhoneHiddenFromStaff(app.post.receiver.phone),
+          },
+        },
+      })),
+      settings,
+    })
   } catch (error) {
     return handleApiError(error)
   }

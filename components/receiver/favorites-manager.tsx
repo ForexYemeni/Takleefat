@@ -11,6 +11,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
+import { StaffPhone, type StaffPhoneData } from '@/components/shared/staff-phone'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -62,7 +63,10 @@ const COPY = {
 interface FavoriteNurseRow {
   id: string
   name: string
-  phone: string
+  /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
+  phone: string | null
+  phoneMasked: string
+  phoneLocked: boolean
   gender: string | null
   specialty: string | null
   qualification: string | null
@@ -176,7 +180,7 @@ export function FavoritesManager({ variant = 'nurse' }: { variant?: 'nurse' | 'd
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-extrabold">{n.name}</p>
-                    <span className="text-xs text-muted-foreground" dir="ltr">{n.phone}</span>
+                    <StaffPhone data={n as StaffPhoneData} personName={n.name} />
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {n.specialty ?? copy.personLabel}

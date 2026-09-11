@@ -40,6 +40,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant-cv'
 import { CreatePostDialog } from '@/components/shared/create-post-dialog'
+import { AssignmentContactChip } from '@/components/shared/staff-phone'
 import { Stars, StarRatingInput } from '@/components/shared/star-rating'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -104,7 +105,17 @@ interface ReceiverAssignment {
   nurseConfirmedReceipt: boolean
   receiverDoneAt: string | null
   nursePaid: boolean | null
-  nurse: { id: string; name: string; specialty: string | null; phone: string }
+  nurse: {
+    id: string
+    name: string
+    specialty: string | null
+    /** الجولة 34: الرقم الكامل يصل فقط عند سداد نسبة الإدارة لهذا التكليف */
+    phone: string | null
+    phoneMasked: string
+    phoneLocked: boolean
+  }
+  /** حالة سداد نسبة الإدارة — يفتح رقم الكادر عند PAID */
+  paymentStatus: string
   rating?: { overall: number; comment: string | null; createdAt: string } | null
   earning?: { amount: number; percent: number } | null
 }
@@ -583,21 +594,8 @@ function ApplicantMiniCard({
 
 // ---------- التكليفات المؤكدة ----------
 
-// ---------- مراسلة الكادر عبر واتساب (الجولة العاشرة) ----------
-
-function assignmentWhatsappUrl(a: ReceiverAssignment): string {
-  return whatsappLink(
-    a.nurse.phone,
-    [
-      `مرحباً ${a.nurse.name}،`,
-      `بخصوص التكليف: ${a.title} — ${a.facility}${a.department ? ` (${a.department})` : ''}`,
-      a.startDate ? `تاريخ البدء: ${formatDate(a.startDate)}` : '',
-      'من منصة تكليفات | Takleefat',
-    ]
-      .filter(Boolean)
-      .join('\n')
-  )
-}
+// الجولة 34: زر مراسلة الكادر أصبح مشروطاً بسداد نسبة الإدارة
+// (AssignmentContactChip) — يظهر مقفلاً حتى السداد ويفتح واتساب بعده تلقائياً
 
 function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment[] }) {
   const queryClient = useQueryClient()
@@ -662,16 +660,13 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                         {formatCurrency(a.value)}
                       </Badge>
                     )}
-                    <a
-                      href={assignmentWhatsappUrl(a)}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={`مراسلة ${a.nurse.name} عبر واتساب`}
-                      className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    >
-                      <MessageCircle className="size-3" />
-                      واتساب
-                    </a>
+                    <AssignmentContactChip
+                      paymentStatus={a.paymentStatus}
+                      assignmentStatus={a.status}
+                      phone={a.nurse.phone}
+                      masked={a.nurse.phoneMasked}
+                      personName={a.nurse.name}
+                    />
                   </div>
 
                   <p className="text-xs text-muted-foreground">

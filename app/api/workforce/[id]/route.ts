@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/workforce/[id] — السيرة الذاتية الكاملة لكادر تمريضي أو طبيب — الجولة 32
@@ -14,6 +15,8 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
  *
  * الاستجابة: البيانات المهنية الكاملة + المستندات + أقسام/تخصصات العمل +
  * السجل المهني (الارتباطات المعتمدة) + ملخص التقييمات الاحترافية.
+ * الجولة 34: رقم التواصل مخفي عن المستلم/المشرف ما لم يوجد تكليف مسدد النسبة
+ * بين الطرفين — الإدارة ترى الرقم دائماً (lib/phone-privacy).
  */
 export async function GET(
   _req: NextRequest,
@@ -124,9 +127,17 @@ export async function GET(
 
     if (!user) return jsonError('الحساب غير موجود', 404)
 
+    // الجولة 34: فتح رقم التواصل حسب قاعدة السداد — الإدارة ترى دائماً
+    let revealed = true
+    if (session.user.role !== 'ADMIN') {
+      const paid = await revealedStaffIds(session.user.id, [user.id])
+      revealed = paid.has(user.id)
+    }
+
     return NextResponse.json({
       profile: {
         ...user,
+        ...phoneView(session.user.role, user.phone, revealed),
         workDepartments: user.workDepartments.map((w) => w.department.name),
         workSpecialties: user.workSpecialties.map((w) => w.specialty.name),
         assignmentsCount,

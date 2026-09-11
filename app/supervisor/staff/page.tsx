@@ -37,6 +37,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
+import { StaffPhone, type StaffPhoneData } from '@/components/shared/staff-phone'
 import { WorkforceDirectory } from '@/components/shared/workforce-directory'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -60,9 +61,11 @@ import {
 } from '@/components/ui/select'
 
 /**
- * أطباء جهتي — مشرف الأطباء يضيف الممرضين الخاصين بجهته الصحية (الجولة الثامنة)
- * - يظهر الطبيب المضاف فوراً في حساب الإدارة (الأطباء) وفي لوحة الجهة
- * - لا يستقبل أي تكليف أو إجراء قبل اعتماده من الإدارة ورفع مستنداته
+ * أطباء جهتي + قائمة أطباء المنصة — مشرف الأطباء يضيف أطباء (الجولة 34):
+ * - الجهة الصحية **ليست شرطاً** — الطبيب يُضاف للقائمة العامة لأطباء المنصة
+ * - وإن وُجدت جهة مرتبطة بحساب المشرف فيُربط بها أيضاً (تظهر في «أطباء جهتي»)
+ * - يظهر الطبيب المضاف فوراً في حساب الإدارة
+ * - لا يستقبل أي تكليف أو إجراء قبل اعتماده من الإدارة ورفع مستنداته إجبارياً دون استثناء
  */
 
 interface StaffNurse {
@@ -76,7 +79,10 @@ interface StaffNurse {
   nurse: {
     id: string
     name: string
-    phone: string
+    /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
+    phone: string | null
+    phoneMasked: string
+    phoneLocked: boolean
     gender: string | null
     specialty: string | null
     qualification: string | null
@@ -266,7 +272,7 @@ export default function ReceiverStaffPage() {
                   <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
                 </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                  <span dir="ltr">{n.nurse.phone}</span>
+                  <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
                   {n.nurse.gender && <span>{GENDER_LABELS[n.nurse.gender] ?? n.nurse.gender}</span>}
                   {n.nurse.specialty && <span>{n.nurse.specialty}</span>}
                   {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
@@ -318,11 +324,13 @@ export default function ReceiverStaffPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="size-4 text-primary" />
-              إضافة ممرض لجهة {org?.name}
+              {org ? `إضافة طبيب — للقائمة العامة وجهة ${org.name}` : 'إضافة طبيب — للقائمة العامة لأطباء المنصة'}
             </DialogTitle>
             <DialogDescription>
-              يُنشأ الحساب بحالة «قيد المراجعة» — يظهر فوراً في حساب الإدارة ولن يستقبل أي تكليف
-              قبل اعتماده من الإدارة ورفع مستنداته. أبلغ الممرض رقم هاتفه وكلمة المرور لتسجيل الدخول.
+              {org
+                ? 'يُضاف الطبيب إلى قائمة أطباء المنصة ويُربط أيضاً بجهتك الصحية — الحساب يُنشأ بحالة «قيد المراجعة» ويظهر فوراً في حساب الإدارة.'
+                : 'يُضاف الطبيب إلى قائمة أطباء المنصة مباشرة بلا حاجة لجهة صحية — الحساب يُنشأ بحالة «قيد المراجعة» ويظهر فوراً في حساب الإدارة.'}{' '}
+              لن يستقبل أي تكليف قبل اعتماده من الإدارة ورفعه مستنداته إجبارياً دون استثناء. أبلغ الطبيب رقم هاتفه وكلمة المرور لتسجيل الدخول.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -499,8 +507,10 @@ export default function ReceiverStaffPage() {
                   <p className="font-bold">{details.nurse.name}</p>
                 </div>
                 <div className="rounded-xl border bg-background p-2.5">
-                  <p className="text-[11px] text-muted-foreground">الهاتف</p>
-                  <p className="font-bold" dir="ltr">{details.nurse.phone}</p>
+                  <p className="text-[11px] text-muted-foreground">رقم التواصل</p>
+                  <div className="mt-1">
+                    <StaffPhone data={details.nurse as StaffPhoneData} personName={details.nurse.name} />
+                  </div>
                 </div>
                 <div className="rounded-xl border bg-background p-2.5">
                   <p className="text-[11px] text-muted-foreground">المؤهل</p>

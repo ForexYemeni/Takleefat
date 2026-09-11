@@ -12,6 +12,7 @@ import {
   GraduationCap,
   IdCard,
   Loader2,
+  Lock,
   Phone as PhoneIcon,
   ShieldCheck,
   Star,
@@ -24,6 +25,7 @@ import { DocumentViewer, type ViewableDocument } from '@/components/shared/docum
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { EmptyState } from '@/components/shared/empty-state'
+import { StaffPhone } from '@/components/shared/staff-phone'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import { DOCUMENT_TYPE_LABELS, GENDER_LABELS, formatDate, formatDateTime } from '@/lib/utils'
 
@@ -56,7 +58,10 @@ interface ProfileDocument {
 export interface FullProfile {
   id: string
   name: string
-  phone: string
+  /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
+  phone: string | null
+  phoneMasked: string
+  phoneLocked: boolean
   gender: string | null
   role: string
   status: string
@@ -243,7 +248,13 @@ export function FullProfileDialog({
                 {/* بطاقة الهوية والتواصل */}
                 <Section title="بطاقة الهوية والتواصل" icon={UserRound}>
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <InfoItem icon={PhoneIcon} label="الهاتف" value={profile.phone} ltr />
+                    <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 px-3 py-2.5">
+                      <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                        <PhoneIcon className="size-3.5" />
+                        رقم التواصل
+                      </span>
+                      <StaffPhone data={profile} personName={profile.name} withActions={false} />
+                    </div>
                     <InfoItem
                       icon={UserRound}
                       label="الجنس"
@@ -255,6 +266,14 @@ export function FullProfileDialog({
                       value={formatDate(profile.createdAt)}
                     />
                   </div>
+                  {profile.phoneLocked && (
+                    <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                      <Lock className="mt-0.5 size-3.5 shrink-0" />
+                      <span>
+                        خطوات فتح الرقم: اعتماد تكليف فعلي مع الكادر ← سداد نسبة الإدارة من قيمته ← يُفتح الرقم تلقائياً ويبقى متاحاً لهذا التكليف
+                      </span>
+                    </p>
+                  )}
                 </Section>
 
                 {/* التحصيل العلمي — حجم أنيق مضغوط */}

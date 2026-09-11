@@ -4,6 +4,7 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { affiliationCreateSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
 import { AFFILIATION_STATUS_LABELS, resolveReceiverOrg } from '@/lib/network'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 import type { Prisma } from '@prisma/client'
 
 /**
@@ -44,7 +45,8 @@ export async function GET(req: NextRequest) {
 
     if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       where = { ...where, nurseId: session.user.id }
-    } else if (session.user.role === 'RECEIVER') {
+    } else if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
+      // الجولة 34: المشرف أيضاً محصور بجهته — كان يصل لكل الارتباطات (ثغرة أُغلقت)
       const org = await resolveReceiverOrg(session.user.id)
       if (!org) return NextResponse.json({ affiliations: [], org: null })
       where = { ...where, hospitalId: org.id }
@@ -64,10 +66,36 @@ export async function GET(req: NextRequest) {
           },
         },
       }),
-      session.user.role === 'RECEIVER' ? resolveReceiverOrg(session.user.id) : Promise.resolve(null),
+      session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR'
+        ? resolveReceiverOrg(session.user.id)
+        : Promise.resolve(null),
     ])
 
-    return NextResponse.json({ affiliations, org })
+    // الجولة 34: أرقام الكوادر تُقنّع للمستلم/المشرف — تُفتح بتكليف مسدد النسبة
+    // (الكادر/الطبيب يرى رقمه هو في ارتباطاته — لا قناع عليه)
+    let revealed: Set<string> = new Set()
+    if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
+      revealed = await revealedStaffIds(
+        session.user.id,
+        affiliations.map((a) => a.nurse.id)
+      )
+    }
+
+    return NextResponse.json({
+      affiliations: affiliations.map((a) => {
+        if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+          return a
+        }
+        return {
+          ...a,
+          nurse: {
+            ...a.nurse,
+            ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+          },
+        }
+      }),
+      org,
+    })
   } catch (error) {
     return handleApiError(error)
   }

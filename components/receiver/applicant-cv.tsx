@@ -8,6 +8,7 @@ import {
   FileText,
   GraduationCap,
   IdCard,
+  Lock,
   MessageCircle,
   Phone as PhoneIcon,
   Stethoscope,
@@ -22,6 +23,7 @@ import { DocumentViewer, type ViewableDocument } from '@/components/shared/docum
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { FavoriteStar } from '@/components/shared/favorite-star'
+import { StaffPhone } from '@/components/shared/staff-phone'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import {
   APPLICATION_STATUS_LABELS,
@@ -69,7 +71,10 @@ export interface ApplicantData {
   nurse: {
     id: string
     name: string
-    phone: string
+    /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
+    phone: string | null
+    phoneMasked: string
+    phoneLocked: boolean
     gender?: string | null
     specialty: string | null
     qualification: string | null
@@ -133,28 +138,41 @@ export function ApplicantCV({
 
       {/* البيانات الأساسية */}
       <div className="grid gap-2 sm:grid-cols-2">
-        <CVRow icon={PhoneIcon} label="رقم الهاتف (للتواصل)" value={nurse.phone} ltr />
-        <div className="flex items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+            <PhoneIcon className="size-3.5" />
+            رقم التواصل
+          </span>
+          <StaffPhone data={nurse} personName={nurse.name} />
+        </div>
+        <div className="flex items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2">
           <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
             <MessageCircle className="size-3.5" />
             تواصل سريع
           </span>
-          <a
-            href={whatsappLink(
-              nurse.phone,
-              [
-                `مرحباً ${nurse.name}،`,
-                postTitle ? `بخصوص تقديمك على التكليف (${postTitle})` : 'بخصوص تقديمك على التكليف',
-                'من منصة تكليفات | Takleefat',
-              ].join('\n')
-            )}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
-          >
-            <MessageCircle className="size-3" />
-            مراسلة واتساب
-          </a>
+          {nurse.phone ? (
+            <a
+              href={whatsappLink(
+                nurse.phone,
+                [
+                  `مرحباً ${nurse.name}،`,
+                  postTitle ? `بخصوص تقديمك على التكليف (${postTitle})` : 'بخصوص تقديمك على التكليف',
+                  'من منصة تكليفات | Takleefat',
+                ].join('\n')
+              )}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+            >
+              <MessageCircle className="size-3" />
+              مراسلة واتساب
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              <Lock className="size-3" />
+              يُفتح بعد سداد نسبة الإدارة
+            </span>
+          )}
         </div>
         <CVRow
           icon={UserRound}

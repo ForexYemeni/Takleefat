@@ -2,11 +2,17 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings } from '@/lib/settings'
+import { isAssignmentPhoneOpen, phoneView, receiverPhoneHiddenFromStaff } from '@/lib/phone-privacy'
 
 /**
  * GET /api/me/assignments
  * تكليفات المستخدم الحالي (الكادر التمريضي أو المستلم الإداري)
  * تشمل البيانات المالية (القيمة، حصة الإدارة، حالة الدفع).
+ *
+ * الجولة 34 — خصوصية أرقام التواصل (lib/phone-privacy):
+ *  - الكادر/الطبيب: لا يرى رقم المستلم الإداري إطلاقاً (قاعدة دائمة).
+ *  - المستلم/المشرف: رقم الكادر مقفل حتى يُسدَّد نسبة الإدارة من ذلك التكليف —
+ *    ويبقى مفتوحاً بعدها (مرتبط بكل تكليف على حدة).
  */
 export async function GET() {
   try {
@@ -34,7 +40,27 @@ export async function GET() {
       getSettings(),
     ])
 
-    return NextResponse.json({ assignments, settings })
+    // الجولة 34: تطبيق قاعدتي الخصوصية حسب جهة المشاهد
+    const shaped = assignments.map((a) => ({
+      ...a,
+      nurse: {
+        ...a.nurse,
+        ...phoneView(
+          session.user.role,
+          a.nurse.phone,
+          isAssignmentPhoneOpen(a)
+        ),
+      },
+      receiver: {
+        ...a.receiver,
+        // الكادر لا يرى رقم المستلم إطلاقاً — أما المستلم فيرى رقم نفسه عادي
+        ...(isWorker
+          ? receiverPhoneHiddenFromStaff(a.receiver.phone)
+          : { phone: a.receiver.phone, phoneMasked: a.receiver.phone, phoneLocked: false }),
+      },
+    }))
+
+    return NextResponse.json({ assignments: shaped, settings })
   } catch (error) {
     return handleApiError(error)
   }

@@ -6,14 +6,17 @@ import { receiverCreateNurseSchema, createDoctorSchema } from '@/lib/validations
 import { notify } from '@/lib/notifications'
 import { resolveReceiverOrg, AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations } from '@/lib/network'
 import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
- * POST /api/receiver/staff — إضافة كادر/طبيب للجهة الصحية
- * المستلم الإداري → يضيف كادر تمريضي | مشرف الأطباء → يضيف أطباء (منظومة الأطباء)
+ * POST /api/receiver/staff — إضافة كادر/طبيب
+ * المستلم الإداري → يضيف كادر تمريضي لجهته | مشرف الأطباء → يضيف أطباء
+ * للقائمة العامة للأطباء في المنصة — **الجهة الصحية ليست شرطاً للمشرف** (الجولة 34):
+ * يضيف الأطباء بلا جهة أصلاً، وإن وُجدت جهة مرتبطة بحسابه فإنه يربطهم بها اختيارياً.
  * - يُنشأ الحساب بحالة PENDING — لا يستقبل أي تكليف أو إجراء
- *   حتى اعتماده من حساب الإدارة ورفع مستنداته (الحاجز الفعلي على مستوى الحساب)
- * - يظهر فوراً في حساب الإدارة وفي لوحة الجهة
- * - الارتباط بالجهة: جهة نشطة → WORKING مباشرة، جهة بانتظار الاعتماد → PENDING
+ *   حتى اعتماده من حساب الإدارة ورفع مستنداته إجبارياً (الحاجز الفعلي على مستوى الحساب)
+ * - يظهر فوراً في حساب الإدارة وفي لوحة الجهة (إن وُجدت)
+ * - الارتباط بالجهة (إن وُجدت): جهة نشطة → WORKING مباشرة، جهة بانتظار الاعتماد → PENDING
  */
 export async function POST(req: NextRequest) {
   try {
@@ -52,9 +55,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // الجهة الصحية للمستلم — لا يمكن إضافة كوادر بلا جهة مصرّح بها
+    // الجهة الصحية للمستلم — إجبارية للمستلم الإداري حصراً
+    // الجولة 34: مشرف الأطباء يضيف أطباء للقائمة العامة بلا شرط جهة
     const org = await resolveReceiverOrg(session.user.id)
-    if (!org) {
+    if (!org && !isSupervisor) {
       return jsonError(
         'لا توجد جهة صحية معتمدة مرتبطة بحسابك — راجع الإدارة لربط جهتك أولاً',
         422
@@ -70,9 +74,9 @@ export async function POST(req: NextRequest) {
 
     // الجهة النشطة: ارتباط فعلي معتمد من المستلم المخول لجهته
     // الجهة المعلقة: يبقى الارتباط PENDING ويُعتمد تلقائياً عند اعتماد الجهة نفسها
-    const orgActive = org.status === 'ACTIVE'
+    const orgActive = org?.status === 'ACTIVE'
 
-    // حساب الكادر/الطبيب + ارتباطه بالجهة — معاملة واحدة
+    // حساب الكادر/الطبيب + ارتباطه بالجهة (إن وُجدت) — معاملة واحدة
     const nurse = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -91,33 +95,39 @@ export async function POST(req: NextRequest) {
         select: { id: true, name: true, phone: true, status: true },
       })
 
-      await tx.nurseAffiliation.create({
-        data: {
-          nurseId: user.id,
-          hospitalId: org.id,
-          status: orgActive ? 'WORKING' : 'PENDING',
-          requestedStatus: 'WORKING',
-          requestedById: session.user.id,
-          reviewedById: orgActive ? session.user.id : null,
-          reviewedAt: orgActive ? new Date() : null,
-          note: isSupervisor
-            ? 'أُضيف من مشرف الأطباء لجهته الصحية'
-            : 'أُضيف من المستلم الإداري لجهته الصحية',
-        },
-      })
+      if (org) {
+        await tx.nurseAffiliation.create({
+          data: {
+            nurseId: user.id,
+            hospitalId: org.id,
+            status: orgActive ? 'WORKING' : 'PENDING',
+            requestedStatus: 'WORKING',
+            requestedById: session.user.id,
+            reviewedById: orgActive ? session.user.id : null,
+            reviewedAt: orgActive ? new Date() : null,
+            note: isSupervisor
+              ? 'أُضيف من مشرف الأطباء لجهته الصحية'
+              : 'أُضيف من المستلم الإداري لجهته الصحية',
+          },
+        })
+      }
 
       return user
     })
 
-    // إشعار الإدارة: عضو جديد أضافه صاحب الجهة — بانتظار الاعتماد ورفع المستندات
+    // إشعار الإدارة: عضو جديد أضافه صاحب الحساب — بانتظار الاعتماد ورفع المستندات
     const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
     await Promise.all(
       admins.map((a) =>
         notify(a.id, {
           title: isSupervisor
-            ? 'طبيب جديد أضافه مشرف الأطباء'
+            ? org
+              ? 'طبيب جديد أضافه مشرف الأطباء لجهته'
+              : 'طبيب جديد أضافه مشرف الأطباء للقائمة العامة'
             : 'كادر تمريضي جديد أضافه المستلم الإداري',
-          body: `${session.user.name} أضاف ${nurse.name} (${phone}) لجهة ${org.name} — راجع بياناته واعتمد حسابه بعد رفع مستنداته`,
+          body: org
+            ? `${session.user.name} أضاف ${nurse.name} (${phone}) لجهة ${org.name} — راجع بياناته واعتمد حسابه بعد رفع مستنداته`
+            : `${session.user.name} أضاف ${nurse.name} (${phone}) إلى قائمة أطباء المنصة — راجع بياناته واعتمد حسابه بعد رفع مستنداته إجبارياً`,
           type: 'GENERIC',
           link: isSupervisor ? '/admin/doctors' : '/admin/nurses',
         })
@@ -127,16 +137,20 @@ export async function POST(req: NextRequest) {
     // إشعار العضو الجديد
     await notify(nurse.id, {
       title: 'مرحباً بك في تكليفات',
-      body: `أنشأ لك ${isSupervisor ? 'مشرف الأطباء' : 'المستلم الإداري'} حساباً مرتبطاً بجهة (${org.name}) — ارفع مستنداتك وانتظر اعتماد حسابك من الإدارة لتفعيل جميع الميزات`,
+      body: org
+        ? `أنشأ لك ${isSupervisor ? 'مشرف الأطباء' : 'المستلم الإداري'} حساباً مرتبطاً بجهة (${org.name}) — رفع مستنداتك إجباري دون استثناء، وانتظر اعتماد حسابك ومستنداتك من الإدارة لتفعيل جميع الميزات`
+        : `أنشأ لك مشرف الأطباء حساباً في قائمة أطباء المنصة — رفع مستنداتك إجباري دون استثناء، وانتظر اعتماد حسابك ومستنداتك من الإدارة لتفعيل جميع الميزات`,
       type: 'GENERIC',
       link: isSupervisor ? '/doctor/documents' : '/nurse/documents',
     })
 
     return NextResponse.json(
       {
-        message: orgActive
-          ? `تمت إضافة ${nurse.name} إلى ${isSupervisor ? 'أطباء' : 'كوادر'} ${org.name} — يظهر الآن في حساب الإدارة ولن يستقبل أي تكليف قبل اعتماد حسابه ورفع مستنداته`
-          : `تمت إضافة ${nurse.name} إلى ${isSupervisor ? 'أطباء' : 'كوادر'} ${org.name} — سيُعتمد ارتباطه تلقائياً عند اعتماد الجهة الصحية من الإدارة`,
+        message: org
+          ? orgActive
+            ? `تمت إضافة ${nurse.name} إلى ${isSupervisor ? 'أطباء' : 'كوادر'} ${org.name} — يظهر الآن في حساب الإدارة ولن يستقبل أي تكليف قبل اعتماد حسابه ورفع مستنداته إجبارياً`
+            : `تمت إضافة ${nurse.name} إلى ${isSupervisor ? 'أطباء' : 'كوادر'} ${org.name} — سيُعتمد ارتباطه تلقائياً عند اعتماد الجهة الصحية من الإدارة`
+          : `تمت إضافة ${nurse.name} إلى قائمة ${isSupervisor ? 'الأطباء' : 'الكوادر'} في المنصة — لن يستقبل أي تكليف قبل رفع مستنداته واعتماد حسابه من الإدارة`,
         nurse,
       },
       { status: 201 }
@@ -195,6 +209,12 @@ export async function GET() {
     ])
     const favoriteSet = new Set(favorites.map((f) => f.nurseId))
 
+    // الجولة 34: أرقام الكوادر/الأطباء مخفية — تُفتح فقط بتكليف مسدد النسبة بين الطرفين
+    const revealed = await revealedStaffIds(
+      session.user.id,
+      affiliations.map((a) => a.nurse.id)
+    )
+
     return NextResponse.json({
       org,
       fullProfileAccess: me?.fullProfileAccess ?? false,
@@ -206,7 +226,10 @@ export async function GET() {
         workYears: a.workYears,
         createdAt: a.createdAt,
         isFavorite: favoriteSet.has(a.nurse.id),
-        nurse: a.nurse,
+        nurse: {
+          ...a.nurse,
+          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+        },
       })),
     })
   } catch (error) {

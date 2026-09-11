@@ -4,6 +4,7 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { updatePostSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
 import { canNurseSeePost, escalateDueProgressivePosts, progressiveAudienceIds, DISTRIBUTION_LABELS } from '@/lib/network'
+import { isAssignmentPhoneOpen, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 import type { Gender } from '@prisma/client'
 
 /**
@@ -11,6 +12,8 @@ import type { Gender } from '@prisma/client'
  * - NURSE: التفاصيل + الرسوم + حالة تقديمه الخاص
  * - RECEIVER (المالك): التفاصيل + التقديمات
  * - ADMIN: التفاصيل الكاملة
+ * الجولة 34: أرقام المتقدمين والكادر المُسند تُقنّع للمالك — تُفتح بتكليف
+ * مسدد النسبة بين الطرفين (lib/phone-privacy) — الإدارة ترى دائماً.
  */
 export async function GET(
   _req: NextRequest,
@@ -79,6 +82,32 @@ export async function GET(
       post.receiverId !== session.user.id
     ) {
       throw new ApiError('ليست لديك صلاحية للوصول إلى هذا التكليف', 403)
+    }
+
+    // الجولة 34: قناع الأرقام لوجهة المالك — المتقدمون بلا تكليف فأرقامهم مقفلة،
+    // والكادر المُسند يُفتح رقم صاحبه في التكليف المسدد فقط
+    if (session.user.role !== 'ADMIN') {
+      const revealed = await revealedStaffIds(
+        session.user.id,
+        post.applications.map((a) => a.nurse.id)
+      )
+      const maskedApplications = post.applications.map((a) => ({
+        ...a,
+        nurse: {
+          ...a.nurse,
+          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+        },
+      }))
+      const maskedAssignments = post.assignments.map((a) => ({
+        ...a,
+        nurse: {
+          ...a.nurse,
+          ...phoneView(session.user.role, a.nurse.phone, isAssignmentPhoneOpen(a)),
+        },
+      }))
+      return NextResponse.json({
+        post: { ...post, applications: maskedApplications, assignments: maskedAssignments },
+      })
     }
 
     return NextResponse.json({ post })

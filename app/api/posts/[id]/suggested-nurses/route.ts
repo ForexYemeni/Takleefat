@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { findMatchingNurses, MATCH_PRIORITY_LABELS } from '@/lib/network'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/posts/[id]/suggested-nurses — المطابقة الذكية للكوادر لهذا التكليف
@@ -46,9 +47,19 @@ export async function GET(
     const inviteMap = new Map(invites.map((i) => [i.nurseId, i.status]))
     const appliedMap = new Map(applications.map((a) => [a.nurseId, a.status]))
 
+    // الجولة 34: قناع أرقام الكوادر المقترحين — يُفتح بتكليف مسدد النسبة بين الطرفين
+    const revealed =
+      session.user.role === 'ADMIN'
+        ? new Set<string>()
+        : await revealedStaffIds(
+            session.user.id,
+            matched.map((n) => n.id)
+          )
+
     return NextResponse.json({
       nurses: matched.map((n) => ({
         ...n,
+        ...phoneView(session.user.role, n.phone, revealed.has(n.id)),
         priorityLabel: MATCH_PRIORITY_LABELS[n.priority] ?? MATCH_PRIORITY_LABELS[0],
         invitationStatus: inviteMap.get(n.id) ?? null,
         applicationStatus: appliedMap.get(n.id) ?? null,

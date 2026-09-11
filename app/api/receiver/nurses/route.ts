@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { findMatchingNurses, MATCH_PRIORITY_LABELS, resolveReceiverOrg } from '@/lib/network'
+import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * البحث المتقدم عن الكوادر والأطباء + المطابقة الذكية | Smart Matching
@@ -51,6 +52,19 @@ export async function GET(req: NextRequest) {
       priorityLabel: MATCH_PRIORITY_LABELS[n.priority] ?? MATCH_PRIORITY_LABELS[0],
     }))
 
+    // الجولة 34: قناع أرقام الكوادر — يُفتح بتكليف مسدد النسبة بين الطرفين
+    const revealed =
+      session.user.role === 'ADMIN'
+        ? new Set<string>()
+        : await revealedStaffIds(
+            session.user.id,
+            matched.map((n) => n.id)
+          )
+    const masked = enriched.map((n) => ({
+      ...n,
+      ...phoneView(session.user.role, n.phone, revealed.has(n.id)),
+    }))
+
     // ملخص توزيع الأولويات (لواجهة اختيار الكوادر)
     const summary = {
       total: enriched.length,
@@ -61,7 +75,7 @@ export async function GET(req: NextRequest) {
       }, {}),
     }
 
-    return NextResponse.json({ nurses: enriched, summary, priorityLabels: MATCH_PRIORITY_LABELS })
+    return NextResponse.json({ nurses: masked, summary, priorityLabels: MATCH_PRIORITY_LABELS })
   } catch (error) {
     return handleApiError(error)
   }

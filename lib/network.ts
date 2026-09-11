@@ -739,7 +739,8 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
           ? {
               OR: [
                 { name: { contains: opts.search } },
-                { phone: { contains: opts.search } },
+                // الجولة 34: البحث بالهاتف أُغلق — كان يسرّب وجود الرقم في المنصة
+                // { phone: { contains: opts.search } },
                 { specialty: { contains: opts.search } },
               ],
             }
