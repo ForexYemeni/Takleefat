@@ -1621,6 +1621,35 @@ import json,sys
 print('no' if not any(h['id']=='$R36_HOSP_ID' for h in json.load(sys.stdin)['hospitals']) else 'yes')")
 check "تنظيف الجولة 27: الجهة المحذوفة اختفت من القوائم" "no" "$R36_GONE"
 
+# ============================================================
+# القسم 37 — الجولة 28: قسم «الأقسام الطبية» المستقل في حساب الإدارة
+# ============================================================
+echo "=========== 37) الجولة 28: قسم الأقسام الطبية المستقل ==========="
+
+# --- فحوص ساكنة: الصفحة المستقلة، الإزالة من الرسوم، التنقل، تعزيز الـ API ---
+R28_PAGE=$([ -f app/admin/departments/page.tsx ] && grep -c 'DepartmentsManager' app/admin/departments/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: صفحة /admin/departments مستقلة تعرض DepartmentsManager" "1" "$R28_PAGE"
+
+R28_STATS=$(grep -c 'إجمالي الأقسام\|ارتباطات الكوادر\|أقسام مخفية\|ظاهرة في القوائم' components/admin/departments-manager.tsx | awk '{print ($1>=4)?1:0}')
+check "ui: القسم المستقل يضم بطاقات الإحصاء الأربع الحية" "1" "$R28_STATS"
+
+R28_REMOVED=$(grep -c 'DepartmentManager' app/admin/settings/page.tsx | awk '{print $1+0}')
+check "ui: صفحة الرسوم وطرق الدفع لم تعد تدير الأقسام (0 إشارة)" "0" "$R28_REMOVED"
+
+R28_NAV=$(grep -c "href: '/admin/departments'" components/shared/dashboard-shell.tsx | awk '{print ($1==1)?1:0}')
+check "ui: قائمة تنقل الإدارة تضم «الأقسام الطبية» بعد الجهات الصحية" "1" "$R28_NAV"
+
+R28_API=$(grep -c '_count' app/api/admin/departments/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: GET الأقسام يعزّز الاستجابة بعدد ارتباطات الكوادر (_count)" "1" "$R28_API"
+
+# --- فحص حي: الاستجابة الفعلية تتضمن _count.nurses لكل قسم (الأقسام أُنشئت في الأقسام السابقة) ---
+R28_LIVE=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/departments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['departments']
+ok=len(d)>0 and all('_count' in x and 'nurses' in x['_count'] for x in d)
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "live: /api/admin/departments يعيد _count.nurses لكل قسم" "ok" "$R28_LIVE"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

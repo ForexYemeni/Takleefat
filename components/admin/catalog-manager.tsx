@@ -63,6 +63,7 @@ interface Department {
   id: string
   name: string
   isActive: boolean
+  _count?: { nurses: number }
 }
 
 interface MapPoint {
@@ -396,6 +397,15 @@ export function DepartmentManager() {
               <span className={d.isActive ? 'font-bold' : 'font-bold text-muted-foreground line-through'}>
                 {d.name}
               </span>
+              {(d._count?.nurses ?? 0) > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="bg-teal-50 px-1.5 text-[10px] font-bold text-teal-700"
+                  title="عدد الكوادر المرتبطين بهذا القسم ضمن أقسام عملهم"
+                >
+                  {d._count!.nurses} كادر
+                </Badge>
+              )}
               <button
                 type="button"
                 aria-label={d.isActive ? `إخفاء ${d.name}` : `إظهار ${d.name}`}

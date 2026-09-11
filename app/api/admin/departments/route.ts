@@ -4,7 +4,8 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { departmentSchema } from '@/lib/validations/post'
 
 /**
- * GET /api/admin/departments — جميع الأقسام (الإدارة)
+ * GET /api/admin/departments — جميع الأقسام (الإدارة) مع عدد الكوادر المرتبطين بكل قسم
+ *   عبر أقسام العمل (WorkDepartment) — يُستخدم في القسم المستقل «الأقسام الطبية»
  * POST /api/admin/departments — إضافة قسم طبي جديد (عناية، طوارئ، رقود، حضانة، قبالة، مختبر...)
  */
 export async function GET() {
@@ -12,6 +13,7 @@ export async function GET() {
     await requireRole('ADMIN')
     const departments = await db.department.findMany({
       orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { nurses: true } } },
     })
     return NextResponse.json({ departments })
   } catch (error) {

@@ -24,7 +24,6 @@ import {
   type SettingsFormValues,
 } from '@/lib/validations/post'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
-import { DepartmentManager } from '@/components/admin/catalog-manager'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -401,21 +400,6 @@ export default function AdminSettingsPage() {
           </Button>
         </div>
       </form>
-
-      {/* الأقسام الطبية — تظهر للمستلم الإداري عند إنشاء التكليف
-          (الجهات الصحية تُدار من قسم «الجهات الصحية» المخصص — أُزيلت من هنا لتجنب الازدواج) */}
-      <Card className="mt-2">
-        <CardHeader>
-          <CardTitle className="text-lg">إدارة الأقسام الطبية</CardTitle>
-          <CardDescription>
-            الأقسام التي يختار منها المستلم الإداري والإدارة عند إنشاء التكليف — مثل: عناية،
-            طوارئ، رقود، حضانة، قبالة، مختبر
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DepartmentManager />
-        </CardContent>
-      </Card>
     </div>
   )
 }
