@@ -163,8 +163,12 @@ interface CreatePostDialogProps {
   onCreated?: (post: { id: string; title: string; number: number }) => void
   /** آخر تكليف — يُملأ به النموذج تلقائياً عند الفتح (زر «أعد نشر آخر تكليف») */
   repostSource?: RepostSource | null
-  /** رقم التكليف التالي — عند تمريره يظهر العنوان الاختياري «التكليف رقم N» (وضع المستلم الإداري) */
+  /** رقم التكليف التالي — عند تمريره يظهر العنوان الاختياري «التكليف رقم N» (وضع المستلم/المشرف) */
   nextNumber?: number
+  /** جمهور التكليف الثابت حسب الدور — المستلم: NURSE | مشرف الأطباء: DOCTOR (منظومة الأطباء) */
+  audience?: 'NURSE' | 'DOCTOR'
+  /** السماح بتغيير الجمهور (الإدارة فقط): منتقي كادر تمريضي / أطباء */
+  allowAudienceChoice?: boolean
 }
 
 export function CreatePostDialog({
@@ -173,12 +177,23 @@ export function CreatePostDialog({
   onCreated,
   repostSource,
   nextNumber,
+  audience: fixedAudience = 'NURSE',
+  allowAudienceChoice = false,
 }: CreatePostDialogProps) {
+  // الجمهور الفعلي — الإدارة تختاره والبقية لهم جمهوره الثابت (منظومة الأطباء)
+  const [chosenAudience, setChosenAudience] = useState<'NURSE' | 'DOCTOR'>(fixedAudience)
+  const audience = allowAudienceChoice ? chosenAudience : fixedAudience
+  const isDoctorAudience = audience === 'DOCTOR'
+  // اسم الجمهور في الحقول والعناوين
+  const peopleNoun = isDoctorAudience ? 'طبيب' : 'كادر'
+  const peopleNounPlural = isDoctorAudience ? 'أطباء' : 'كوادر'
+
   const form = useForm<CreatePostFormValues, unknown, CreatePostInput>({
     resolver: zodResolver(createPostSchema),
     defaultValues: {
       title: '',
       description: '',
+      audience,
       hospitalId: '',
       department: '',
       location: '',
@@ -200,12 +215,19 @@ export function CreatePostDialog({
   const { data: departmentsData } = useQuery({
     queryKey: ['departments'],
     queryFn: () => apiFetcher<{ departments: DepartmentOption[] }>('/api/departments'),
-    enabled: open,
+    enabled: open && !isDoctorAudience,
+  })
+  // كتالوج التخصصات الطبية — جمهور الأطباء (منظومة الأطباء)
+  const { data: specialtiesData } = useQuery({
+    queryKey: ['specialties'],
+    queryFn: () => apiFetcher<{ specialties: DepartmentOption[] }>('/api/specialties'),
+    enabled: open && isDoctorAudience,
   })
 
   const hospitals = hospitalsData?.hospitals ?? []
-  // /api/departments يُعيد الأقسام النشطة فقط (فلتر isActive على الخادم) — لا فلترة إضافية هنا
-  const departments = departmentsData?.departments ?? []
+  // القسم/التخصص يُختار من كتالوج الإدارة النشط — لا فلترة إضافية هنا
+  const departments =
+    (isDoctorAudience ? specialtiesData?.specialties : departmentsData?.departments) ?? []
 
   // إعادة نشر: ملء النموذج من آخر تكليف (العنوان يُترك فارغاً ليأخذ الرقم الجديد تلقائياً)
   useEffect(() => {
@@ -213,6 +235,7 @@ export function CreatePostDialog({
       form.reset({
         title: '',
         description: repostSource.description ?? '',
+        audience: allowAudienceChoice ? chosenAudience : fixedAudience,
         hospitalId: repostSource.hospitalId ?? '',
         department: repostSource.department ?? '',
         location: '',
@@ -235,10 +258,10 @@ export function CreatePostDialog({
   const [selectedNurseIds, setSelectedNurseIds] = useState<string[]>([])
   const selectedDepartment = form.watch('department') || ''
   const { data: suggestedData } = useQuery({
-    queryKey: ['suggested-nurses', selectedHospitalId, form.watch('gender'), selectedDepartment],
+    queryKey: ['suggested-nurses', selectedHospitalId, form.watch('gender'), selectedDepartment, audience],
     queryFn: () =>
       apiFetcher<{ nurses: SuggestedNurse[]; priorityLabels: Record<string, string> }>(
-        `/api/receiver/nurses?hospitalId=${selectedHospitalId}&gender=${form.watch('gender') || 'ANY'}&department=${encodeURIComponent(selectedDepartment)}`
+        `/api/receiver/nurses?hospitalId=${selectedHospitalId}&gender=${form.watch('gender') || 'ANY'}&department=${encodeURIComponent(selectedDepartment)}${isDoctorAudience ? '&audience=DOCTOR' : ''}`
       ),
     enabled: open && !!selectedHospitalId,
   })
@@ -264,6 +287,7 @@ export function CreatePostDialog({
         '/api/posts',
         {
           ...values,
+          audience,
           ...(values.distribution === 'INVITE_SELECTED' ? { invitedNurseIds: selectedNurseIds } : {}),
         }
       )
@@ -282,16 +306,57 @@ export function CreatePostDialog({
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {nextNumber ? `إنشاء تكليف جديد — التكليف رقم ${nextNumber}` : 'إضافة تكليف مُعلن'}
+            {nextNumber
+              ? `إنشاء تكليف جديد — التكليف رقم ${nextNumber}`
+              : isDoctorAudience
+                ? 'إضافة تكليف مُعلن — أطباء'
+                : 'إضافة تكليف مُعلن'}
           </DialogTitle>
           <DialogDescription>
             {nextNumber
               ? `سيظهر العنوان تلقائياً «التكليف رقم ${nextNumber}» (ويمكن الإدارة تعديله لاحقاً) — الجهة الصحية تُختار من مستشفيات الإدارة والموقع يُعبأ تلقائياً — بدون تاريخ انتهاء`
-              : 'يُنشر التكليف للكادر التمريضي للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'}
+              : isDoctorAudience
+                ? 'يُنشر التكليف للأطباء للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'
+                : 'يُنشر التكليف للكادر التمريضي للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(submitMutation, onInvalid)} className="space-y-4" noValidate>
+          {/* منتقي الجمهور — الإدارة فقط (كادر تمريضي / أطباء) */}
+          {allowAudienceChoice && (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setChosenAudience('NURSE')
+                  form.setValue('department', '')
+                }}
+                className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition-colors ${
+                  !isDoctorAudience
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/40'
+                }`}
+              >
+                <Stethoscope className="size-4" />
+                تكليف كادر تمريضي
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChosenAudience('DOCTOR')
+                  form.setValue('department', '')
+                }}
+                className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition-colors ${
+                  isDoctorAudience
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/40'
+                }`}
+              >
+                <BriefcaseMedical className="size-4" />
+                تكليف أطباء
+              </button>
+            </div>
+          )}
           {/* العنوان الاختياري — وضع المستلم الإداري (الترقيم التسلسلي التلقائي) */}
           {nextNumber != null && (
             <div className="space-y-2">
@@ -353,19 +418,19 @@ export function CreatePostDialog({
             )}
           </div>
 
-          {/* القسم من قوائم الإدارة */}
+          {/* القسم/التخصص من كتالوجات الإدارة — حسب الجمهور */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <Stethoscope className="size-3.5" />
-                القسم (من قوائم الإدارة)
+                {isDoctorAudience ? 'التخصص الطبي (من كتالوج الإدارة)' : 'القسم (من قوائم الإدارة)'}
               </Label>
               <Select
                 value={form.watch('department') || undefined}
                 onValueChange={(v) => form.setValue('department', v)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر القسم" />
+                  <SelectValue placeholder={isDoctorAudience ? 'اختر التخصص الطبي' : 'اختر القسم'} />
                 </SelectTrigger>
                 <SelectContent>
                   {departments.map((d) => (
@@ -413,7 +478,7 @@ export function CreatePostDialog({
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <Users className="size-3.5" />
-                عدد الكادر المطلوب
+                عدد {peopleNounPlural} المطلوب
               </Label>
               <Input type="number" min={1} max={50} {...form.register('nursesNeeded')} />
               {form.formState.errors.nursesNeeded && (
@@ -527,6 +592,7 @@ export function CreatePostDialog({
                 department={form.watch('department') || ''}
                 distribution={distribution}
                 enabled={open}
+                audience={audience}
               />
             )}
 
@@ -546,7 +612,12 @@ export function CreatePostDialog({
                   department={selectedDepartment}
                   selected={selectedNurseIds}
                   onToggle={toggleNurse}
-                  emptyText="لا يوجد كوادر مطابقون للجنس والقسم المطلوبين — أضف كوادر أو اختر جهة أخرى"
+                  audience={audience}
+                  emptyText={
+                    isDoctorAudience
+                      ? 'لا يوجد أطباء مطابقون للجنس والتخصص المطلوبين — أضف أطباء أو اختر جهة أخرى'
+                      : 'لا يوجد كوادر مطابقون للجنس والقسم المطلوبين — أضف كوادر أو اختر جهة أخرى'
+                  }
                 />
                 {selectedNurseIds.length === 0 && (
                   <p className="text-xs font-bold text-amber-600">اختر كادراً واحداً على الأقل قبل النشر</p>

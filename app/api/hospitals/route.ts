@@ -8,7 +8,7 @@ import { requireRole, handleApiError } from '@/lib/api-helpers'
  */
 export async function GET() {
   try {
-    await requireRole('ADMIN', 'NURSE', 'RECEIVER')
+    await requireRole('ADMIN', 'NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const hospitals = await db.hospital.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },

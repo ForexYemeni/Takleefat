@@ -42,13 +42,14 @@ export function useSuggestedNurses(
   hospitalId: string | null | undefined,
   gender: string | null | undefined,
   department?: string | null,
-  enabled = true
+  enabled = true,
+  audience?: 'NURSE' | 'DOCTOR' | null
 ) {
   return useQuery({
-    queryKey: ['receiver-nurses', hospitalId, gender, department ?? ''],
+    queryKey: ['receiver-nurses', hospitalId, gender, department ?? '', audience ?? ''],
     queryFn: () =>
       apiFetcher<{ nurses: SuggestedNurse[]; summary: { total: number; available: number } }>(
-        `/api/receiver/nurses?hospitalId=${hospitalId ?? ''}&gender=${gender || 'ANY'}&department=${encodeURIComponent(department ?? '')}`
+        `/api/receiver/nurses?hospitalId=${hospitalId ?? ''}&gender=${gender || 'ANY'}&department=${encodeURIComponent(department ?? '')}${audience === 'DOCTOR' ? '&audience=DOCTOR' : ''}`
       ),
     // hospitalId اختياري — عند فراغه تُرجع الـ API الكوادر المرتبطين بجهة المستلم تلقائياً
     enabled,
@@ -63,6 +64,7 @@ export function NursePickList({
   onToggle,
   emptyText = 'لا يوجد كوادر مطابقون — اختر جهة أخرى أو عدّل الجنس المطلوب',
   heightClass = 'max-h-64',
+  audience,
 }: {
   hospitalId: string | null | undefined
   gender: string | null | undefined
@@ -71,9 +73,10 @@ export function NursePickList({
   onToggle: (id: string) => void
   emptyText?: string
   heightClass?: string
+  audience?: 'NURSE' | 'DOCTOR' | null
 }) {
   const [search, setSearch] = useState('')
-  const { data, isLoading } = useSuggestedNurses(hospitalId, gender, department)
+  const { data, isLoading } = useSuggestedNurses(hospitalId, gender, department, true, audience)
 
   const nurses = useMemo(() => {
     const all = data?.nurses ?? []

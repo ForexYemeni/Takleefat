@@ -29,7 +29,7 @@ const DOCUMENT_GATED_STATUSES = ['ENDORSED', 'WORKING'] as const
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN')
+    const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const hospitalId = req.nextUrl.searchParams.get('hospitalId')
     const status = req.nextUrl.searchParams.get('status')
     const nurseId = req.nextUrl.searchParams.get('nurseId')
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       ...(nurseId ? { nurseId } : {}),
     }
 
-    if (session.user.role === 'NURSE') {
+    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       where = { ...where, nurseId: session.user.id }
     } else if (session.user.role === 'RECEIVER') {
       const org = await resolveReceiverOrg(session.user.id)
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN')
+    const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const parsed = affiliationCreateSchema.safeParse(await req.json())
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
@@ -83,10 +83,10 @@ export async function POST(req: NextRequest) {
 
     const { note, workYears, newOrg } = parsed.data
     // الكادر يطلب لنفسه — المستلم/الإدارة يحددان الكادر
-    const targetNurseId = session.user.role === 'NURSE' ? session.user.id : parsed.data.nurseId
+    const targetNurseId = session.user.role === 'NURSE' || session.user.role === 'DOCTOR' ? session.user.id : parsed.data.nurseId
     if (!targetNurseId) return jsonError('معرّف الكادر مطلوب', 422)
     // الحالة الفعلية المطلوبة: المستلم/الإدارة يضبطونها — الكادر يطلب نوع العمل فقط (الجولة الثامنة)
-    const requestedStatus = parsed.data.status ?? (session.user.role === 'NURSE' ? 'PENDING' : 'WORKING')
+    const requestedStatus = parsed.data.status ?? (session.user.role === 'NURSE' || session.user.role === 'DOCTOR' ? 'PENDING' : 'WORKING')
 
     // ---------- جهة صحية جديدة؟ (الجولة الثامنة) تُرفع للإدارة بانتظار الاعتماد ----------
     let hospitalId = parsed.data.hospitalId
@@ -127,13 +127,13 @@ export async function POST(req: NextRequest) {
       db.user.findUnique({ where: { id: targetNurseId }, select: { id: true, name: true, role: true, status: true } }),
       db.hospital.findUnique({ where: { id: hospitalId }, select: { id: true, name: true, status: true, isActive: true } }),
     ])
-    if (!nurse || nurse.role !== 'NURSE') return jsonError('الكادر التمريضي غير موجود', 404)
+    if (!nurse || (nurse.role !== 'NURSE' && nurse.role !== 'DOCTOR')) return jsonError('الكادر غير موجود', 404)
     if (!hospital) return jsonError('الجهة الصحية غير موجودة', 404)
 
     // الحماية أولاً: الكادر يطلب فقط — الحالات المحمية محرّمة عليه نهائياً (قبل فحص التكرار)
     let finalStatus: string = requestedStatus
     let finalRequestedStatus: string | null = null
-    if (session.user.role === 'NURSE') {
+    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       if (!(NURSE_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
         throw new ApiError(
           'لا يمكنك تعيين حالة الاعتماد أو المقابلة بنفسك — طلبك يُسجل «قيد المراجعة» وتُعتمده الجهة المختصة',

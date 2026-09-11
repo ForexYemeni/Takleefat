@@ -5,15 +5,16 @@ import { reviewApplicationSchema } from '@/lib/validations/post'
 import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
 import { notify, notifyAdmins } from '@/lib/notifications'
 import { formatCurrency } from '@/lib/utils'
+import { audienceRole, audienceAssignmentsLink } from '@/lib/network'
 
 /**
  * PATCH /api/applications/[id] — مراجعة تقديم (اعتماد / رفض)
- * المستلم الإداري المالك (أو الإدارة).
+ * المستلم الإداري المالك (تكليفاته) أو مشرف الأطباء المالك (تكليفات أطبائه) أو الإدارة.
  *
  * عند الاعتماد:
- * 1) يُنشأ تكليف مؤكد (Assignment) بحالة «تم الاستلام» للكادر المقبول
+ * 1) يُنشأ تكليف مؤكد (Assignment) بحالة «تم الاستلام» للجمهور المقبول
  * 2) تُحسب حصة الإدارة من قيمة التكليف وتُسجل
- * 3) يُشعَر الكادر بطرق الدفع (محفظة جيب / رقم الحساب / اسم الحساب)
+ * 3) يُشعَر المقدّم بطرق الدفع (محفظة جيب / رقم الحساب / اسم الحساب)
  * 4) إذا اكتمل العدد المطلوب يُغلق التكليف ويُرفض بقية التقديمات
  */
 export async function PATCH(
@@ -21,7 +22,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('RECEIVER', 'ADMIN')
+    const session = await requireRole('RECEIVER', 'ADMIN', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const parsed = reviewApplicationSchema.safeParse(await req.json())
@@ -35,9 +36,25 @@ export async function PATCH(
     })
     if (!application) return jsonError('التقديم غير موجود', 404)
 
-    if (session.user.role === 'RECEIVER' && application.post.receiverId !== session.user.id) {
+    if (
+      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      application.post.receiverId !== session.user.id
+    ) {
       throw new ApiError('يمكنك مراجعة تقديمات تكليفاتك فقط', 403)
     }
+
+    // حماية الجمهور: مشرف الأطباء يراجع تقديمات تكليفات الأطباء حصراً — والمستلم تمريض حصراً
+    const postAudienceRole = audienceRole(application.post.audience)
+    if (
+      session.user.role !== 'ADMIN' &&
+      ((session.user.role === 'DOCTOR_SUPERVISOR' && postAudienceRole !== 'DOCTOR') ||
+        (session.user.role === 'RECEIVER' && postAudienceRole !== 'NURSE'))
+    ) {
+      throw new ApiError('جمهور هذا التكليف لا يطابق دور حسابك', 403)
+    }
+
+    // رابط لوحة الجمهور — لإشعارات النتائج
+    const audienceLink = audienceAssignmentsLink(application.post.audience)
 
     if (application.status !== 'PENDING') {
       return jsonError('تمت مراجعة هذا التقديم مسبقاً', 409)
@@ -64,7 +81,7 @@ export async function PATCH(
         title: 'لم يتم اعتماد تقديمك',
         body: `تقديمك على التكليف (${application.post.title}) لم يُعتمد. السبب: ${note.trim()}`,
         type: 'APPLICATION_REJECTED',
-        link: '/nurse/assignments',
+        link: audienceLink,
       })
 
       // الجولة الخامسة عشرة: الإدارة ترى الرفض أيضاً (غير مُراجع التقديم نفسه)
@@ -142,7 +159,7 @@ export async function PATCH(
       title: 'تهانينا! تم اعتماد تقديمك',
       body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (${dueBreakdown}) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName} — بعد الدفع ارفع لقطة شاشة إثبات الدفع من صفحة تكليفاتك`,
       type: 'APPLICATION_APPROVED',
-      link: '/nurse/assignments',
+      link: audienceLink,
     })
 
     // الجولة الخامسة عشرة: الإدارة ترى الاعتماد وإنشاء التكليف (غير المُعتمِد نفسه)
@@ -190,9 +207,9 @@ export async function PATCH(
         remaining.map((app) =>
           notify(app.nurseId, {
             title: 'لم يتم اعتماد تقديمك',
-            body: `تقديمك على (${application.post.title}) لم يُعتمد. السبب: تم اكتمال عدد الكادر المطلوب`,
+            body: `تقديمك على (${application.post.title}) لم يُعتمد. السبب: تم اكتمال العدد المطلوب لهذا التكليف`,
             type: 'APPLICATION_REJECTED',
-            link: '/nurse/assignments',
+            link: audienceLink,
           })
         )
       )

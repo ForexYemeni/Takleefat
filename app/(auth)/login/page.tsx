@@ -18,6 +18,8 @@ import { maybeAutoPromptAfterLogin } from '@/lib/push-client'
 
 const ROLE_HOME: Record<string, string> = {
   ADMIN: '/admin',
+  DOCTOR: '/doctor',
+  DOCTOR_SUPERVISOR: '/supervisor',
   NURSE: '/nurse',
   RECEIVER: '/receiver',
 }

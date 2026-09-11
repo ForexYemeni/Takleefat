@@ -1,10 +1,21 @@
 import { db } from '@/lib/db'
-import type { Gender, Post, DistributionMethod } from '@prisma/client'
+import type { Gender, Post, DistributionMethod, Audience } from '@prisma/client'
 
 /**
  * شبكة الكوادر الصحية المعتمدة | Verified Healthcare Workforce Network
  * مكتبة المطابقة الذكية وخصوصية التوزيع والنشر التدريجي — تُستخدم من كل واجهات API
+ * منظومة الأطباء: نفس المحرك يعمل لجمهور NURSE (أقسام العمل) وجمهور DOCTOR (تخصصات العمل)
  */
+
+/** دور الجمهور المستهدف من التكليف — يحدد من يرى ويقدّم */
+export function audienceRole(audience: Audience | null | undefined): 'NURSE' | 'DOCTOR' {
+  return audience === 'DOCTOR' ? 'DOCTOR' : 'NURSE'
+}
+
+/** رابط لوحة الجمهور — للإشعارات الموجهة */
+export function audienceAssignmentsLink(audience: Audience | null | undefined): string {
+  return audience === 'DOCTOR' ? '/doctor/assignments' : '/nurse/assignments'
+}
 
 // ---------- تسميات الحالات ----------
 
@@ -180,9 +191,12 @@ export async function getAudiencePreview(opts: {
   department?: string | null
   gender?: Gender | null
   distribution?: string | null
+  /** جمهور التكليف — NURSE (كادر تمريضي) أو DOCTOR (أطباء — منظومة الأطباء) */
+  audience?: Audience | null
 }): Promise<AudiencePreviewResult> {
+  const role = audienceRole(opts.audience)
   const genderWhere = opts.gender && opts.gender !== 'ANY' ? { gender: opts.gender } : {}
-  const base = { role: 'NURSE' as const, status: 'APPROVED' as const, ...genderWhere }
+  const base = { role, status: 'APPROVED' as const, ...genderWhere }
 
   const [nurses, favorites] = await Promise.all([
     db.user.findMany({
@@ -192,7 +206,9 @@ export async function getAudiencePreview(opts: {
     db.favoriteNurse.findMany({ where: { receiverId: opts.receiverId }, select: { nurseId: true } }),
   ])
   const nurseIds = nurses.map((n) => n.id)
-  const workDeptsMap = await getWorkDepartmentsMap(nurseIds)
+  // خريطة أقسام/تخصصات العمل — علائقية حسب الجمهور
+  const workDeptsMap =
+    role === 'DOCTOR' ? await getSpecialtiesMap(nurseIds) : await getWorkDepartmentsMap(nurseIds)
   const affs =
     opts.hospitalId && nurseIds.length > 0
       ? await db.nurseAffiliation.findMany({
@@ -332,13 +348,18 @@ export function isPrivateDistribution(distribution: DistributionMethod | null | 
 export interface PostVisibilityContext {
   nurseId: string
   nurseGender: Gender | null
+  /** دور الطالب للرؤية — يجب أن يطابق جمهور التكليف (منظومة الأطباء) */
+  role?: 'NURSE' | 'DOCTOR'
 }
 
 /**
  * فحص رؤية التكليف للكادر — يُطبق على القائمة وعلى الرابط المباشر وعلى التقديم:
- * فلترة الجنس إلزامية دائماً + خصوصية طريقة التوزيع + مراحل النشر التدريجي.
+ * مطابقة الجمهور (تمريض/أطباء) + فلترة الجنس + خصوصية طريقة التوزيع + مراحل النشر التدريجي.
  */
 export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): Promise<boolean> {
+  // 0) فلتر الجمهور — حتمي: تكليف الأطباء لا يراه الكادر التمريضي والعكس (منظومة الأطباء)
+  if (audienceRole(post.audience) !== (ctx.role ?? 'NURSE')) return false
+
   // 1) فلتر الجنس — حتمي على مستوى المنطق وقاعدة البيانات
   if (!genderMatches(post.gender, ctx.nurseGender)) return false
   if (post.status !== 'OPEN' && post.status !== 'ASSIGNED') return false
@@ -383,7 +404,7 @@ export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): P
     return !!aff && (required as string[]).includes(aff.status)
   }
 
-  // 6) AUTO_MATCH — مطابق للجنس + (أقسام عمله توافق القسم أو تخصصه نصياً أو مرتبط بالجهة)
+  // 6) AUTO_MATCH — مطابق للجنس + (أقسام/تخصصات عمله توافق المطلوب أو مرتبط بالجهة)
   if (distribution === 'AUTO_MATCH') {
     if (post.hospitalId) {
       const aff = await db.nurseAffiliation.findUnique({
@@ -393,16 +414,28 @@ export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): P
       if (aff && AFFILIATED_AUDIENCE.includes(aff.status as never)) return true
     }
     if (post.department) {
-      // علائقياً: القسم ضمن أقسام عمل الكادر المصرّح بها (كتالوج الإدارة)
-      const wd = await db.workDepartment.findFirst({
-        where: {
-          nurseId: ctx.nurseId,
-          department: { name: post.department, isActive: true },
-        },
-        select: { id: true },
-      })
-      if (wd) return true
-      // سقوط نصي للكوادر التاريخيين بلا أقسام عمل مصرّح بها
+      if (post.audience === 'DOCTOR') {
+        // علائقياً: التخصص ضمن تخصصات عمل الطبيب (كتالوج التخصصات الطبية)
+        const ds = await db.doctorSpecialty.findFirst({
+          where: {
+            doctorId: ctx.nurseId,
+            specialty: { name: post.department, isActive: true },
+          },
+          select: { id: true },
+        })
+        if (ds) return true
+      } else {
+        // علائقياً: القسم ضمن أقسام عمل الكادر المصرّح بها (كتالوج الإدارة)
+        const wd = await db.workDepartment.findFirst({
+          where: {
+            nurseId: ctx.nurseId,
+            department: { name: post.department, isActive: true },
+          },
+          select: { id: true },
+        })
+        if (wd) return true
+      }
+      // سقوط نصي للكوادر التاريخيين بلا أقسام/تخصصات عمل مصرّح بها
       const nurse = await db.user.findUnique({
         where: { id: ctx.nurseId },
         select: { specialty: true, qualification: true },
@@ -461,17 +494,28 @@ export async function getDepartmentAudience(opts: {
   department: string
   gender?: Gender | null
   hospitalId?: string | null
+  /** جمهور التكليف — يحدد الجمهور العلائقي (أقسام عمل الكادر أو تخصصات عمل الطبيب) */
+  audience?: Audience | null
 }): Promise<{ departmentNurseIds: string[]; extendedNurseIds: string[] }> {
+  const role = audienceRole(opts.audience)
   const genderWhere = opts.gender && opts.gender !== 'ANY' ? { gender: opts.gender } : {}
-  const base = { role: 'NURSE' as const, status: 'APPROVED' as const, ...genderWhere }
+  const base = { role, status: 'APPROVED' as const, ...genderWhere }
   const dept = opts.department.trim()
 
-  // 1) كوادر القسم — علائقياً من أقسام عملهم
-  const deptRows = await db.workDepartment.findMany({
-    where: { department: { name: dept, isActive: true }, nurse: base },
-    select: { nurseId: true },
-  })
-  const departmentNurseIds = Array.from(new Set(deptRows.map((r) => r.nurseId)))
+  // 1) جمهور المطلوب — علائقياً من أقسام عمل الكادر أو تخصصات عمل الطبيب
+  const deptRows =
+    role === 'DOCTOR'
+      ? await db.doctorSpecialty.findMany({
+          where: { specialty: { name: dept, isActive: true }, doctor: base },
+          select: { doctorId: true },
+        })
+      : await db.workDepartment.findMany({
+          where: { department: { name: dept, isActive: true }, nurse: base },
+          select: { nurseId: true },
+        })
+  const departmentNurseIds = Array.from(
+    new Set(deptRows.map((r) => 'nurseId' in r ? r.nurseId : (r as { doctorId: string }).doctorId))
+  )
   const deptSet = new Set(departmentNurseIds)
 
   // 2) الجمهور الموسع: مطابقة نصية للكوادر التاريخيين + المرتبطون بالجهة الصحية
@@ -517,7 +561,9 @@ export async function escalateDueProgressivePosts(): Promise<number> {
       progressiveStage: { lt: 3 },
       progressiveNextAt: { lte: new Date() },
     },
-    select: { id: true, progressiveStage: true, title: true, progressiveNextAt: true },
+    select: {
+      id: true, progressiveStage: true, title: true, progressiveNextAt: true, audience: true,
+    },
   })
   if (due.length === 0) return 0
 
@@ -541,7 +587,7 @@ export async function escalateDueProgressivePosts(): Promise<number> {
             title: 'تكليف متاح في مرحلتك',
             body: `تم توسيع نشر التكليف (${updated.title}) ليشمل فئتك — راجعه وتقدّم الآن`,
             type: 'POST_CREATED',
-            link: '/nurse/assignments',
+            link: audienceAssignmentsLink(p.audience),
           },
         }).catch(() => null)
       )
@@ -550,13 +596,17 @@ export async function escalateDueProgressivePosts(): Promise<number> {
   return escalated
 }
 
-/** معرّفات جمهور المرحلة الحالية لتكليف تدريجي (مطابقة الجنس إلزامية) */
-export type ProgressivePostRef = Pick<Post, 'id' | 'receiverId' | 'gender' | 'hospitalId' | 'progressiveStage'>
+/** معرّفات جمهور المرحلة الحالية لتكليف تدريجي (مطابقة الجمهور والجنس إلزامية) */
+export type ProgressivePostRef = Pick<
+  Post,
+  'id' | 'receiverId' | 'gender' | 'hospitalId' | 'progressiveStage' | 'audience'
+>
 export async function progressiveAudienceIds(post: ProgressivePostRef): Promise<string[]> {
+  const role = audienceRole(post.audience)
   const genderWhere = post.gender === 'ANY'
     ? {}
     : { gender: post.gender }
-  const base = { role: 'NURSE' as const, status: 'APPROVED' as const, ...genderWhere }
+  const base = { role, status: 'APPROVED' as const, ...genderWhere }
   const stage = post.progressiveStage ?? 0
 
   if (stage === 0) {
@@ -615,6 +665,8 @@ export interface MatchOptions {
   hospitalId?: string | null
   postGender?: Gender | null
   department?: string | null
+  /** دور الجمهور — NURSE: كادر تمريضي (افتراضي) | DOCTOR: أطباء (منظومة الأطباء) */
+  role?: 'NURSE' | 'DOCTOR'
   /** إظهار غير المطابقين للجنس؟ (لا — فلترة الجنس إلزامية دائماً) */
   favoritesOnly?: boolean
   search?: string
@@ -646,18 +698,41 @@ export async function getWorkDepartmentsMap(
 }
 
 /**
+ * خريطة تخصصات عمل الأطباء — أسماء التخصصات النشطة لكل طبيب من كتالوج التخصصات الطبية
+ * (مرآة getWorkDepartmentsMap — منظومة الأطباء). مفاتيح الواجهة نفسها (workDepartments)
+ * لتعمل مكونات الاختيار والمعاينة لجمهور الأطباء دون تعديل.
+ */
+export async function getSpecialtiesMap(
+  doctorIds: string[]
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>()
+  if (doctorIds.length === 0) return map
+  const rows = await db.doctorSpecialty.findMany({
+    where: { doctorId: { in: doctorIds }, specialty: { isActive: true } },
+    select: { doctorId: true, specialty: { select: { name: true } } },
+  })
+  for (const row of rows) {
+    const list = map.get(row.doctorId) ?? []
+    list.push(row.specialty.name)
+    map.set(row.doctorId, list)
+  }
+  return map
+}
+
+/**
  * جلب الكوادر مرتبين حسب أولوية المطابقة الذكية:
  * المفضلون ← العاملون بالجهة ← المعتمدون ← المتقابَل معهم ← الخارجيون المؤهلون ← بقية المطابقين
  * فلترة الجنس إلزامية: لا يظهر في النتيجة أي كادر لا يطابق جنس التكليف المطلوب.
  * مطابقة القسم علائقية أولاً (من أقسام عمل الكادر المصرّح بها) مع سقوط نصي للتاريخي.
  */
 export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNurse[]> {
+  const role = opts.role ?? 'NURSE'
   const genderWhere = opts.postGender && opts.postGender !== 'ANY' ? { gender: opts.postGender } : {}
 
   const [nurses, favorites, busyNurseIds] = await Promise.all([
     db.user.findMany({
       where: {
-        role: 'NURSE',
+        role,
         status: 'APPROVED',
         ...genderWhere,
         ...(opts.search
@@ -682,7 +757,7 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
       select: { nurseId: true, category: true },
     }),
     db.assignment.findMany({
-      where: { status: { in: ['ACTIVE', 'RECEIVED'] }, nurse: { role: 'NURSE' } },
+      where: { status: { in: ['ACTIVE', 'RECEIVED'] }, nurse: { role } },
       select: { nurseId: true },
     }),
   ])
@@ -715,8 +790,9 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
   const affMap = new Map(affiliations.map((a) => [a.nurseId, a.status]))
   const ratingMap = new Map(ratingAgg.map((r) => [r.nurseId, { avg: r._avg.overall, count: r._count }]))
   const docsMap = new Map(docsCounts.map((d) => [d.userId, d._count]))
-  // أقسام عمل الكوادر من كتالوج الإدارة — المطابقة العلائقية للقسم
-  const workDeptsMap = await getWorkDepartmentsMap(nurseIds)
+  // أقسام/تخصصات عمل الجمهور من كتالوج الإدارة — المطابقة العلائقية حسب الجمهور
+  const workDeptsMap =
+    role === 'DOCTOR' ? await getSpecialtiesMap(nurseIds) : await getWorkDepartmentsMap(nurseIds)
 
   const result: MatchedNurse[] = nurses
     .map((n) => {

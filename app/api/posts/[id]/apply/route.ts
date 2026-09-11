@@ -3,19 +3,19 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { notify, notifyAdmins } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
-import { canNurseSeePost } from '@/lib/network'
+import { canNurseSeePost, audienceRole } from '@/lib/network'
 
 /**
- * POST /api/posts/[id]/apply — تقديم الكادر التمريضي على تكليف مُعلن
+ * POST /api/posts/[id]/apply — تقديم الكادر التمريضي/الطبيب على تكليف مُعلن
  * body: { coverNote?: string }
- * الشروط: حساب معتمد + التكليف مفتوح + عدم التقديم مسبقاً.
+ * الشروط: حساب معتمد + التكليف مفتوح + جمهور التكليف يطابق دور المقدّم + عدم التقديم مسبقاً.
  */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
 
     if (session.user.status !== 'APPROVED') {
       throw new ApiError('حسابك قيد المراجعة — يمكنك التقديم بعد اعتماد حسابك من الإدارة', 403)
@@ -40,11 +40,21 @@ export async function POST(
       return jsonError('هذا التكليف غير متاح للتقديم حالياً', 409)
     }
 
-    // حماية مزدوجة: فلتر الجنس + خصوصية التوزيع — حتى لو وصل عبر رابط مباشر أو API
+    // حماية مزدوجة: مطابقة الجمهور (تمريض/أطباء) + فلتر الجنس + خصوصية التوزيع
+    // — حتى لو وصل عبر رابط مباشر أو API (منظومة الأطباء: لا تقديم متبادل بين الجماهير)
+    if (audienceRole(post.audience) !== session.user.role) {
+      return jsonError(
+        session.user.role === 'DOCTOR'
+          ? 'هذا التكليف مخصص للكادر التمريضي — لا يمكنك التقديم عليه بحساب الطبيب'
+          : 'هذا التكليف مخصص للأطباء — لا يمكنك التقديم عليه بحسابك الحالي',
+        403
+      )
+    }
     const me = await db.user.findUnique({ where: { id: session.user.id }, select: { gender: true } })
     const allowed = await canNurseSeePost(post, {
       nurseId: session.user.id,
       nurseGender: me?.gender ?? null,
+      role: session.user.role === 'DOCTOR' ? 'DOCTOR' : 'NURSE',
     })
     if (!allowed) {
       return jsonError('هذا التكليف غير متاح للتقديم من حسابك (شروط الجنس أو جمهور التوزيع)', 403)
@@ -90,7 +100,7 @@ export async function POST(
       title: 'تقديم جديد على تكليفك',
       body: `${session.user.name} قدّم على التكليف (${post.title}) — راجع السيرة الذاتية واعتمد أو ارفض`,
       type: 'APPLICATION_SUBMITTED',
-      link: '/receiver/assignments',
+      link: session.user.role === 'DOCTOR' ? '/supervisor/assignments' : '/receiver/assignments',
     })
 
     // الجولة الخامسة عشرة: الإدارة ترى كل التقديمات الجديدة أيضاً

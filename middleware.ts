@@ -4,11 +4,14 @@ import { getToken } from 'next-auth/jwt'
 /**
  * حماية المسارات حسب الدور — تكليفات | Takleefat
  * /admin → مدير النظام | /nurse → الكادر التمريضي | /receiver → المستلم الإداري
+ * /doctor → الطبيب | /supervisor → مشرف الأطباء (منظومة الأطباء)
  */
 const ROLE_HOME: Record<string, string> = {
   ADMIN: '/admin',
   NURSE: '/nurse',
   RECEIVER: '/receiver',
+  DOCTOR: '/doctor',
+  DOCTOR_SUPERVISOR: '/supervisor',
 }
 
 export async function middleware(req: NextRequest) {
@@ -36,6 +39,8 @@ export async function middleware(req: NextRequest) {
     { prefix: '/admin', allowedRole: 'ADMIN' },
     { prefix: '/nurse', allowedRole: 'NURSE' },
     { prefix: '/receiver', allowedRole: 'RECEIVER' },
+    { prefix: '/doctor', allowedRole: 'DOCTOR' },
+    { prefix: '/supervisor', allowedRole: 'DOCTOR_SUPERVISOR' },
   ]
 
   for (const rule of rules) {
@@ -55,5 +60,14 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/admin/:path*', '/nurse/:path*', '/receiver/:path*', '/login', '/register'],
+  matcher: [
+    '/',
+    '/admin/:path*',
+    '/nurse/:path*',
+    '/receiver/:path*',
+    '/doctor/:path*',
+    '/supervisor/:path*',
+    '/login',
+    '/register',
+  ],
 }

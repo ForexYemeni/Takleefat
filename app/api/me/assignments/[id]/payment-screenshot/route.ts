@@ -15,7 +15,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
     const { id } = await params
 
     const assignment = await db.assignment.findUnique({ where: { id } })

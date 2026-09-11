@@ -61,7 +61,7 @@ async function getApprovedNurseCard(id: string): Promise<CardData | null> {
     },
   })
   // الكادر المعتمد حصراً — أي حالة أخرى تعامل كغير موجودة
-  if (!nurse || nurse.role !== 'NURSE' || nurse.status !== 'APPROVED') return null
+  if (!nurse || (nurse.role !== 'NURSE' && nurse.role !== 'DOCTOR') || nurse.status !== 'APPROVED') return null
 
   const [assignmentAgg, ratingsAgg] = await Promise.all([
     db.assignment.groupBy({ by: ['status'], where: { nurseId: id }, _count: true }),

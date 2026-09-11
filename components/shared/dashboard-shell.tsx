@@ -10,6 +10,7 @@ import {
   Coins,
   FileCheck2,
   Headset,
+  HeartPulse,
   IdCard,
   Inbox,
   LayoutDashboard,
@@ -24,6 +25,7 @@ import {
   UserCog,
   UserRound,
   Users,
+  UserSquare2,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
@@ -48,7 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
-export type DashboardRole = 'ADMIN' | 'NURSE' | 'RECEIVER'
+export type DashboardRole = 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
 
 interface NavItem {
   href: string
@@ -67,8 +69,11 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/admin/nurses', label: 'الكادر التمريضي', icon: Users },
       { href: '/admin/receivers', label: 'المستلمون الإداريون', icon: UserCog },
+      { href: '/admin/doctors', label: 'الأطباء', icon: Stethoscope },
+      { href: '/admin/supervisors', label: 'مشرفو الأطباء', icon: UserSquare2 },
       { href: '/admin/organizations', label: 'الجهات الصحية', icon: Building2 },
-      { href: '/admin/departments', label: 'الأقسام الطبية', icon: Stethoscope },
+      { href: '/admin/departments', label: 'الأقسام الطبية', icon: ClipboardList },
+      { href: '/admin/specialties', label: 'التخصصات الطبية', icon: HeartPulse },
       { href: '/admin/assignments', label: 'التكليفات', icon: ClipboardList },
       { href: '/admin/documents', label: 'مراجعة المستندات', icon: FileCheck2 },
       { href: '/admin/settings', label: 'الرسوم وطرق الدفع', icon: Settings2 },
@@ -98,6 +103,30 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/receiver/favorites', label: 'الكوادر المفضلة', icon: Star },
       { href: '/receiver/earnings', label: 'أرباحي', icon: Coins },
       { href: '/receiver/profile', label: 'الملف الشخصي', icon: UserRound },
+    ],
+  },
+  DOCTOR: {
+    roleLabel: 'الطبيب',
+    profilePath: '/doctor/profile',
+    items: [
+      { href: '/doctor', label: 'نظرة عامة', icon: LayoutDashboard },
+      { href: '/doctor/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
+      { href: '/doctor/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
+      { href: '/doctor/documents', label: 'مستنداتي', icon: FileCheck2 },
+      { href: '/doctor/card', label: 'بطاقتي المهنية', icon: IdCard },
+      { href: '/doctor/profile', label: 'الملف الشخصي', icon: UserRound },
+    ],
+  },
+  DOCTOR_SUPERVISOR: {
+    roleLabel: 'مشرف الأطباء',
+    profilePath: '/supervisor/profile',
+    items: [
+      { href: '/supervisor', label: 'نظرة عامة', icon: LayoutDashboard },
+      { href: '/supervisor/assignments', label: 'تكليفات الأطباء', icon: Inbox },
+      { href: '/supervisor/staff', label: 'أطبائي', icon: Stethoscope },
+      { href: '/supervisor/favorites', label: 'الأطباء المفضلون', icon: Star },
+      { href: '/supervisor/earnings', label: 'أرباحي', icon: Coins },
+      { href: '/supervisor/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
   },
 }

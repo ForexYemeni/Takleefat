@@ -19,6 +19,8 @@ interface AudiencePreviewCardProps {
   department: string
   distribution: string
   enabled: boolean
+  /** جمهور التكليف — DOCTOR لجمهور الأطباء (منظومة الأطباء) */
+  audience?: 'NURSE' | 'DOCTOR' | null
 }
 
 const BREAKDOWN_CHIPS: Array<{ key: keyof AudiencePreviewResult['breakdown']; label: string; cls: string }> = [
@@ -36,12 +38,12 @@ const PROGRESSIVE_STAGES: Array<{ key: 'stage0' | 'stage1' | 'stage2' | 'stage3'
   { key: 'stage3', label: 'المرحلة 4 — كل الكوادر المؤهلين المطابقين' },
 ]
 
-export function AudiencePreviewCard({ hospitalId, gender, department, distribution, enabled }: AudiencePreviewCardProps) {
+export function AudiencePreviewCard({ hospitalId, gender, department, distribution, enabled, audience }: AudiencePreviewCardProps) {
   const { data, isFetching, isError } = useQuery({
-    queryKey: ['post-audience-preview', hospitalId, gender, department, distribution],
+    queryKey: ['post-audience-preview', hospitalId, gender, department, distribution, audience ?? ''],
     queryFn: () =>
       apiFetcher<AudiencePreviewResult>(
-        `/api/posts/audience-preview?hospitalId=${encodeURIComponent(hospitalId)}&gender=${gender}&department=${encodeURIComponent(department)}&distribution=${distribution}`
+        `/api/posts/audience-preview?hospitalId=${encodeURIComponent(hospitalId)}&gender=${gender}&department=${encodeURIComponent(department)}&distribution=${distribution}${audience === 'DOCTOR' ? '&audience=DOCTOR' : ''}`
       ),
     enabled: enabled && !!hospitalId,
     staleTime: 10_000,

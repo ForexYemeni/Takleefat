@@ -36,6 +36,8 @@ export interface PlatformSettings {
   paymentNotes: string
   /** نسبة المستلم الإداري من كل تكليف (٪) — تُحتسب من حساب الإدارة */
   receiverSharePercent: number
+  /** نسبة مشرف الأطباء من كل تكليف أطباء (٪) — تُحتسب من حساب الإدارة (منظومة الأطباء) */
+  supervisorSharePercent: number
 }
 
 export const SETTINGS_DEFAULTS: PlatformSettings = {
@@ -49,6 +51,7 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   paymentAccountName: 'منصة تكليفات',
   paymentNotes: '',
   receiverSharePercent: 10,
+  supervisorSharePercent: 10,
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
@@ -62,6 +65,7 @@ const KEYS: Record<keyof PlatformSettings, string> = {
   paymentAccountName: 'paymentAccountName',
   paymentNotes: 'paymentNotes',
   receiverSharePercent: 'receiverSharePercent',
+  supervisorSharePercent: 'supervisorSharePercent',
 }
 
 /**
@@ -137,6 +141,10 @@ export async function getSettings(): Promise<PlatformSettings> {
       receiverSharePercent: Math.min(
         100,
         num('receiverSharePercent', SETTINGS_DEFAULTS.receiverSharePercent)
+      ),
+      supervisorSharePercent: Math.min(
+        100,
+        num('supervisorSharePercent', SETTINGS_DEFAULTS.supervisorSharePercent)
       ),
     }
   } catch {

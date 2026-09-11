@@ -6,14 +6,12 @@ import { handleApiError, jsonError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notifications'
 
 /**
- * POST /api/auth/register — إنشاء حساب جديد (كادر تمريضي / مستلم إداري)
+ * POST /api/auth/register — إنشاء حساب جديد (كادر تمريضي / مستلم إداري / طبيب)
  * يبقى الحساب قيد المراجعة حتى اعتماده من مدير النظام.
  *
- * الجولة الثالثة عشرة:
- * - الاسم في حقل واحد (الاسم مع اللقب) + هاتف 9 أرقام + كلمة مرور مرة واحدة
- * - الكادر: المؤهل من 3 خيارات + الجنس إجباري + التخصص وسنوات الخبرة إجبارية من أقسام الإدارة
- * - المستلم: الجهة من قائمة الإدارة، أو جهة جديدة تُنشأ بحالة PENDING
- *   مع بقية بياناتها وترفع للاعتماد أو الرفض من حساب الإدارة.
+ * منظومة الأطباء:
+ * - الطبيب يسجل ذاتياً بمؤهلات التخصص الطبي الخاصة (بكالوريوس طب وجراحة / ماجستير / دكتوراه / زمالة)
+ * - مشرف الأطباء لا يُسجّل ذاتياً — تُنشئه الإدارة يدوياً (مثل المستلم الإداري)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -76,13 +74,13 @@ export async function POST(req: NextRequest) {
         password: hashedPassword,
         role,
         status: 'PENDING',
-        ...(role === 'NURSE'
+        ...(role === 'NURSE' || role === 'DOCTOR'
           ? {
-              // التخصص إجباري للكادر — يُختار من الأقسام المُدارة في حساب الإدارة
+              // التخصص إجباري للكادر والطبيب
               specialty: specialty?.trim() || null,
-              qualification,
+              qualification: qualification?.trim() || null,
               yearsOfExperience: yearsOfExperience ?? 0,
-              // الجنس إجباري للكادر (المتحقق في المخطط)
+              // الجنس إجباري للكادر والطبيب (المتحقق في المخطط)
               gender: gender ?? null,
             }
           : {}),
@@ -94,16 +92,20 @@ export async function POST(req: NextRequest) {
 
     // إشعار جميع مديري النظام بوجود طلب تسجيل جديد (+ جهة جديدة بانتظار الاعتماد)
     const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
+    const roleLabel =
+      role === 'DOCTOR' ? 'طبيب' : role === 'NURSE' ? 'كادر تمريضي' : 'مستلم إداري'
+    const reviewLink =
+      role === 'DOCTOR' ? '/admin/doctors' : role === 'NURSE' ? '/admin/nurses' : '/admin/receivers'
     await Promise.all([
       ...admins.map((admin) =>
         notify(admin.id, {
           title: 'طلب تسجيل جديد',
           body:
-            role === 'NURSE'
-              ? `${name} — ${specialty ? `تخصص ${specialty} — ` : ''}بانتظار اعتماد الحساب`
+            role === 'NURSE' || role === 'DOCTOR'
+              ? `${name} — ${roleLabel}${specialty ? ` — تخصص ${specialty}` : ''} — بانتظار اعتماد الحساب`
               : `${name} — طلب حساب مستلم إداري${hospitalName ? ` — الجهة الصحية: ${hospitalName.trim()}` : ''} — بانتظار الاعتماد`,
           type: 'GENERIC',
-          link: role === 'NURSE' ? '/admin/nurses' : '/admin/receivers',
+          link: reviewLink,
         })
       ),
       // إشعار الجهة الصحية الجديدة المقترحة
@@ -122,7 +124,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         message:
-          role === 'NURSE'
+          role === 'NURSE' || role === 'DOCTOR'
             ? 'تم إنشاء حسابك بنجاح! يمكنك تسجيل الدخول فوراً — لكن التقديم على التكليفات لا يتاح إلا بعد رفع مستنداتك واعتماد حسابك من الإدارة.'
             : pendingOrgName
               ? 'تم إنشاء حسابك بنجاح! جهتك الصحية الجديدة أُرسلت للإدارة لاعتمادها — يمكنك تسجيل الدخول فوراً وسيتم تمكينك من إنشاء التكليفات بعد اعتماد حسابك وجهتك.'

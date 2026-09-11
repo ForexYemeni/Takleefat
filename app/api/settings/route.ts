@@ -10,7 +10,7 @@ import { getSettings, setSetting } from '@/lib/settings'
  */
 export async function GET() {
   try {
-    await requireRole('ADMIN', 'NURSE', 'RECEIVER')
+    await requireRole('ADMIN', 'NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const settings = await getSettings()
     return NextResponse.json({ settings })
   } catch (error) {

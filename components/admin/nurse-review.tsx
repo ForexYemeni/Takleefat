@@ -20,9 +20,18 @@ import { apiFetcher, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS, QUALIFICATION_OPTIONS } from '@/lib/utils'
 import {
   createNurseSchema,
+  createDoctorSchema,
   type CreateNurseInput,
   type CreateNurseFormValues,
 } from '@/lib/validations/user'
+
+/** خيارات مؤهل الأطباء (منظومة الأطباء) — نفس قيم DOCTOR_QUALIFICATION_VALUES */
+const DOCTOR_QUALIFICATION_OPTIONS = [
+  { value: 'بكالوريوس طب وجراحة', label: 'بكالوريوس طب وجراحة' },
+  { value: 'ماجستير', label: 'ماجستير' },
+  { value: 'دكتوراه', label: 'دكتوراه' },
+  { value: 'شهادة زمالة', label: 'شهادة زمالة' },
+]
 import { StatusBadge } from '@/components/shared/status-badge'
 import { UserActionsMenu } from '@/components/admin/user-actions'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
@@ -102,7 +111,8 @@ const STATUS_TABS = [
   { value: 'SUSPENDED', label: 'موقوف' },
 ] as const
 
-export function NurseReview() {
+export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
+  const isDoctor = role === 'DOCTOR'
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<string>('ALL')
   const [search, setSearch] = useState('')
@@ -111,7 +121,7 @@ export function NurseReview() {
   const [showPassword, setShowPassword] = useState(false)
 
   const createForm = useForm<CreateNurseFormValues, unknown, CreateNurseInput>({
-    resolver: zodResolver(createNurseSchema),
+    resolver: zodResolver(isDoctor ? (createDoctorSchema as never) : createNurseSchema),
     defaultValues: {
       name: '',
       phone: '',
@@ -125,7 +135,7 @@ export function NurseReview() {
 
   const createMutation = useMutation({
     mutationFn: (values: CreateNurseInput) =>
-      apiPost<{ message: string }>('/api/admin/users', { ...values, role: 'NURSE' }),
+      apiPost<{ message: string }>('/api/admin/users', { ...values, role }),
     onSuccess: (res) => {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
@@ -137,8 +147,8 @@ export function NurseReview() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', 'NURSE'],
-    queryFn: () => apiFetcher<{ users: AdminUser[] }>('/api/admin/users?role=NURSE'),
+    queryKey: ['admin-users', role],
+    queryFn: () => apiFetcher<{ users: AdminUser[] }>(`/api/admin/users?role=${role}`),
   })
 
   const users = (data?.users ?? []).filter((u) => {
@@ -154,9 +164,11 @@ export function NurseReview() {
     <div className="space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-extrabold">الكادر التمريضي</h1>
+          <h1 className="text-2xl font-extrabold">{isDoctor ? 'الأطباء' : 'الكادر التمريضي'}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            مراجعة واعتماد حسابات الكوادر التمريضية في منصة تكليفات
+            {isDoctor
+              ? 'مراجعة واعتماد حسابات الأطباء في منصة تكليفات — منظومة الأطباء'
+              : 'مراجعة واعتماد حسابات الكوادر التمريضية في منصة تكليفات'}
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -171,7 +183,7 @@ export function NurseReview() {
           </div>
           <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">
             <UserPlus className="size-4" />
-            إضافة كادر
+            إضافة {isDoctor ? 'طبيب' : 'كادر'}
           </Button>
         </div>
       </div>
@@ -195,7 +207,11 @@ export function NurseReview() {
         <EmptyState
           icon={Users}
           title="لا توجد حسابات مطابقة"
-          description="لم يتم العثور على حسابات كادر تمريضي ضمن هذا التصنيف."
+          description={
+            isDoctor
+              ? 'لم يتم العثور على حسابات أطباء ضمن هذا التصنيف.'
+              : 'لم يتم العثور على حسابات كادر تمريضي ضمن هذا التصنيف.'
+          }
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border bg-card">
@@ -269,7 +285,7 @@ export function NurseReview() {
       <Dialog open={!!detailsUser} onOpenChange={(open) => !open && setDetailsUser(null)}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>بيانات الكادر التمريضي</DialogTitle>
+            <DialogTitle>{isDoctor ? 'بيانات الطبيب' : 'بيانات الكادر التمريضي'}</DialogTitle>
             <DialogDescription>
               بيانات الحساب والمستندات المرفوعة في منصة تكليفات
             </DialogDescription>
@@ -278,13 +294,15 @@ export function NurseReview() {
         </DialogContent>
       </Dialog>
 
-      {/* حوار إضافة كادر تمريضي جديد */}
+      {/* حوار إضافة عضو جديد (كادر/طبيب) */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>إضافة كادر تمريضي جديد</DialogTitle>
+            <DialogTitle>{isDoctor ? 'إضافة طبيب جديد' : 'إضافة كادر تمريضي جديد'}</DialogTitle>
             <DialogDescription>
-              يُنشأ الحساب معتمداً تلقائياً ويمكن للكادر تسجيل الدخول فوراً في منصة تكليفات.
+              {isDoctor
+                ? 'يُنشأ الحساب معتمداً تلقائياً — المؤهل من خيارات الأطباء والتخصص الطبي حقل حر.'
+                : 'يُنشأ الحساب معتمداً تلقائياً ويمكن للكادر تسجيل الدخول فوراً في منصة تكليفات.'}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -323,10 +341,10 @@ export function NurseReview() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="nurse-specialty">التخصص *</Label>
+                <Label htmlFor="nurse-specialty">{isDoctor ? 'التخصص الطبي *' : 'التخصص *'}</Label>
                 <Input
                   id="nurse-specialty"
-                  placeholder="مثال: تمريض طوارئ"
+                  placeholder={isDoctor ? 'مثال: باطنية' : 'مثال: تمريض طوارئ'}
                   {...createForm.register('specialty')}
                 />
                 {createForm.formState.errors.specialty && (
@@ -364,7 +382,7 @@ export function NurseReview() {
                     <SelectValue placeholder="اختر المؤهل" />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUALIFICATION_OPTIONS.map((q) => (
+                    {(isDoctor ? DOCTOR_QUALIFICATION_OPTIONS : QUALIFICATION_OPTIONS).map((q) => (
                       <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
                     ))}
                   </SelectContent>

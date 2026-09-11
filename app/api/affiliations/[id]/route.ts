@@ -41,7 +41,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('ADMIN', 'RECEIVER')
+    const session = await requireRole('ADMIN', 'RECEIVER', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const parsed = affiliationUpdateSchema.safeParse(await req.json())
@@ -98,7 +98,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('ADMIN', 'RECEIVER')
+    const session = await requireRole('ADMIN', 'RECEIVER', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const { affiliation, error } = await loadWithAccess(id, session.user.role, session.user.id)

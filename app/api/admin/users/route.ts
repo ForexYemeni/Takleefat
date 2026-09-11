@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { createReceiverSchema, createNurseSchema } from '@/lib/validations/user'
+import {
+  createReceiverSchema,
+  createNurseSchema,
+  createDoctorSchema,
+  createSupervisorSchema,
+} from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 
 /**
  * GET /api/admin/users?role=NURSE&status=PENDING&search=...
- * قائمة المستخدمين مع إمكانية التصفية
+ * قائمة المستخدمين مع إمكانية التصفية (كل الأدوار: كادر، مستلمون، أطباء، مشرفو أطباء)
  */
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +24,9 @@ export async function GET(req: NextRequest) {
 
     const users = await db.user.findMany({
       where: {
-        ...(role === 'NURSE' || role === 'RECEIVER' || role === 'ADMIN' ? { role } : {}),
+        ...(role && ['NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR'].includes(role)
+          ? { role: role as 'NURSE' | 'RECEIVER' | 'ADMIN' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' }
+          : {}),
         ...(status && ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(status)
           ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
           : {}),
@@ -62,16 +69,25 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/admin/users — إنشاء حساب جديد (مستلم إداري أو كادر تمريضي)
- * body: { role: 'RECEIVER' | 'NURSE', ...الحقول }
+ * POST /api/admin/users — إنشاء حساب جديد من الإدارة
+ * body: { role: 'RECEIVER' | 'NURSE' | 'DOCTOR' | 'DOCTOR_SUPERVISOR', ...الحقول }
  * الحساب يُنشأ معتمداً تلقائياً لأن المدير هو من ينشئه.
+ * DOCTOR_SUPERVISOR: مشرف أطباء (يستدعي الأطباء — منظومة الأطباء)
+ * DOCTOR: طبيب بمؤهلات التخصص الطبي الخاصة
  */
 export async function POST(req: NextRequest) {
   try {
     await requireRole('ADMIN')
 
     const body = await req.json()
-    const role: 'NURSE' | 'RECEIVER' = body?.role === 'NURSE' ? 'NURSE' : 'RECEIVER'
+    const role: 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' =
+      body?.role === 'NURSE'
+        ? 'NURSE'
+        : body?.role === 'DOCTOR'
+          ? 'DOCTOR'
+          : body?.role === 'DOCTOR_SUPERVISOR'
+            ? 'DOCTOR_SUPERVISOR'
+            : 'RECEIVER'
 
     // التحقق حسب نوع الحساب ثم الإنشاء (فصل الفروع لتضييق الأنواع بشكل صحيح)
     if (role === 'NURSE') {
@@ -112,6 +128,87 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json(
         { message: 'تم إنشاء حساب الكادر التمريضي بنجاح', user },
+        { status: 201 }
+      )
+    }
+
+    // الطبيب — مؤهلات التخصص الطبي الخاصة (منظومة الأطباء)
+    if (role === 'DOCTOR') {
+      const parsed = createDoctorSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
+      }
+      const { name, phone, password, specialty, qualification, gender, yearsOfExperience } = parsed.data
+
+      const existing = await db.user.findUnique({ where: { phone } })
+      if (existing) {
+        return jsonError('رقم الهاتف مسجل مسبقاً في المنصة', 409)
+      }
+
+      const hashed = await hash(password, 12)
+      const user = await db.user.create({
+        data: {
+          name,
+          phone,
+          password: hashed,
+          role: 'DOCTOR',
+          status: 'APPROVED',
+          specialty: specialty.trim(),
+          qualification,
+          gender,
+          yearsOfExperience: yearsOfExperience ?? 0,
+        },
+        select: { id: true, name: true, phone: true, role: true, status: true },
+      })
+
+      await notify(user.id, {
+        title: 'مرحباً بك في تكليفات',
+        body: 'تم إنشاء حسابك كطبيب. يمكنك الآن استعراض التكليفات المتاحة ورفع مستنداتك والتقديم عليها.',
+        type: 'GENERIC',
+        link: '/doctor',
+      })
+
+      return NextResponse.json(
+        { message: 'تم إنشاء حساب الطبيب بنجاح', user },
+        { status: 201 }
+      )
+    }
+
+    // مشرف الأطباء — نفس شكل المستلم الإداري (منظومة الأطباء)
+    if (role === 'DOCTOR_SUPERVISOR') {
+      const parsed = createSupervisorSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
+      }
+      const { name, phone, password, hospitalName } = parsed.data
+
+      const existing = await db.user.findUnique({ where: { phone } })
+      if (existing) {
+        return jsonError('رقم الهاتف مسجل مسبقاً في المنصة', 409)
+      }
+
+      const hashed = await hash(password, 12)
+      const user = await db.user.create({
+        data: {
+          name,
+          phone,
+          password: hashed,
+          role: 'DOCTOR_SUPERVISOR',
+          status: 'APPROVED', // حسابات يُنشئها المدير تكون معتمدة تلقائياً
+          ...(hospitalName ? { hospitalName: hospitalName.trim() } : {}),
+        },
+        select: { id: true, name: true, phone: true, role: true, status: true },
+      })
+
+      await notify(user.id, {
+        title: 'مرحباً بك في تكليفات',
+        body: 'تم إنشاء حسابك كمشرف أطباء. يمكنك الآن إنشاء تكليفات الأطباء واستدعاء الأطباء لجهتك.',
+        type: 'GENERIC',
+        link: '/supervisor',
+      })
+
+      return NextResponse.json(
+        { message: 'تم إنشاء حساب مشرف الأطباء بنجاح', user },
         { status: 201 }
       )
     }

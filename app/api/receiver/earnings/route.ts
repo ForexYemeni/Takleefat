@@ -10,7 +10,7 @@ import { getSettings } from '@/lib/settings'
  */
 export async function GET() {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
 
     const [earnings, withdrawals, settings, me] = await Promise.all([
       db.receiverEarning.findMany({

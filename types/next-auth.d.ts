@@ -6,7 +6,7 @@ declare module 'next-auth' {
       id: string
       name: string
       phone: string
-      role: 'ADMIN' | 'NURSE' | 'RECEIVER'
+      role: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
       status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
     } & DefaultSession['user']
   }
@@ -15,7 +15,7 @@ declare module 'next-auth' {
     id: string
     name: string
     phone: string
-    role: 'ADMIN' | 'NURSE' | 'RECEIVER'
+    role: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
     status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
   }
 }
@@ -24,7 +24,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id?: string
     phone?: string
-    role?: 'ADMIN' | 'NURSE' | 'RECEIVER'
+    role?: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
     status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
   }
 }

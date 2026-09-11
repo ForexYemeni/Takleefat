@@ -8,6 +8,9 @@ export const createPostSchema = z.object({
   // العنوان اختياري — يُولَّد تلقائياً «التكليف رقم N» إذا تُرك فارغاً
   title: z.string().max(150, 'العنوان طويل جداً').optional().or(z.literal('')),
   description: z.string().max(2000, 'الوصف طويل جداً').optional().or(z.literal('')),
+  // جمهور التكليف — NURSE: يقدّم عليه الكادر التمريضي | DOCTOR: يقدّم عليه الأطباء (منظومة الأطباء)
+  // الإدارة تختار بحرية، المستلم الإداري يُفرض عليه NURSE، مشرف الأطباء يُفرض عليه DOCTOR على الخادم
+  audience: z.enum(['NURSE', 'DOCTOR'], { error: 'جمهور التكليف غير صحيح' }).default('NURSE'),
   // الجهة الصحية تُختار من المستشفيات المضافة من حساب الإدارة
   hospitalId: z.string({ error: 'الجهة الصحية مطلوبة' }).min(1, 'الجهة الصحية مطلوبة'),
   department: z.string().max(120).optional().or(z.literal('')),
@@ -135,6 +138,13 @@ export const settingsSchema = z
       .min(0, 'النسبة لا يمكن أن تكون سالبة')
       .max(100, 'النسبة لا تتجاوز 100٪')
       .optional(),
+    // نسبة مشرف الأطباء من كل تكليف أطباء — تُحتسب من حساب الإدارة (منظومة الأطباء)
+    supervisorSharePercent: z.coerce
+      .number({ error: 'نسبة مشرف الأطباء غير صحيحة' })
+      .int('النسبة يجب أن تكون رقماً صحيحاً')
+      .min(0, 'النسبة لا يمكن أن تكون سالبة')
+      .max(100, 'النسبة لا تتجاوز 100٪')
+      .optional(),
   })
   .refine(
     (data) =>
@@ -255,6 +265,17 @@ export const departmentSchema = z.object({
 })
 
 export const departmentUpdateSchema = departmentSchema.partial().extend({
+  isActive: z.boolean().optional(),
+})
+
+export const specialtySchema = z.object({
+  name: z
+    .string({ error: 'اسم التخصص مطلوب' })
+    .min(2, 'اسم التخصص مطلوب')
+    .max(120, 'الاسم طويل جداً'),
+})
+
+export const specialtyUpdateSchema = specialtySchema.partial().extend({
   isActive: z.boolean().optional(),
 })
 

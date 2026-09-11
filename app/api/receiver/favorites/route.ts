@@ -15,7 +15,7 @@ import { findMatchingNurses } from '@/lib/network'
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const search = req.nextUrl.searchParams.get('search')
 
     // قائمته الخاصة حصراً — ثم تُرتب بالمطابقة الذكية (المفضلة أولاً بطبيعتها)
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const parsed = favoriteSchema.safeParse(await req.json())
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const nurseId = req.nextUrl.searchParams.get('nurseId')
     if (!nurseId) throw new ApiError('معرّف الكادر مطلوب', 400)
 
@@ -118,7 +118,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const nurseId = req.nextUrl.searchParams.get('nurseId')
     if (!nurseId) throw new ApiError('معرّف الكادر مطلوب', 400)
 

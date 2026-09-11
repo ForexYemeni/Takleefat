@@ -11,7 +11,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
     const { id } = await params
 
     const document = await db.document.findUnique({ where: { id } })

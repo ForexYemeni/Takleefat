@@ -10,7 +10,7 @@ import { getSettings } from '@/lib/settings'
  */
 export async function GET() {
   try {
-    const session = await requireRole('NURSE', 'RECEIVER')
+    const session = await requireRole('NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const isNurse = session.user.role === 'NURSE'
 
     const [assignments, settings] = await Promise.all([

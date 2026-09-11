@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('RECEIVER', 'ADMIN')
+    const session = await requireRole('RECEIVER', 'ADMIN', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const post = await db.post.findUnique({

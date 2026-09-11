@@ -1174,6 +1174,7 @@ function AdminPostsTab() {
           if (!open) setRepostMode(false)
         }}
         repostSource={repostMode ? posts[0] ?? null : null}
+        allowAudienceChoice
         onCreated={() => invalidate()}
       />
 

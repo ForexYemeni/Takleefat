@@ -47,12 +47,16 @@ export interface FeeSettlement {
 export async function settleAssignmentFees(assignmentId: string): Promise<FeeSettlement | null> {
   const assignment = await db.assignment.findUnique({
     where: { id: assignmentId },
-    include: { earning: true },
+    include: { earning: true, receiver: { select: { role: true } } },
   })
   if (!assignment) return null
 
   const settings: PlatformSettings = await getSettings()
-  const sharePercent = settings.receiverSharePercent
+  // نسبة الحصة حسب دور صاحب التكليف: مشرف أطباء → نسبة المشرف | مستلم إداري → نسبة المستلم
+  const sharePercent =
+    assignment.receiver.role === 'DOCTOR_SUPERVISOR'
+      ? settings.supervisorSharePercent
+      : settings.receiverSharePercent
   const earningAmount = calcReceiverEarning(assignment.value, sharePercent)
 
   // حصة الإدارة — تُحتسب عند الغياب فقط (لا نغيّر قيماً محسوبة سابقاً)
@@ -90,9 +94,13 @@ export async function settleAssignmentFees(assignmentId: string): Promise<FeeSet
 }
 
 /** وصف نصي موحد لنتيجة التسوية — يُستخدم في السجلات والرسوم والرسائل */
-export function settlementNote(settlement: FeeSettlement, assignmentValue: number | null): string {
+export function settlementNote(
+  settlement: FeeSettlement,
+  assignmentValue: number | null,
+  beneficiaryLabel = 'المستلم الإداري'
+): string {
   if (settlement.earningAmount > 0) {
-    return `تم توزيع رسوم التكليف — ربح المستلم الإداري: ${formatCurrency(settlement.earningAmount)} (${settlement.sharePercent}٪ من ${formatCurrency(assignmentValue ?? 0)})${settlement.adminFeeBackfilled ? ' — وعُبئت حصة الإدارة الناقصة' : ''}`
+    return `تم توزيع رسوم التكليف — ربح ${beneficiaryLabel}: ${formatCurrency(settlement.earningAmount)} (${settlement.sharePercent}٪ من ${formatCurrency(assignmentValue ?? 0)})${settlement.adminFeeBackfilled ? ' — وعُبئت حصة الإدارة الناقصة' : ''}`
   }
   return settlement.adminFeeBackfilled
     ? `عُبئت حصة الإدارة الناقصة: ${formatCurrency(settlement.adminFee ?? 0)}`

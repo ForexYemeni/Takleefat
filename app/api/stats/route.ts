@@ -8,7 +8,7 @@ import { requireRole, handleApiError } from '@/lib/api-helpers'
  */
 export async function GET() {
   try {
-    const session = await requireRole('ADMIN', 'NURSE', 'RECEIVER')
+    const session = await requireRole('ADMIN', 'NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const userId = session.user.id
 
     if (session.user.role === 'ADMIN') {
@@ -17,6 +17,10 @@ export async function GET() {
         pendingNurses,
         approvedNurses,
         totalReceivers,
+        totalDoctors,
+        pendingDoctors,
+        approvedDoctors,
+        totalSupervisors,
         totalAssignments,
         activeAssignments,
         receivedAssignments,
@@ -30,6 +34,10 @@ export async function GET() {
         db.user.count({ where: { role: 'NURSE', status: 'PENDING' } }),
         db.user.count({ where: { role: 'NURSE', status: 'APPROVED' } }),
         db.user.count({ where: { role: 'RECEIVER' } }),
+        db.user.count({ where: { role: 'DOCTOR' } }),
+        db.user.count({ where: { role: 'DOCTOR', status: 'PENDING' } }),
+        db.user.count({ where: { role: 'DOCTOR', status: 'APPROVED' } }),
+        db.user.count({ where: { role: 'DOCTOR_SUPERVISOR' } }),
         db.assignment.count(),
         db.assignment.count({ where: { status: 'ACTIVE' } }),
         db.assignment.count({ where: { status: 'RECEIVED' } }),
@@ -47,6 +55,10 @@ export async function GET() {
         approvedNurses,
         totalReceivers,
         pendingReceivers,
+        totalDoctors,
+        pendingDoctors,
+        approvedDoctors,
+        totalSupervisors,
         totalAssignments,
         activeAssignments,
         receivedAssignments,
@@ -57,7 +69,7 @@ export async function GET() {
       })
     }
 
-    if (session.user.role === 'NURSE') {
+    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       const [
         myAssignments,
         activeAssignments,
@@ -79,7 +91,7 @@ export async function GET() {
       ])
 
       return NextResponse.json({
-        role: 'NURSE',
+        role: session.user.role,
         myAssignments,
         activeAssignments,
         completedAssignments,
@@ -91,7 +103,7 @@ export async function GET() {
       })
     }
 
-    // RECEIVER
+    // RECEIVER + DOCTOR_SUPERVISOR (نفس الشكل — منظومة الأطباء)
     const [
       myAssignments,
       pendingReceipt,
@@ -111,7 +123,7 @@ export async function GET() {
     ])
 
     return NextResponse.json({
-      role: 'RECEIVER',
+      role: session.user.role,
       myAssignments,
       pendingReceipt,
       completedAssignments,

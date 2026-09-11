@@ -10,7 +10,7 @@ import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
  */
 export async function GET() {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
     const nurseId = session.user.id
 
     const [affiliations, workDepartments, assignmentAgg, applicationAgg, ratingsAgg, busy] = await Promise.all([

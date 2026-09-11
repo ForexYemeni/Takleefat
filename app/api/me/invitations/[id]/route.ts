@@ -14,7 +14,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     const action = body?.action === 'ACCEPT' ? 'ACCEPT' : body?.action === 'DECLINE' ? 'DECLINE' : null

@@ -19,6 +19,14 @@ export const PHONE_MESSAGE =
 /** المؤهل العلمي — الخيارات الثابتة الثلاثة (نفس قيم QUALIFICATION_OPTIONS في lib/utils) */
 export const QUALIFICATION_VALUES = ['أورديلي سنة', 'دبلوم ثلاث سنوات', 'بكالوريوس أربع سنوات'] as const
 
+/** المؤهل العلمي للأطباء — خيارات ثابتة خاصة بمنظومة الأطباء */
+export const DOCTOR_QUALIFICATION_VALUES = [
+  'بكالوريوس طب وجراحة',
+  'ماجستير',
+  'دكتوراه',
+  'شهادة زمالة',
+] as const
+
 export const loginSchema = z.object({
   phone: z
     .string({ error: 'رقم الهاتف مطلوب' })
@@ -49,7 +57,8 @@ export const newOrgSchema = z.object({
 export const registerSchema = z
   .object({
     // الافتراضي: كادر تمريضي — للتوافق مع أي طلبات قديمة لا تُرسل الحقل
-    role: z.enum(['NURSE', 'RECEIVER'], { error: 'نوع الحساب مطلوب' }).default('NURSE'),
+    // DOCTOR: تسجيل ذاتي للطبيب (منظومة الأطباء) — مشرف الأطباء لا يُسجّل ذاتياً (الإدارة تنشئه)
+    role: z.enum(['NURSE', 'RECEIVER', 'DOCTOR'], { error: 'نوع الحساب مطلوب' }).default('NURSE'),
     // الاسم مع اللقب فقط — كلمتان على الأقل (تُفحص في superRefine)
     name: z
       .string({ error: 'الاسم مطلوب' })
@@ -62,9 +71,10 @@ export const registerSchema = z
       .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
       .regex(/[A-Za-z]/, 'كلمة المرور يجب أن تحتوي على حروف')
       .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على أرقام'),
-    // حقول خاصة بالكادر التمريضي — التخصص إجباري للكادر (تُفحص في superRefine)
+    // حقول خاصة بالكادر التمريضي والطبيب — التخصص إجباري (تُفحص في superRefine)
     specialty: z.string().trim().max(80, 'التخصص طويل جداً').optional(),
-    qualification: z.enum(QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }).optional(),
+    // المؤهل: للكادر من 3 خيارات وللطبيب من خياراته الخاصة (تُفحص في superRefine)
+    qualification: z.string().optional(),
     // الجهة الصحية (المستشفى) — خاصة بالمستلم الإداري
     hospitalName: z.string().max(120, 'اسم الجهة الصحية طويل جداً').optional(),
     // جهة صحية جديدة لا توجد في قائمة الإدارة — تُرفع بانتظار الاعتماد مع بقية بياناتها
@@ -94,12 +104,18 @@ export const registerSchema = z
       })
     }
 
-    // بيانات الكادر التمريضي: المؤهل والجنس والتخصص وسنوات الخبرة كلها إلزامية
-    if (data.role === 'NURSE') {
-      if (!data.qualification) {
+    // بيانات الكادر التمريضي والطبيب: المؤهل والجنس والتخصص وسنوات الخبرة كلها إلزامية
+    if (data.role === 'NURSE' || data.role === 'DOCTOR') {
+      // المؤهل من قائمة الدور الصحيحة (الطبيب له خياراته الخاصة)
+      const allowedQuals: readonly string[] =
+        data.role === 'DOCTOR' ? DOCTOR_QUALIFICATION_VALUES : QUALIFICATION_VALUES
+      if (!data.qualification || !allowedQuals.includes(data.qualification)) {
         ctx.addIssue({
           code: 'custom',
-          message: 'المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)',
+          message:
+            data.role === 'DOCTOR'
+              ? 'المؤهل العلمي مطلوب — اختر من القائمة (بكالوريوس طب وجراحة / ماجستير / دكتوراه / شهادة زمالة)'
+              : 'المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)',
           path: ['qualification'],
         })
       }
@@ -113,7 +129,10 @@ export const registerSchema = z
       if (!data.specialty || data.specialty.trim().length === 0) {
         ctx.addIssue({
           code: 'custom',
-          message: 'التخصص مطلوب — اختر القسم من القائمة',
+          message:
+            data.role === 'DOCTOR'
+              ? 'التخصص مطلوب — اختر التخصص الطبي من القائمة'
+              : 'التخصص مطلوب — اختر القسم من القائمة',
           path: ['specialty'],
         })
       }

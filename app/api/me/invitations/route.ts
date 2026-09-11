@@ -10,7 +10,7 @@ import { requireRole, handleApiError } from '@/lib/api-helpers'
 
 export async function GET() {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
 
     const invitations = await db.nurseInvitation.findMany({
       where: { nurseId: session.user.id },

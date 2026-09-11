@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PHONE_REGEX, PHONE_MESSAGE, QUALIFICATION_VALUES } from '@/lib/validations/auth'
+import { PHONE_REGEX, PHONE_MESSAGE, QUALIFICATION_VALUES, DOCTOR_QUALIFICATION_VALUES } from '@/lib/validations/auth'
 
 /**
  * حسابات يُنشئها مدير النظام (مستلم إداري / كادر تمريضي) ومستلم الجهة لكوادر جهته.
@@ -83,6 +83,31 @@ export const receiverCreateNurseSchema = z.object({
   ),
 })
 
+/** إنشاء حساب طبيب من الإدارة — مؤهلات الأطباء الخاصة (منظومة الأطباء) */
+export const createDoctorSchema = z.object({
+  name: fullNameSchema,
+  phone: adminPhoneSchema,
+  password: adminPasswordSchema,
+  specialty: z
+    .string({ error: 'التخصص مطلوب — اختر التخصص الطبي من القائمة' })
+    .trim()
+    .min(1, 'التخصص مطلوب — اختر التخصص الطبي من القائمة')
+    .max(80, 'التخصص طويل جداً'),
+  qualification: z.enum(DOCTOR_QUALIFICATION_VALUES, { error: 'اختر المؤهل العلمي من القائمة' }),
+  gender: z.enum(['MALE', 'FEMALE'], { error: 'الجنس مطلوب — اختر ذكر أو أنثى' }),
+  yearsOfExperience: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.coerce
+      .number({ error: 'سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)' })
+      .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
+      .min(0, 'سنوات الخبرة غير صحيحة')
+      .max(50, 'سنوات الخبرة غير صحيحة')
+  ),
+})
+
+/** إنشاء حساب مشرف أطباء من الإدارة — نفس شكل المستلم الإداري (منظومة الأطباء) */
+export const createSupervisorSchema = createReceiverSchema
+
 export const reviewUserSchema = z.object({
   status: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING'], {
     error: 'الحالة غير صحيحة',
@@ -93,6 +118,9 @@ export const reviewUserSchema = z.object({
 export type CreateReceiverInput = z.infer<typeof createReceiverSchema>
 export type CreateNurseInput = z.infer<typeof createNurseSchema>
 export type CreateNurseFormValues = z.input<typeof createNurseSchema>
+export type CreateDoctorInput = z.infer<typeof createDoctorSchema>
+export type CreateDoctorFormValues = z.input<typeof createDoctorSchema>
+export type CreateSupervisorInput = z.infer<typeof createSupervisorSchema>
 export type ReceiverCreateNurseInput = z.infer<typeof receiverCreateNurseSchema>
 export type ReceiverCreateNurseFormValues = z.input<typeof receiverCreateNurseSchema>
 
@@ -133,3 +161,14 @@ export const workDepartmentsSchema = z.object({
 })
 
 export type WorkDepartmentsInput = z.infer<typeof workDepartmentsSchema>
+
+// ---------- تخصصات عمل الطبيب (تعدد تخصصات من كتالوج التخصصات الطبية — منظومة الأطباء) ----------
+
+export const workSpecialtiesSchema = z.object({
+  // معرفات التخصصات المختارة من كتالوج الإدارة — استبدال كامل للمجموعة الحالية
+  specialtyIds: z
+    .array(z.string().min(1, 'معرّف التخصص غير صحيح'), { error: 'قائمة التخصصات غير صحيحة' })
+    .max(20, 'الحد الأقصى 20 تخصصاً'),
+})
+
+export type WorkSpecialtiesInput = z.infer<typeof workSpecialtiesSchema>

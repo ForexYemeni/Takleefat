@@ -16,7 +16,7 @@ const VALID_TYPES = ['ID_CARD', 'PRACTICE_LICENSE', 'EXPERIENCE_CERT', 'OTHER']
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
 
     const formData = await req.formData()
     const file = formData.get('file')

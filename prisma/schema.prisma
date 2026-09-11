@@ -19,6 +19,15 @@ enum Role {
   ADMIN
   NURSE
   RECEIVER
+  DOCTOR
+  DOCTOR_SUPERVISOR
+}
+
+/// جمهور التكليف المُعلن — الكادر المستهدف بالتقديم
+/// NURSE: كادر تمريضي (السلوك التاريخي) | DOCTOR: أطباء (منظومة الأطباء)
+enum Audience {
+  NURSE
+  DOCTOR
 }
 
 /// حالة الحساب (يعمل النظام بموافقة المدير)
@@ -198,6 +207,8 @@ model User {
   applicationsReviewed Application[]      @relation("ApplicationReviewer")
   // أقسام العمل التي يعمل بها الكادر (رقود/طوارئ/عناية/مختبر...) — تعدد أقسام من كتالوج الإدارة
   workDepartments      WorkDepartment[]   @relation("NurseWorkDepartments")
+  // تخصصات عمل الطبيب — تعدد تخصصات من كتالوج التخصصات الطبية (منظومة الأطباء)
+  workSpecialties      DoctorSpecialty[]  @relation("DoctorWorkSpecialties")
   // شبكة الكوادر: الارتباط المهني + المفضلة + الاستدعاءات
   affiliations         NurseAffiliation[] @relation("NurseAffiliations")
   affiliationsReviewed NurseAffiliation[] @relation("AffiliationReviewer")
@@ -329,6 +340,8 @@ model Post {
   hours             Int?
   /// الجنس المطلوب للتكليف
   gender            Gender              @default(ANY)
+  /// جمهور التكليف — NURSE: يقدّم عليه الكادر التمريضي | DOCTOR: يقدّم عليه الأطباء
+  audience          Audience            @default(NURSE)
   nursesNeeded      Int                 @default(1)
   /// قيمة التكليف (المقابل المالي الكامل) بالريال اليمني
   value             Int
@@ -410,6 +423,35 @@ model WorkDepartment {
   @@unique([nurseId, departmentId])
   @@index([departmentId])
   @@map("work_departments")
+}
+
+/// التخصصات الطبية — كتالوج مستقل تُديره الإدارة (باطنية، جراحة عامة، أطفال، نساء وولادة...)
+/// تُختار عند إنشاء تكليف مُوجّه للأطباء ويصرح بها الطبيب ضمن تخصصات عمله
+model Specialty {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  doctors DoctorSpecialty[] @relation("SpecialtyDoctors")
+
+  @@map("specialties")
+}
+
+/// تخصصات عمل الطبيب — يختار الطبيب عدة تخصصات يعمل بها من كتالوج الإدارة
+/// وعند إنشاء تكليف أطباء بتخصص محدد يصل التكليف مباشرة لمن أضاف هذا التخصص
+model DoctorSpecialty {
+  id          String   @id @default(cuid())
+  doctorId    String
+  specialtyId String
+  createdAt   DateTime @default(now())
+
+  doctor    User      @relation("DoctorWorkSpecialties", fields: [doctorId], references: [id], onDelete: Cascade)
+  specialty Specialty @relation("SpecialtyDoctors", fields: [specialtyId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, specialtyId])
+  @@index([specialtyId])
+  @@map("doctor_specialties")
 }
 
 /// تقديم الكادر التمريضي على تكليف مُعلن

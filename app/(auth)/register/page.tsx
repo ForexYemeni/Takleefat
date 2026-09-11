@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Hospital,
   PlusCircle,
+  HeartPulse,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -32,12 +33,11 @@ import { ORG_TYPE_LABELS } from '@/lib/network'
 import { getServerIssueMessage } from '@/lib/client-diagnostics'
 
 /**
- * صفحة التسجيل — الجولة الثالثة عشرة:
- * - الاسم مع اللقب في حقل واحد (حقل واحد للكادر والمستلم)
- * - الهاتف 9 أرقام حصراً (maxLength=9)
- * - كلمة المرور مرة واحدة دون تأكيد
- * - الكادر: التخصص إجباري (أقسام الإدارة) + سنوات الخبرة إجبارية + المؤهل من 3 خيارات + الجنس إجباري
- * - المستلم: الجهة من جهات الإدارة أو جهة جديدة مع بقية بياناتها تُرفع للاعتماد
+ * صفحة التسجيل — منظومة الأطباء:
+ * - الاسم مع اللقب في حقل واحد + هاتف 9 أرقام + كلمة مرور مرة واحدة
+ * - الكادر: التخصص إجباري (أقسام الإدارة) + المؤهل من 3 خيارات
+ * - الطبيب: التخصص الطبي إجباري (كتالوج التخصصات المستقل) + مؤهلات الأطباء الخاصة
+ * - المستلم: الجهة من جهات الإدارة أو جهة جديدة تُرفع للاعتماد
  */
 
 interface PublicOrg {
@@ -49,6 +49,14 @@ interface PublicOrg {
 
 const ORG_TYPE_OPTIONS = ['HOSPITAL', 'MEDICAL_CENTER', 'SPECIALIZED_CENTER', 'CLINIC', 'MEDICAL_COMPLEX', 'OTHER'] as const
 
+/** مؤهلات الأطباء — خيارات خاصة بمنظومة الأطباء (نفس قيم DOCTOR_QUALIFICATION_VALUES) */
+const DOCTOR_QUALIFICATION_OPTIONS = [
+  { value: 'بكالوريوس طب وجراحة', label: 'بكالوريوس طب وجراحة' },
+  { value: 'ماجستير', label: 'ماجستير' },
+  { value: 'دكتوراه', label: 'دكتوراه' },
+  { value: 'شهادة زمالة', label: 'شهادة زمالة' },
+]
+
 export default function RegisterPage() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
@@ -57,10 +65,11 @@ export default function RegisterPage() {
 
   // كتالوجات الإدارة للقوائم (نقاط نهاية عامة)
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([])
+  const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
   const [orgs, setOrgs] = useState<PublicOrg[]>([])
 
   // حقول مشتركة
-  const [role, setRole] = useState<'NURSE' | 'RECEIVER'>('NURSE')
+  const [role, setRole] = useState<'NURSE' | 'RECEIVER' | 'DOCTOR'>('NURSE')
   const [name, setName] = useState('') // حقل واحد: الاسم مع اللقب
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
@@ -80,6 +89,10 @@ export default function RegisterPage() {
     fetch('/api/departments/public')
       .then((r) => r.json())
       .then((d) => setDepartments(d.departments ?? []))
+      .catch(() => null)
+    fetch('/api/specialties/public')
+      .then((r) => r.json())
+      .then((d) => setSpecialties(d.specialties ?? []))
       .catch(() => null)
     fetch('/api/hospitals/public')
       .then((r) => r.json())
@@ -102,9 +115,13 @@ export default function RegisterPage() {
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
       return setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي حروفاً وأرقاماً')
     }
-    if (role === 'NURSE') {
+    if (role === 'NURSE' || role === 'DOCTOR') {
       if (specialty.trim().length === 0) {
-        return setError('التخصص مطلوب — اختر القسم من القائمة')
+        return setError(
+          role === 'DOCTOR'
+            ? 'التخصص مطلوب — اختر التخصص الطبي من القائمة'
+            : 'التخصص مطلوب — اختر القسم من القائمة'
+        )
       }
       if (yearsOfExperience === '') {
         return setError('سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)')
@@ -113,7 +130,11 @@ export default function RegisterPage() {
         return setError('سنوات الخبرة يجب أن تكون رقماً صحيحاً بين 0 و 50')
       }
       if (!qualification) {
-        return setError('المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)')
+        return setError(
+          role === 'DOCTOR'
+            ? 'المؤهل العلمي مطلوب — اختر من القائمة (بكالوريوس طب وجراحة / ماجستير / دكتوراه / شهادة زمالة)'
+            : 'المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)'
+        )
       }
       if (!gender) {
         return setError('الجنس مطلوب — اختر ذكر أو أنثى')
@@ -130,7 +151,7 @@ export default function RegisterPage() {
 
     const payload: Record<string, unknown> = { role, name: name.trim(), phone, password }
 
-    if (role === 'NURSE') {
+    if (role === 'NURSE' || role === 'DOCTOR') {
       payload.specialty = specialty.trim() // إجباري
       payload.qualification = qualification
       payload.yearsOfExperience = Number(yearsOfExperience) // إجباري (0 للمتخرج الجديد)
@@ -193,8 +214,8 @@ export default function RegisterPage() {
         </Alert>
       )}
 
-      {/* اختيار نوع الحساب */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* اختيار نوع الحساب — كادر تمريضي / طبيب / مستلم إداري */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <button
           type="button"
           onClick={() => setRole('NURSE')}
@@ -209,8 +230,20 @@ export default function RegisterPage() {
         </button>
         <button
           type="button"
-          onClick={() => setRole('RECEIVER')}
+          onClick={() => setRole('DOCTOR')}
           className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+            role === 'DOCTOR'
+              ? 'border-primary bg-primary/5 text-primary'
+              : 'border-border text-muted-foreground hover:border-primary/40'
+          }`}
+        >
+          <HeartPulse className="size-6" />
+          <span className="text-sm font-bold">طبيب</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setRole('RECEIVER')}
+          className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors sm:col-start-3 ${
             role === 'RECEIVER'
               ? 'border-primary bg-primary/5 text-primary'
               : 'border-border text-muted-foreground hover:border-primary/40'
@@ -256,33 +289,33 @@ export default function RegisterPage() {
           <p className="text-[11px] text-muted-foreground">9 أرقام فقط — يبدأ بـ 7</p>
         </div>
 
-        {/* ---------- حقول الكادر التمريضي ---------- */}
-        {role === 'NURSE' && (
+        {/* ---------- حقول الكادر التمريضي والطبيب (منظومة الأطباء) ---------- */}
+        {(role === 'NURSE' || role === 'DOCTOR') && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* التخصص — إجباري من أقسام الإدارة */}
+              {/* التخصص — إجباري من كتالوجات الإدارة (أقسام للكادر / تخصصات طبية للطبيب) */}
               <div className="space-y-2">
-                <Label htmlFor="specialty">التخصص *</Label>
-                {departments.length === 0 ? (
+                <Label htmlFor="specialty">{role === 'DOCTOR' ? 'التخصص الطبي *' : 'التخصص *'}</Label>
+                {(role === 'DOCTOR' ? specialties : departments).length === 0 ? (
                   <>
                     <Input
                       id="specialty"
-                      placeholder="مثال: تمريض طوارئ"
+                      placeholder={role === 'DOCTOR' ? 'مثال: باطنية' : 'مثال: تمريض طوارئ'}
                       value={specialty}
                       onChange={(e) => setSpecialty(e.target.value)}
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      قائمة الأقسام غير متوفرة حالياً — اكتب تخصصك يدوياً
+                      القائمة غير متوفرة حالياً — اكتب تخصصك يدوياً
                     </p>
                   </>
                 ) : (
                   <>
                     <Select value={specialty} onValueChange={setSpecialty}>
                       <SelectTrigger id="specialty">
-                        <SelectValue placeholder="اختر القسم / التخصص" />
+                        <SelectValue placeholder={role === 'DOCTOR' ? 'اختر التخصص الطبي' : 'اختر القسم / التخصص'} />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments.map((d) => (
+                        {(role === 'DOCTOR' ? specialties : departments).map((d) => (
                           <SelectItem key={d.id} value={d.name}>
                             {d.name}
                           </SelectItem>
@@ -290,7 +323,9 @@ export default function RegisterPage() {
                       </SelectContent>
                     </Select>
                     <p className="text-[11px] text-muted-foreground">
-                      إجباري — نفس الأقسام التي تُعمل بها التكليفات وتُدار من حساب الإدارة
+                      {role === 'DOCTOR'
+                        ? 'إجباري — من كتالوج التخصصات الطبية المُدار من حساب الإدارة'
+                        : 'إجباري — نفس الأقسام التي تُعمل بها التكليفات وتُدار من حساب الإدارة'}
                     </p>
                   </>
                 )}
@@ -315,7 +350,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* المؤهل العلمي — 3 خيارات ثابتة */}
+              {/* المؤهل العلمي — خيارات الدور (3 للكادر / 4 للطبيب) */}
               <div className="space-y-2">
                 <Label htmlFor="qualification">المؤهل العلمي *</Label>
                 <Select value={qualification} onValueChange={setQualification}>
@@ -323,7 +358,7 @@ export default function RegisterPage() {
                     <SelectValue placeholder="اختر المؤهل" />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUALIFICATION_OPTIONS.map((q) => (
+                    {(role === 'DOCTOR' ? DOCTOR_QUALIFICATION_OPTIONS : QUALIFICATION_OPTIONS).map((q) => (
                       <SelectItem key={q.value} value={q.value}>
                         {q.label}
                       </SelectItem>
@@ -331,7 +366,9 @@ export default function RegisterPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">
-                  أورديلي سنة — دبلوم ثلاث سنوات — بكالوريوس أربع سنوات
+                  {role === 'DOCTOR'
+                    ? 'بكالوريوس طب وجراحة — ماجستير — دكتوراه — شهادة زمالة'
+                    : 'أورديلي سنة — دبلوم ثلاث سنوات — بكالوريوس أربع سنوات'}
                 </p>
               </div>
               {/* الجنس — إجباري */}
@@ -514,7 +551,7 @@ export default function RegisterPage() {
 
       <p className="text-center text-xs leading-relaxed text-muted-foreground">
         بإنشاء حسابك في تكليفات فإنك توافق على أن تتم مراجعة بياناتك ومستنداتك من قبل إدارة المنصة
-        قبل تفعيل الحساب — سواء كان حساب كادر تمريضي أو مستلم إداري.
+        قبل تفعيل الحساب — سواء كان حساب كادر تمريضي أو طبيب أو مستلم إداري.
       </p>
 
       <p className="text-center text-sm text-muted-foreground">

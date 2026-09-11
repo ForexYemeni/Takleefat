@@ -9,7 +9,7 @@ import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
  */
 export async function GET() {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
 
     const [applications, settings] = await Promise.all([
       db.application.findMany({

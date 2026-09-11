@@ -9,7 +9,7 @@ import { notify } from '@/lib/notifications'
  */
 export async function POST() {
   try {
-    const session = await requireRole('NURSE')
+    const session = await requireRole('NURSE', 'DOCTOR')
 
     const user = await db.user.findUnique({ where: { id: session.user.id } })
     if (!user) return jsonError('الحساب غير موجود', 404)

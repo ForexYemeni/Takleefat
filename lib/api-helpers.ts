@@ -24,8 +24,11 @@ export async function requireSession(): Promise<Session> {
 
 /**
  * يتطلب صلاحية دور محدد (أو أكثر)
+ * الأدوار الخمسة: ADMIN | NURSE | RECEIVER | DOCTOR | DOCTOR_SUPERVISOR
  */
-export async function requireRole(...roles: Array<'ADMIN' | 'NURSE' | 'RECEIVER'>) {
+export async function requireRole(
+  ...roles: Array<'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'>
+) {
   const session = await requireSession()
   if (!roles.includes(session.user.role)) {
     throw new ApiError('ليست لديك صلاحية للوصول إلى هذا المورد', 403)

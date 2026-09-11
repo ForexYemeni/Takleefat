@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import {
   BadgeCheck,
   ClipboardList,
+  Stethoscope,
+  UserSquare2,
   FileCheck2,
   Hourglass,
   UserCog,
@@ -24,6 +26,10 @@ interface AdminStats {
   pendingNurses: number
   approvedNurses: number
   totalReceivers: number
+  totalDoctors: number
+  pendingDoctors: number
+  approvedDoctors: number
+  totalSupervisors: number
   totalAssignments: number
   activeAssignments: number
   receivedAssignments: number
@@ -83,6 +89,14 @@ export default function AdminOverviewPage() {
       color: 'bg-emerald-50 text-emerald-700',
     },
     {
+      title: 'الأطباء',
+      value: data?.totalDoctors ?? 0,
+      icon: Stethoscope,
+      hint: `${data?.approvedDoctors ?? 0} معتمد — ${data?.totalSupervisors ?? 0} مشرف`,
+      href: '/admin/doctors',
+      color: 'bg-rose-50 text-rose-700',
+    },
+    {
       title: 'مستندات بانتظار المراجعة',
       value: data?.pendingDocuments ?? 0,
       icon: FileCheck2,
@@ -96,6 +110,7 @@ export default function AdminOverviewPage() {
     { label: 'إنشاء تكليف جديد', href: '/admin/assignments', icon: ClipboardList },
     { label: 'اعتماد حسابات جديدة', href: '/admin/nurses?status=PENDING', icon: BadgeCheck },
     { label: 'إضافة مستلم إداري', href: '/admin/receivers', icon: UserCog },
+    { label: 'إضافة مشرف أطباء', href: '/admin/supervisors', icon: UserSquare2 },
     { label: 'مراجعة المستندات', href: '/admin/documents', icon: FileCheck2 },
   ]
 

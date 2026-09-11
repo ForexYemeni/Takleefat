@@ -1650,6 +1650,176 @@ ok=len(d)>0 and all('_count' in x and 'nurses' in x['_count'] for x in d)
 print('ok' if ok else 'bad')" 2>/dev/null)
 check "live: /api/admin/departments يعيد _count.nurses لكل قسم" "ok" "$R28_LIVE"
 
+# ============================================================
+# القسم 38 — الجولة 29: منظومة الأطباء الكاملة (مشرف أطباء + أطباء + التخصصات الطبية)
+# ============================================================
+echo "=========== 38) الجولة 29: منظومة الأطباء الكاملة ==========="
+
+# --- فحوص ساكنة: البنية الجديدة ---
+R29_SCHEMA=$(grep -cE '^model (Specialty|DoctorSpecialty) |^enum Audience ' prisma/schema.prisma | awk '{print ($1==3)?1:0}')
+check "schema: Specialty + DoctorSpecialty + enum Audience موجودة" "1" "$R29_SCHEMA"
+
+R29_ROLES=$(grep -c "  DOCTOR$\|  DOCTOR_SUPERVISOR$" prisma/schema.prisma | awk '{print ($1>=2)?1:0}')
+check "schema: دورا DOCTOR و DOCTOR_SUPERVISOR في enum Role" "1" "$R29_ROLES"
+
+R29_MW=$(grep -c "DOCTOR_SUPERVISOR: '/supervisor'" middleware.ts | awk '{print ($1==1)?1:0}')
+check "middleware: مسارات /doctor و /supervisor محمية بالدورين" "1" "$R29_MW"
+
+R29_NAV=$(grep -c "DOCTOR: {" components/shared/dashboard-shell.tsx | awk '{print ($1==1)?1:0}')
+check "ui: لوحتا DOCTOR و DOCTOR_SUPERVISOR في التنقل" "1" "$R29_NAV"
+
+R29_ADMINNAV=$(grep -c "admin/doctors\|admin/supervisors\|admin/specialties" components/shared/dashboard-shell.tsx | awk '{print ($1>=3)?1:0}')
+check "ui: الإدارة تضم الأطباء والمشرفين والتخصصات في قائمتها" "1" "$R29_ADMINNAV"
+
+R29_REG=$(grep -c "'DOCTOR'" "app/(auth)/register/page.tsx" | awk '{print ($1>=2)?1:0}')
+check "ui: صفحة التسجيل تدعم نوع الحساب «طبيب»" "1" "$R29_REG"
+
+R29_DLG=$(grep -c "allowAudienceChoice" components/shared/create-post-dialog.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: النافذة المشتركة تدعم اختيار الجمهور (الإدارة) وتثبيته (المشرف)" "1" "$R29_DLG"
+
+R29_SUPDLG=$(grep -c 'audience="DOCTOR"' app/supervisor/assignments/page.tsx | awk '{print ($1==1)?1:0}')
+check "ui: لوحة المشرف تُنشئ تكليفات أطباء حصراً (audience=DOCTOR)" "1" "$R29_SUPDLG"
+
+R29_FEES=$(grep -c "supervisorSharePercent" lib/fees.ts | awk '{print ($1>=1)?1:0}')
+check "fees: تسوية الأرباح تفرّق نسبة المشرف عن نسبة المستلم" "1" "$R29_FEES"
+
+# --- فحوص حية: كتالوج التخصصات ---
+R29_SPEC=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_spec.json" -w "%{http_code}" -X POST $BASE/api/admin/specialties -H "Content-Type: application/json" \
+  -d '{"name":"قلبية E2E"}')
+check "الإدارة تضيف تخصصاً طبياً للكتالوج المستقل → 201" "201" "$R29_SPEC"
+SPEC_ID=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/specialties | jget "['specialties'][0]['id']")
+SPEC_NAME=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/specialties | jget "['specialties'][0]['name']")
+SPEC_DUP=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/specialties -H "Content-Type: application/json" \
+  -d '{"name":"قلبية E2E"}')
+check "رفض تكرار التخصص → 409" "409" "$SPEC_DUP"
+SPEC_PUB=$(curl -s $BASE/api/specialties/public | jget "['specialties'][0]['name']")
+check "التخصصات متاحة للعامة في التسجيل (/api/specialties/public)" "$SPEC_NAME" "$SPEC_PUB"
+
+# --- فحوص حية: إنشاء مشرف الأطباء من الإدارة ---
+R29_SUP=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_sup.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR_SUPERVISOR","name":"مشرف الأطباء E2E","phone":"791110901","password":"Super@1234","hospitalName":"مستشفى E2E الأساس"}')
+check "الإدارة تنشئ مشرف أطباء (مرآة المستلم) → 201" "201" "$R29_SUP"
+login "$DIR/supervisor.jar" "791110901" "Super@1234"
+SUP_ROLE=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/auth/session | jget "['user']['role']")
+check "دخول مشرف الأطباء ودوره DOCTOR_SUPERVISOR" "DOCTOR_SUPERVISOR" "$SUP_ROLE"
+
+# --- فحوص حية: حساب الطبيب (تسجيل ذاتي + إنشاء من الإدارة) ---
+R29_DOCDUP=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"د. أحمد قلبي","phone":"791110902","password":"Doctor@123","specialty":"قلبية E2E","qualification":"أورديلي سنة","yearsOfExperience":7,"gender":"MALE"}')
+check "رفض مؤهل غير تابع لقائمة الأطباء → 422" "422" "$R29_DOCDUP"
+R29_DOCREG=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"د. تسجيل ذاتي","phone":"791110903","password":"Doctor@123","specialty":"قلبية E2E","qualification":"دكتوراه","yearsOfExperience":7,"gender":"MALE"}')
+check "تسجيل ذاتي للطبيب بمؤهلات التخصص الطبي → 201" "201" "$R29_DOCREG"
+R29_DOC=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_doc.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"د. أحمد قلبي","phone":"791110902","password":"Doctor@123","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":7,"gender":"MALE"}')
+check "الإدارة تنشئ طبيباً معتمداً بمؤهل طب → 201" "201" "$R29_DOC"
+login "$DIR/doctor.jar" "791110902" "Doctor@123"
+DOC_ROLE=$(curl -s -b "$DIR/doctor.jar" $BASE/api/auth/session | jget "['user']['role']")
+check "دخول الطبيب ودوره DOCTOR" "DOCTOR" "$DOC_ROLE"
+
+# تخصصات عمل الطبيب — علائقية من الكتالوج
+WD_BAD=$(code -b "$DIR/doctor.jar" -X PUT $BASE/api/me/work-specialties -H "Content-Type: application/json" \
+  -d '{"specialtyIds":["nonexistent-id"]}')
+check "رفض تخصص خارج كتالوج الإدارة → 422" "422" "$WD_BAD"
+WD_PUT=$(code -b "$DIR/doctor.jar" -X PUT $BASE/api/me/work-specialties -H "Content-Type: application/json" \
+  -d "{\"specialtyIds\":[\"$SPEC_ID\"]}")
+check "الطبيب يصرّح بتخصص عمله من الكتالوج → 200" "200" "$WD_PUT"
+WD_MINE=$(curl -s -b "$DIR/doctor.jar" $BASE/api/me/work-specialties | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(x['id']=='$SPEC_ID' for x in d['specialties']))" 2>/dev/null)
+check "تخصصات عمل الطبيب محفوظة علائقياً" "True" "$WD_MINE"
+
+# --- فحوص حية: المشرف ينشئ تكليف أطباء بـ 8 طرق التوزيع ---
+R29_POST=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r29_post.json" -w "%{http_code}" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"title\":\"\",\"description\":\"تكليف أطباء E2E\",\"hospitalId\":\"$HOSP\",\"department\":\"قلبية E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":\"1\",\"hours\":\"8\",\"gender\":\"ANY\",\"value\":\"60000\",\"distribution\":\"ALL_MATCHING\",\"progressiveStageHours\":\"\",\"audience\":\"DOCTOR\"}")
+check "المشرف ينشئ تكليف أطباء (ALL_MATCHING + تخصص) → 201" "201" "$R29_POST"
+DOC_POST_ID=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/posts | jget "['posts'][0]['id']")
+DOC_POST_AUD=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/posts | jget "['posts'][0]['audience']")
+check "جمهور تكليف المشرف أطباء حصراً (audience=DOCTOR)" "DOCTOR" "$DOC_POST_AUD"
+
+# فرض الجمهور على الخادم: لو أرسل المشرف audience=NURSE يُفرض DOCTOR
+R29_FORCED=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r29_forced.json" -w "%{http_code}" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"title\":\"تكليف فرض الجمهور\",\"hospitalId\":\"$HOSP\",\"department\":\"\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"value\":10000,\"distribution\":\"ALL_MATCHING\",\"audience\":\"NURSE\"}")
+FORCED_AUD=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/posts | jget "['posts'][0]['audience']")
+check "الخادم يفرض جمهور أطباء على المشرف حتى لو أرسل تمريض" "DOCTOR" "$FORCED_AUD"
+FORCED_ID=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/posts | jget "['posts'][0]['id']")
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$FORCED_ID -o /dev/null
+
+# عزل الجمهور: الكادر التمريضي لا يرى تكليف الأطباء — والطبيب يراه
+NURSE_SEES=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$DOC_POST_ID' for p in d['posts']))" 2>/dev/null)
+check "عزل الجمهور: تكليف الأطباء لا يظهر للكادر التمريضي" "False" "$NURSE_SEES"
+DOC_SEES=$(curl -s -b "$DIR/doctor.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$DOC_POST_ID' for p in d['posts']))" 2>/dev/null)
+check "عزل الجمهور: تكليف الأطباء يظهر للطبيب المصرّح بتخصصه" "True" "$DOC_SEES"
+
+# التقديم: الطبيب يقدّم — والكادر ممنوع من تكليف الأطباء (حماية الجمهور)
+# (رفع مستند الطبيب أولاً — لا تقديم بلا مستندات)
+DOC_UP=$(code -b "$DIR/doctor.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "الطبيب يرفع مستنداته → 201" "201" "$DOC_UP"
+DOC_APPLY=$(curl -s -b "$DIR/doctor.jar" -o "$DIR/r29_apply.json" -w "%{http_code}" -X POST $BASE/api/posts/$DOC_POST_ID/apply -H "Content-Type: application/json" \
+  -d '{"coverNote":"تقديم طبيب"}')
+check "الطبيب يقدّم على تكليف الأطباء → 201" "201" "$DOC_APPLY"
+DOC_APP_ID=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/posts/$DOC_POST_ID/applications | jget "['applications'][0]['id']")
+NURSE_APPLY=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$DOC_POST_ID/apply -H "Content-Type: application/json" \
+  -d '{"coverNote":"كادر على تكليف أطباء"}')
+check "حماية الجمهور: الكادر ممنوع من التقديم على تكليف أطباء → 403" "403" "$NURSE_APPLY"
+
+# شبكة المشرف: /api/receiver/nurses تُعيد الأطباء للمشرف
+SUP_NET=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/nurses | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('ok' if len(d['nurses'])>=1 else 'empty')" 2>/dev/null)
+check "شبكة المشرف تُظهر الأطباء (مرآة شبكة المستلم)" "ok" "$SUP_NET"
+
+# اعتماد المشرف للتقديم → إنشاء تكليف مؤكد للطبيب
+R29_APPROVE=$(code -b "$DIR/supervisor.jar" -X PATCH $BASE/api/applications/$DOC_APP_ID -H "Content-Type: application/json" \
+  -d '{"action":"APPROVE"}')
+check "المشرف يعتمد تقديم الطبيب → 200" "200" "$R29_APPROVE"
+SUP_ASSGN=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('ok' if len(d['assignments'])>=1 else 'empty')" 2>/dev/null)
+check "تكليف مؤكد ظهر لدى المشرف بعد الاعتماد" "ok" "$SUP_ASSGN"
+DOC_ASSGN=$(curl -s -b "$DIR/doctor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('ok' if len(d['assignments'])>=1 else 'empty')" 2>/dev/null)
+check "تكليف مؤكد ظهر لدى الطبيب بعد الاعتماد" "ok" "$DOC_ASSGN"
+
+# مطابقة AUTO_MATCH العلائقية: طبيب بلا تخصص مصرّح لا يرى تكليف التخصص
+R29_DOC2=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_doc2.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"د. بلا تخصص","phone":"791110904","password":"Doctor@123","specialty":"مخاطية","qualification":"ماجستير","yearsOfExperience":3,"gender":"FEMALE"}')
+check "إنشاء طبيب ثانٍ بلا تخصص مصرّح → 201" "201" "$R29_DOC2"
+login "$DIR/doctor2.jar" "791110904" "Doctor@123"
+R29_AM=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r29_am.json" -w "%{http_code}" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"title\":\"\",\"hospitalId\":\"$HOSP\",\"department\":\"قلبية E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"value\":20000,\"distribution\":\"AUTO_MATCH\",\"audience\":\"DOCTOR\"}")
+check "المشرف ينشئ تكليف أطباء بمطابقة ذكية → 201" "201" "$R29_AM"
+AM_ID=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/posts | jget "['posts'][0]['id']")
+DOC1_SEES_AM=$(curl -s -b "$DIR/doctor.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$AM_ID' for p in d['posts']))" 2>/dev/null)
+check "المطابقة الذكية: الطبيب المصرّح بالتخصص يرى تكليف AUTO_MATCH" "True" "$DOC1_SEES_AM"
+DOC2_SEES_AM=$(curl -s -b "$DIR/doctor2.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(p['id']=='$AM_ID' for p in d['posts']))" 2>/dev/null)
+check "المطابقة الذكية: الطبيب غير المصرّح لا يراه (علائقية حصراً)" "False" "$DOC2_SEES_AM"
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/posts/$AM_ID -o /dev/null
+
+# إحصاءات الإدارة تشمل الأطباء والمشرفين
+R29_STATS=$(curl -s -b "$DIR/admin.jar" $BASE/api/stats | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('ok' if d.get('totalDoctors',0)>=2 and d.get('totalSupervisors',0)>=1 else 'bad')" 2>/dev/null)
+check "إحصاءات الإدارة تعرض الأطباء والمشرفين" "ok" "$R29_STATS"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

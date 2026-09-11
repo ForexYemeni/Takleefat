@@ -27,7 +27,7 @@ const createWithdrawalSchema = z.object({
  */
 export async function GET() {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const withdrawals = await db.withdrawal.findMany({
       where: { receiverId: session.user.id },
       orderBy: { createdAt: 'desc' },
@@ -45,7 +45,7 @@ export async function GET() {
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER')
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
 
     const parsed = createWithdrawalSchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) {

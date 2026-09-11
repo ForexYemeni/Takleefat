@@ -17,7 +17,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN')
+    const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const post = await db.post.findUnique({
@@ -55,16 +55,17 @@ export async function GET(
 
     if (!post) return jsonError('التكليف غير موجود', 404)
 
-    if (session.user.role === 'NURSE') {
+    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       await escalateDueProgressivePosts()
       const me = await db.user.findUnique({
         where: { id: session.user.id },
         select: { gender: true },
       })
-      // حماية الرابط المباشر: غير المطابق للجنس أو غير المضمّن في جمهور التوزيع = 404
+      // حماية الرابط المباشر: غير المطابق للجمهور/الجنس أو غير المضمّن في جمهور التوزيع = 404
       const allowed = await canNurseSeePost(post, {
         nurseId: session.user.id,
         nurseGender: me?.gender ?? null,
+        role: session.user.role === 'DOCTOR' ? 'DOCTOR' : 'NURSE',
       })
       if (!allowed) return jsonError('هذا التكليف غير متاح لك', 404)
 
@@ -73,7 +74,10 @@ export async function GET(
       return NextResponse.json({ post: rest, myApplication: mine })
     }
 
-    if (session.user.role === 'RECEIVER' && post.receiverId !== session.user.id) {
+    if (
+      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      post.receiverId !== session.user.id
+    ) {
       throw new ApiError('ليست لديك صلاحية للوصول إلى هذا التكليف', 403)
     }
 
@@ -94,7 +98,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('RECEIVER', 'ADMIN')
+    const session = await requireRole('RECEIVER', 'ADMIN', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const post = await db.post.findUnique({
@@ -253,7 +257,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireRole('RECEIVER', 'ADMIN')
+    const session = await requireRole('RECEIVER', 'ADMIN', 'DOCTOR_SUPERVISOR')
     const { id } = await params
 
     const post = await db.post.findUnique({
