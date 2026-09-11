@@ -492,12 +492,13 @@ a=[x for x in d.get('assignments',[]) if x.get('id')=='$A4_ID']
 print(a[0]['status'] if a else '?')")
 check "حالة التكليف بعد الإنهاء: COMPLETED" "COMPLETED" "$A4_STATUS"
 
-# 17-و) أرباح المستلم الإداري — بعد الجولة 11 يُوزَّع الربح فوراً عند تأكيد دفع الإدارة:
-#   8000 من تأكيد دفع تكليف P3 (10٪ من 80000) + 12000 من إنهاء المستلم (10٪ من 120000) = 20000
+# 17-و) أرباح المستلم الإداري — الجولة 32: الافتراضي التلقائي = نصف نسبة الإدارة
+#   20000 من تأكيد دفع تكليف P3 (نصف نسبة الإدارة 25٪ خلال نافذة adminPercentage=50 × 80000)
+#   + 6000 من إنهاء المستلم (نصف نسبة الإدارة 5٪ بعد إعادة adminPercentage=10 × 120000) = 26000
 EARN_TOTAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
-check "ربح المستلم الإجمالي (8000 توزيع تأكيد الدفع + 12000 إنهاء المستلم)" "20000" "$EARN_TOTAL"
+check "ربح المستلم الإجمالي (20000 توزيع تأكيد الدفع + 6000 إنهاء المستلم)" "26000" "$EARN_TOTAL"
 EARN_AVAIL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['available']")
-check "الرصيد المتاح للسحب" "20000" "$EARN_AVAIL"
+check "الرصيد المتاح للسحب" "26000" "$EARN_AVAIL"
 
 # 17-ز) طلب سحب: رفض تجاوز الرصيد + طلب صحيح بالبيانات
 W_OVER=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/withdrawals -H "Content-Type: application/json" \
@@ -509,7 +510,7 @@ W_OK=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/withdrawals -H 
 check "طلب سحب 5000 مع المحفظة والحساب → قيد المعالجة" "PENDING" "$W_OK"
 
 EARN_AVAIL2=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['available']")
-check "الرصيد بعد الطلب المعلق (20000-5000)" "15000" "$EARN_AVAIL2"
+check "الرصيد بعد الطلب المعلق (26000-5000)" "21000" "$EARN_AVAIL2"
 
 W_DATA=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/withdrawals | python3 -c "
 import json,sys
@@ -528,7 +529,7 @@ EARN_FINAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | python
 import json,sys
 d=json.load(sys.stdin)['summary']
 print(d['available'], d['withdrawn'])")
-check "الرصيد بعد الصرف (متاح 15000 | مسحوب 5000)" "15000 5000" "$EARN_FINAL"
+check "الرصيد بعد الصرف (متاح 21000 | مسحوب 5000)" "21000 5000" "$EARN_FINAL"
 
 # 17-ح) التقييم يُضاف للسيرة الذاتية عند التقديم لأي تكليف آخر
 P6=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
@@ -1085,11 +1086,11 @@ R11_PAY_MSG=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$
 import json,sys
 d=json.load(sys.stdin)
 s=d.get('settlement') or {}
-print('distribute' if ('توزيع رسوم التكليف' in d.get('message','') and s.get('earningAmount')==6000 and s.get('earningCreated')==True) else 'no')" 2>/dev/null)
-check "تأكيد الدفع يوزع رسوم التكليف فوراً (ربح 6000 = 10٪ من 60000)" "distribute" "$R11_PAY_MSG"
+print('distribute' if ('توزيع رسوم التكليف' in d.get('message','') and s.get('earningAmount')==3000 and s.get('earningCreated')==True) else 'no')" 2>/dev/null)
+check "تأكيد الدفع يوزع رسوم التكليف فوراً (ربح 3000 = نصف نسبة الإدارة 5٪ من 60000)" "distribute" "$R11_PAY_MSG"
 
 R11_EARN_AFTER=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
-check "ربح المستلم زاد بـ 6000 بعد تأكيد الدفع (قبل=$R11_EARN_BEFORE بعد=$R11_EARN_AFTER)" "6000" "$((R11_EARN_AFTER - R11_EARN_BEFORE))"
+check "ربح المستلم زاد بـ 3000 بعد تأكيد الدفع (قبل=$R11_EARN_BEFORE بعد=$R11_EARN_AFTER)" "3000" "$((R11_EARN_AFTER - R11_EARN_BEFORE))"
 
 R11_PS=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/assignments | python3 -c "
 import json,sys
@@ -1103,7 +1104,7 @@ R11_REDIST=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$R
 import json,sys
 d=json.load(sys.stdin)
 s=d.get('settlement') or {}
-print('ok' if s.get('earningAmount')==6000 and s.get('earningCreated')==False else 'no')" 2>/dev/null)
+print('ok' if s.get('earningAmount')==3000 and s.get('earningCreated')==False else 'no')" 2>/dev/null)
 check "إعادة احتساب الرسوم: idempotent بلا ازدواج (earningCreated=False)" "ok" "$R11_REDIST"
 
 R11_EARN_FINAL=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/earnings | jget "['summary']['totalEarned']")
