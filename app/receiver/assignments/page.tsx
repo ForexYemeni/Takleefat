@@ -6,7 +6,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeCheck,
   Banknote,
+  Building2,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
   Clock,
   History,
   Inbox,
@@ -15,6 +19,7 @@ import {
   PackageCheck,
   Plus,
   ShieldAlert,
+  ShieldCheck,
   Star,
   UserRound,
   Users,
@@ -29,6 +34,7 @@ import {
   formatDate,
   formatDateTime,
   formatCurrency,
+  APPLICATION_STATUS_LABELS,
   ASSIGNMENT_STATUS_LABELS,
   POST_STATUS_LABELS,
   POST_GENDER_LABELS,
@@ -272,6 +278,7 @@ export default function ReceiverAssignmentsPage() {
           </DialogHeader>
           {applicationsPost && (
             <ApplicationsReview
+              key={applicationsPost.id}
               postId={applicationsPost.id}
               nursesNeeded={applicationsPost.nursesNeeded}
               postTitle={applicationsPost.title}
@@ -432,6 +439,7 @@ function ApplicationsReview({
   postTitle?: string
 }) {
   const queryClient = useQueryClient()
+  const [selected, setSelected] = useState<ApplicantData | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['post-applications', postId],
@@ -462,21 +470,120 @@ function ApplicationsReview({
     )
   }
 
-  return (
-    <div className="space-y-4">
-      <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
-        المطلوب: {nursesNeeded} كادر — عند اكتمال العدد يُغلق التكليف تلقائياً وتُرفض بقية التقديمات
-      </p>
-      {applications.map((applicant) => (
+  // ---------- عرض السيرة الذاتية الاحترافية — عند الضغط على بطاقة الكادر ----------
+  if (selected) {
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setSelected(null)}
+          className="flex items-center gap-1.5 rounded-xl border bg-secondary/50 px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <ChevronRight className="size-4" />
+          عودة لقائمة التقديمات ({applications.length})
+        </button>
         <ApplicantCV
-          key={applicant.applicationId}
-          applicant={applicant}
+          applicant={selected}
           postTitle={postTitle}
           reviewing={reviewMutation.isPending}
           onReview={(id, action, note) => reviewMutation.mutate({ id, action, note })}
         />
-      ))}
+      </div>
+    )
+  }
+
+  const pendingCount = applications.filter((a) => a.status === 'PENDING').length
+  const approvedCount = applications.filter((a) => a.status === 'APPROVED').length
+  const rejectedCount = applications.filter((a) => a.status === 'REJECTED').length
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+          المطلوب: {nursesNeeded} كادر — عند اكتمال العدد يُغلق التكليف تلقائياً وتُرفض بقية التقديمات
+        </p>
+        <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+          <Badge variant="outline">{pendingCount} قيد المراجعة</Badge>
+          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+            {approvedCount} معتمد
+          </Badge>
+          {rejectedCount > 0 && (
+            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              {rejectedCount} مرفوض
+            </Badge>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        اضغط على بطاقة الكادر لعرض سيرته الذاتية كاملة — البيانات والمستندات والتقييمات
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {applications.map((applicant) => (
+          <ApplicantMiniCard
+            key={applicant.applicationId}
+            applicant={applicant}
+            onOpen={() => setSelected(applicant)}
+          />
+        ))}
+      </div>
     </div>
+  )
+}
+
+// ---------- بطاقة التقديم المصغّرة (الجولة 22) ----------
+
+/**
+ * بطاقة تقديم مصغّرة — الاسم والملخص وحالة المراجعة فقط؛
+ * الضغط عليها يفتح السيرة الذاتية الاحترافية كاملة بدل عرضها الممتد داخل القائمة.
+ */
+function ApplicantMiniCard({
+  applicant,
+  onOpen,
+}: {
+  applicant: ApplicantData
+  onOpen: () => void
+}) {
+  const { nurse } = applicant
+  const rating = nurse.ratings?.average
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full items-center gap-3 rounded-2xl border bg-card p-3 text-start transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-bl from-teal-100 to-teal-50 text-base font-extrabold text-teal-800 ring-2 ring-teal-100/70 dark:from-teal-950 dark:to-teal-900/60 dark:text-teal-200 dark:ring-teal-900">
+        {nurse.name.slice(0, 1)}
+        <span
+          className={cn(
+            'absolute -bottom-0.5 -end-0.5 size-3.5 rounded-full ring-2 ring-card',
+            applicant.status === 'PENDING' && 'bg-amber-400',
+            applicant.status === 'APPROVED' && 'bg-emerald-500',
+            applicant.status === 'REJECTED' && 'bg-red-400'
+          )}
+        />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-extrabold">{nurse.name}</span>
+          {!!nurse.isFavorite && <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" />}
+          {rating != null && rating > 0 && (
+            <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+              <Star className="size-2.5 fill-amber-400 text-amber-400" />
+              {rating}
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+          {nurse.specialty && <span className="truncate font-semibold">{nurse.specialty}</span>}
+          {nurse.yearsOfExperience != null && nurse.yearsOfExperience > 0 && (
+            <span>{nurse.yearsOfExperience} سنة خبرة</span>
+          )}
+          <span>قدّم {formatDate(applicant.createdAt)}</span>
+        </span>
+      </span>
+      <StatusBadge status={applicant.status} labels={APPLICATION_STATUS_LABELS} />
+      <ChevronLeft className="size-4 shrink-0 text-muted-foreground/60 transition-all group-hover:-translate-x-0.5 group-hover:text-primary" />
+    </button>
   )
 }
 
@@ -900,6 +1007,48 @@ function CompleteAssignmentDialog({
 
 // ---------- إنشاء تكليف مُعلن ----------
 
+// جمهور التكليف — شرائح الاستهداف المتاحة عند إنشاء تكليف (الجولة 22)
+// القيم مطابقة لطريقة التوزيع في الخادم (DistributionMethod) والرؤية مطبقة فيه
+const RECEIVER_AUDIENCE_OPTIONS: Array<{
+  value: NonNullable<CreatePostInput['distribution']>
+  label: string
+  hint: string
+  icon: React.ComponentType<{ className?: string }>
+  wide?: boolean
+}> = [
+  {
+    value: 'ALL_MATCHING',
+    label: 'جميع الممرضين',
+    hint: 'يصل التكليف لكل الكوادر المؤهلين المطابقين للجنس المطلوب — النشر العام للجميع',
+    icon: Users,
+    wide: true,
+  },
+  {
+    value: 'FAVORITES',
+    label: 'المفضلون لديك',
+    hint: 'حصراً للكوادر الذين أضفتهم إلى قائمة المفضلة الخاصة بحسابك',
+    icon: Star,
+  },
+  {
+    value: 'SAME_ORG',
+    label: 'كوادر الجهة الصحية',
+    hint: 'الذين يعملون أو ارتبطوا بالجهة الصحية المختارة لهذا التكليف',
+    icon: Building2,
+  },
+  {
+    value: 'ENDORSED',
+    label: 'المعتمدون',
+    hint: 'الكوادر الذين اعتمدتهم الإدارة لدى الجهة الصحية المختارة',
+    icon: ShieldCheck,
+  },
+  {
+    value: 'INTERVIEWED',
+    label: 'من تمت مقابلتهم',
+    hint: 'الكوادر الذين سُجّل أن الإدارة قابلتهم لدى الجهة الصحية المختارة',
+    icon: ClipboardCheck,
+  },
+]
+
 function CreatePostDialog({
   open,
   onOpenChange,
@@ -927,6 +1076,7 @@ function CreatePostDialog({
       hours: '',
       gender: 'ANY',
       value: '',
+      distribution: 'ALL_MATCHING',
     },
   })
 
@@ -960,6 +1110,8 @@ function CreatePostDialog({
         hours: repostSource.hours != null ? String(repostSource.hours) : '',
         gender: (repostSource.gender as 'MALE' | 'FEMALE' | 'ANY') ?? 'ANY',
         value: repostSource.value != null ? String(repostSource.value) : '',
+        distribution:
+          (repostSource.distribution as CreatePostInput['distribution']) ?? 'ALL_MATCHING',
       })
     }
   }, [open, repostSource, hospitals.length])
@@ -1143,14 +1295,65 @@ function CreatePostDialog({
             />
           </div>
 
-          {/* المعاينة الحية لجمهور التكليف قبل النشر (الجولة العاشرة) */}
-          <AudiencePreviewCard
-            hospitalId={form.watch('hospitalId')}
-            gender={form.watch('gender') || 'ANY'}
-            department={form.watch('department') || ''}
-            distribution="ALL_MATCHING"
-            enabled={open}
-          />
+          {/* ---------- جمهور التكليف — من يصلهم؟ (الجولة 22) ---------- */}
+          <div className="space-y-2.5 rounded-2xl border bg-secondary/30 p-4">
+            <div>
+              <Label className="flex items-center gap-1.5 text-sm font-extrabold">
+                <Users className="size-4 text-primary" />
+                جمهور التكليف — من يصلهم؟
+              </Label>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                اختر شريحة الكوادر التي يظهر لها هذا التكليف — باقي الكوادر لن يروه في قائمتهم
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {RECEIVER_AUDIENCE_OPTIONS.map((opt) => {
+                const active = (form.watch('distribution') || 'ALL_MATCHING') === opt.value
+                const OptIcon = opt.icon
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => form.setValue('distribution', opt.value)}
+                    className={cn(
+                      'flex items-start gap-2.5 rounded-xl border-2 p-3 text-start transition-all',
+                      opt.wide && 'sm:col-span-2',
+                      active
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border bg-background hover:border-primary/30'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'mt-0.5 shrink-0 rounded-lg p-1.5',
+                        active ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'
+                      )}
+                    >
+                      <OptIcon className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-sm font-extrabold">
+                        {opt.label}
+                        {active && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden />}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                        {opt.hint}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* المعاينة الحية لجمهور التكليف قبل النشر — تتبع الخيار المختار */}
+            <AudiencePreviewCard
+              hospitalId={form.watch('hospitalId')}
+              gender={form.watch('gender') || 'ANY'}
+              department={form.watch('department') || ''}
+              distribution={form.watch('distribution') || 'ALL_MATCHING'}
+              enabled={open}
+            />
+          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

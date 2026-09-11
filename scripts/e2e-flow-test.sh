@@ -1345,6 +1345,72 @@ check "globals: تدرج الهوية ينتهي بالبنفسجي" "1" "$R21_G
 check "logo.svg: تدرج أزرق ملكي ← بنفسجي" "2" "$(grep -cE '#2563EB|#8B5CF6' public/logo.svg | awk '{print ($1>=2)?2:0}')"
 check "sw.js: إصدار v4 (إبطال كاش الأيقونات القديمة)" "1" "$(grep -cF "takleefat-v4" public/sw.js)"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# القسم 33 — الجولة 22: بطاقات تقديم مصغّرة + جمهور التكليف للمستلم + الحذف الكامل للجهات
+# ─────────────────────────────────────────────────────────────────────────────
+R22_MINI=$(grep -c 'ApplicantMiniCard' app/receiver/assignments/page.tsx | awk '{print ($1>=2)?1:0}')
+check "receiver: بطاقة تقديم مصغّرة (تعريف + استخدام) والسيرة تُفتح بالضغط" "1" "$R22_MINI"
+check "receiver: زر عودة من السيرة الذاتية لقائمة التقديمات" "1" "$(
+  grep -cF 'عودة لقائمة التقديمات' app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+)"
+R22_AUD=0
+for v in ALL_MATCHING FAVORITES SAME_ORG ENDORSED INTERVIEWED; do
+  grep -qF "value: '$v'" app/receiver/assignments/page.tsx && R22_AUD=$((R22_AUD+1))
+done
+check "receiver: خيارات الجمهور الخمسة (الجميع/المفضلون/الجهة/المعتمدون/المقابلون)" "5" "$R22_AUD"
+check "receiver: معاينة الجمهور الحية تتبع التوزيع المختار" "1" "$(
+  grep -cF "distribution={form.watch('distribution')" app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}'
+)"
+check "hospitals DELETE: أُزيل حاجز 409 — الحذف الكامل دائماً" "0" "$(
+  grep -cF 'لا يمكن حذف الجهة' 'app/api/admin/hospitals/[id]/route.ts' | awk '{print $1+0}'
+)"
+R22_DEL=$(grep -cE 'post\.updateMany|hospital\.delete' 'app/api/admin/hospitals/[id]/route.ts' | awk '{print ($1>=2)?1:0}')
+check "hospitals DELETE: فك ارتباط التكليفات السابقة + حذف الجهة نهائياً" "1" "$R22_DEL"
+check "departments DELETE: حذف القسم نهائياً (كما هو)" "1" "$(
+  grep -cE 'department\.delete' 'app/api/admin/departments/[id]/route.ts' | awk '{print ($1>=1)?1:0}'
+)"
+
+# --- فحوص حية: التوزيع الخاص يُرى لجمهوره فقط ---
+R22_INT=$(curl -s -w '\n%{http_code}' -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$NEW_HOSP_ID\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":50000,\"distribution\":\"INTERVIEWED\"}")
+R22_INT_CODE=$(echo "$R22_INT" | tail -1)
+R22_INT_ID=$(echo "$R22_INT" | head -n -1 | jget "['post']['id']")
+check "إنشاء تكليف بجمهور «من تمت مقابلتهم» → 201" "201" "$R22_INT_CODE"
+R22_HIDDEN=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$R22_INT_ID' in ids else 'no')")
+check "تكليف «المقابلون» مخفي على الكادر غير المتقابل" "no" "$R22_HIDDEN"
+
+R22_END=$(curl -s -w '\n%{http_code}' -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":50000,\"distribution\":\"ENDORSED\"}")
+R22_END_ID=$(echo "$R22_END" | head -n -1 | jget "['post']['id']")
+R22_SEE_END=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$R22_END_ID' in ids else 'no')")
+check "تكليف «المعتمدون» يظهر للكادر المعتمد لدى الجهة" "yes" "$R22_SEE_END"
+
+R22_FAV=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":50000,\"distribution\":\"FAVORITES\"}")
+R22_FAV_ID=$(echo "$R22_FAV" | jget "['post']['id']")
+R22_SEE_FAV=$(curl -s -b "$DIR/nurse.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$R22_FAV_ID' in ids else 'no')")
+check "تكليف «المفضلون» يظهر لمفضل الكادر" "yes" "$R22_SEE_FAV"
+
+# --- فحص حي: حذف جهة مرتبطة بتكليف ينجح حذفاً كاملاً والتكليف يبقى بسجله النصي ---
+RH=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى حذف الجولة 22","status":"ACTIVE"}')
+RH_ID=$(echo "$RH" | jget "['hospital']['id']")
+RHP=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$RH_ID\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":33000}")
+RHP_ID=$(echo "$RHP" | jget "['post']['id']")
+check "حذف جهة مرتبطة بتكليف مُعلن → 200 (بلا حاجز)" "200" "$(code -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$RH_ID)"
+check "التكليف السابق باقٍ بعد حذف جهته (سجل نصي محفوظ)" "200" "$(code -b "$DIR/receiver.jar" $BASE/api/posts/$RHP_ID)"
+check "الجهة المحذوفة اختفت تماماً من القوائم" "404" "$(code -b "$DIR/admin.jar" $BASE/api/admin/hospitals/$RH_ID)"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

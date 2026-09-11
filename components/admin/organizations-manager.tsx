@@ -692,10 +692,14 @@ export function OrganizationsManager() {
         title={`حذف جهة «${deleteTarget?.name ?? ''}» نهائياً`}
         description={
           deleteTarget
-            ? `سيتم حذف الجهة نهائياً مع ${deleteTarget._count?.affiliations ?? 0} ارتباط كوادر بسجلها${
+            ? `سيتم حذف «${deleteTarget.name}» حذفاً كاملاً من المنصة نهائياً: تُحذف الجهة مع ${
+                deleteTarget._count?.affiliations ?? 0
+              } ارتباط كوادر بسجلهم المهني،${
                 (deleteTarget._count?.posts ?? 0) > 0
-                  ? ` و${deleteTarget._count?.posts ?? 0} تكليف مُعلن مرتبط بها`
-                  : ' — لا توجد تكليفات مرتبطة بها'
+                  ? ` وتُفكَّك ارتباط ${
+                      deleteTarget._count?.posts ?? 0
+                    } تكليف سابق مع بقاء سجلها التاريخي النصي (قيمة التكليفات والأرباح لن تُفقد)`
+                  : ' ولا توجد تكليفات مرتبطة بها'
               }. لا يمكن التراجع عن هذا الإجراء!`
             : ''
         }

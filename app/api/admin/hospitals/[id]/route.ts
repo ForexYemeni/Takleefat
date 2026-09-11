@@ -10,7 +10,8 @@ import { notify } from '@/lib/notifications'
  * إحصاءات الكوادر المرتبطين بالحالة + التكليفات النشطة والسابقة + قائمة الكوادر مفصلة.
  *
  * PATCH /api/admin/hospitals/[id] — تعديل جهة صحية (البيانات الكاملة + الحالة + التفعيل)
- * DELETE /api/admin/hospitals/[id] — حذف جهة (يُمنع إذا مرتبطة بتكليفات مُعلنة)
+ * DELETE /api/admin/hospitals/[id] — حذف الجهة حذفاً كاملاً نهائياً: تُحذف الجهة
+ * وارتباطات كوادرها، وتُفكَّك ارتباط التكليفات السابقة مع بقاء سجلها التاريخي النصي.
  */
 export async function GET(
   _req: NextRequest,
@@ -214,18 +215,37 @@ export async function DELETE(
 
     const hospital = await db.hospital.findUnique({
       where: { id },
-      include: { _count: { select: { posts: true } } },
+      include: { _count: { select: { posts: true, affiliations: true } } },
     })
     if (!hospital) return jsonError('الجهة الصحية غير موجودة', 404)
-    if (hospital._count.posts > 0) {
-      return jsonError(
-        'لا يمكن حذف الجهة — مرتبطة بتكليفات مُعلنة. يمكنك جعلها «غير نشطة» بدلاً من حذفها',
-        409
-      )
-    }
 
-    await db.hospital.delete({ where: { id } })
-    return NextResponse.json({ message: `تم حذف الجهة الصحية (${hospital.name}) نهائياً` })
+    // الحذف الكامل (الجولة 22): الجهة تُحذف نهائياً أياً كان ما يرتبط بها —
+    // ارتباطات كوادرها تُحذف تلقائياً (onDelete: Cascade)، والتكليفات السابقة
+    // تُفكَّك ارتباطها بالجهة مع بقاء سجلها التاريخي النصي كاملاً (لا فقد بيانات).
+    const detachedPosts = await db.$transaction(async (tx) => {
+      const detached = await tx.post.updateMany({
+        where: { hospitalId: id },
+        data: { hospitalId: null },
+      })
+      await tx.hospital.delete({ where: { id } })
+      return detached.count
+    })
+
+    return NextResponse.json({
+      message: [
+        `تم حذف الجهة الصحية (${hospital.name}) حذفاً كاملاً من المنصة`,
+        hospital._count.affiliations > 0
+          ? `مع ${hospital._count.affiliations} ارتباط كوادر`
+          : null,
+        detachedPosts > 0
+          ? `وفُكَّ ارتباط ${detachedPosts} تكليف سابق (سجلها التاريخي محفوظ)`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' — '),
+      deletedAffiliations: hospital._count.affiliations,
+      detachedPosts,
+    })
   } catch (error) {
     return handleApiError(error)
   }
