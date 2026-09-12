@@ -6,6 +6,7 @@ import { notify, notifyAdmins } from '@/lib/notifications'
 import { getSettings, effectiveSharePercent } from '@/lib/settings'
 import { calcReceiverEarning } from '@/lib/fees'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
+import { resolveReceiverOrg } from '@/lib/network'
 
 const ratingAxis = z
   .number({ error: 'التقييم غير صحيح' })
@@ -14,8 +15,8 @@ const ratingAxis = z
   .max(5, 'التقييم خمس نجوم كحد أقصى')
 
 const receiverCompleteSchema = z.object({
-  // هل تم الدفع للممرض؟ — إلزامي (نعم / لا)
-  nursePaid: z.boolean({ error: 'يجب تحديد هل تم الدفع للممرض أم لا' }),
+  // هل تم الدفع للكادر؟ — إلزامي (نعم / لا)
+  nursePaid: z.boolean({ error: 'يجب تحديد هل تم الدفع للكادر أم لا' }),
   // التقييم الاحترافي للكادر
   rating: z.object({
     overall: ratingAxis,
@@ -29,11 +30,21 @@ const receiverCompleteSchema = z.object({
 
 /**
  * POST /api/me/assignments/[id]/receiver-complete
- * المستلم الإداري: «تم انتهاء التكليف»
- * 1) يسأل: هل تم الدفع للممرض؟ (يُسجَّل)
- * 2) تقييم الكادر بشكل احترافي (نجوم + محاور + تعليق) — يظهر في ملف الكادر
- *    ويُضاف إلى السيرة الذاتية عند التقديم لأي تكليف آخر
- * 3) يُحتسب ربح المستلم الإداري (نسبة من التكليف تُحتسب من حساب الإدارة)
+ * المستلم الإداري أو مشرف الأطباء: «تم انتهاء التكليف» + التقييم الاحترافي
+ * =====================================================================
+ * الجولة 39 — الإنهاء والتقييم حتى لو أُغلق التكليف من حساب الكادر:
+ *  - يعمل من أي حالة سارية: ACTIVE (بانتظار الاستلام — يُسجل الاستلام تلقائياً)
+ *    أو RECEIVED — سواء أكّد الكادر إنهاء التكليف من حسابه أو قبل ذلك.
+ *  - لو أُغلق التكليف من الإدارة (COMPLETED) دون إنهاء المستلم، يستطيع
+ *    المستلم/المشرف تسجيل الإنهاء والإجابة عن الدفع والتقييم.
+ *  - التكليف الملغى لا يُنهى أبداً، والتكليف المُنهى من المستلم نفسه لا يتكرر.
+ *  - نطاق مشرف الأطباء: تكليفاته هو، وتكليفات أطباء جهته الصحية (ارتباط
+ *    ساري: يعمل حالياً/معتمد) — والمستلم الإداري تكليفاته هو حصراً.
+ *
+ * الخطوات:
+ * 1) هل تم الدفع للكادر؟ (يُسجَّل)
+ * 2) تقييم احترافي (نجوم + محاور + تعليق) — يظهر في ملف الكادر وسيرته الذاتية
+ * 3) ربح المستلم الإداري صاحب التكليف (نسبة من التكليف تُحتسب من حساب الإدارة)
  * 4) الحالة النهائية: مكتمل + إشعار الكادر والإدارة
  */
 export async function POST(
@@ -51,23 +62,48 @@ export async function POST(
 
     const assignment = await db.assignment.findUnique({
       where: { id },
-      include: { receiver: { select: { commissionPercent: true } } },
+      include: {
+        receiver: { select: { id: true, commissionPercent: true } },
+        nurse: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            affiliations: { select: { hospitalId: true, status: true } },
+          },
+        },
+      },
     })
     if (!assignment) return jsonError('التكليف غير موجود', 404)
-    if (assignment.receiverId !== session.user.id) {
+
+    // الجولة 39 — نطاق الوصول: صاحب التكليف، أو مشرف الأطباء لطبيب من جهته الصحية
+    const isOwner = assignment.receiverId === session.user.id
+    let hasAccess = isOwner
+    if (!hasAccess && session.user.role === 'DOCTOR_SUPERVISOR') {
+      const org = await resolveReceiverOrg(session.user.id)
+      hasAccess =
+        !!org &&
+        assignment.nurse.role === 'DOCTOR' &&
+        assignment.nurse.affiliations.some(
+          (af) => af.hospitalId === org.id && (af.status === 'WORKING' || af.status === 'ENDORSED')
+        )
+    }
+    if (!hasAccess) {
       return jsonError('ليست لديك صلاحية على هذا التكليف', 403)
     }
-    if (assignment.status === 'COMPLETED') {
-      return jsonError('تم إنهاء هذا التكليف مسبقاً', 409)
-    }
+
     if (assignment.status === 'CANCELLED') {
       return jsonError('لا يمكن إنهاء تكليف ملغى', 409)
+    }
+    if (assignment.status === 'COMPLETED' && assignment.receiverDoneAt) {
+      return jsonError('تم إنهاء هذا التكليف مسبقاً', 409)
     }
 
     const { nursePaid, rating } = parsed.data
 
     // نسبة صاحب التكليف — تُحتسب من قيمة التكليف وتُخصم من حساب الإدارة
     // الجولة 32: نسبة مخصصة على الحساب إن عيّنتها الإدارة، وإلا التلقائي (نصف نسبة الإدارة)
+    // الجولة 39: الربح يبقى لصاحب التكليف حتى لو أنّهه مشرف الأطباء
     const settings = await getSettings()
     const sharePercent = effectiveSharePercent(assignment.receiver, settings)
     const earningAmount = calcReceiverEarning(assignment.value, sharePercent)
@@ -77,7 +113,10 @@ export async function POST(
         where: { id },
         data: {
           status: 'COMPLETED',
-          receiverDoneAt: new Date(),
+          // الإنهاء من «بانتظار الاستلام» يسجّل الاستلام تلقائياً — والإنهاء
+          // بعد إغلاق الإدارة يحفظ تاريخ إنهاء المستلم الحقيقي
+          receivedAt: assignment.receivedAt ?? new Date(),
+          receiverDoneAt: assignment.receiverDoneAt ?? new Date(),
           nursePaid,
         },
       }),
@@ -105,7 +144,7 @@ export async function POST(
           comment: rating.comment?.trim() || null,
         },
       }),
-      // ربح المستلم الإداري من هذا التكليف
+      // ربح المستلم الإداري صاحب التكليف من هذا التكليف
       ...(earningAmount > 0
         ? [
             db.receiverEarning.upsert({
@@ -113,7 +152,7 @@ export async function POST(
               update: { amount: earningAmount, percent: sharePercent },
               create: {
                 assignmentId: id,
-                receiverId: session.user.id,
+                receiverId: assignment.receiverId,
                 amount: earningAmount,
                 percent: sharePercent,
               },
@@ -126,8 +165,8 @@ export async function POST(
       data: {
         assignmentId: id,
         userId: session.user.id,
-        action: 'إنهاء التكليف من المستلم الإداري',
-        note: `تم إنهاء التكليف — تم الدفع للممرض: ${nursePaid ? 'نعم' : 'لا'} — تقييم الكادر: ${rating.overall}/5${earningAmount > 0 ? ` — ربح المستلم: ${formatCurrency(earningAmount)}` : ''}`,
+        action: isOwner ? 'إنهاء التكليف من المستلم الإداري' : 'إنهاء التكليف من مشرف الأطباء',
+        note: `تم إنهاء التكليف — تم الدفع للكادر: ${nursePaid ? 'نعم' : 'لا'} — تقييم الكادر: ${rating.overall}/5${earningAmount > 0 ? ` — ربح المستلم: ${formatCurrency(earningAmount)}` : ''}`,
       },
     })
 
@@ -135,13 +174,24 @@ export async function POST(
     await Promise.all([
       notify(assignment.nurseId, {
         title: 'تم إنهاء التكليف وتقييمك',
-        body: `أنهى المستلم الإداري التكليف (${assignment.title}) — تم الدفع لك: ${nursePaid ? 'نعم' : 'لا'} — تقييمك ${stars} (${rating.overall}/5)${rating.comment?.trim() ? ` — «${rating.comment.trim()}»` : ''}`,
+        body: `أنهى ${isOwner ? 'المستلم الإداري' : 'مشرف الأطباء'} التكليف (${assignment.title}) — تم الدفع لك: ${nursePaid ? 'نعم' : 'لا'} — تقييمك ${stars} (${rating.overall}/5)${rating.comment?.trim() ? ` — «${rating.comment.trim()}»` : ''}`,
         type: 'ASSIGNMENT_COMPLETED',
-        link: '/nurse/assignments',
+        link: assignment.nurse.role === 'DOCTOR' ? '/doctor/assignments' : '/nurse/assignments',
       }),
+      // إشعار صاحب التكليف عند إنهائه من مشرف الأطباء (لا إشعار ذاتي للمُنهي نفسه)
+      ...(isOwner
+        ? []
+        : [
+            notify(assignment.receiverId, {
+              title: 'إنهاء تكليف',
+              body: `أُنهي التكليف (${assignment.title}) بنجاح — تقييم الكادر ${rating.overall}/5 بواسطة مشرف الأطباء (${session.user.name})`,
+              type: 'ASSIGNMENT_COMPLETED',
+              link: '/receiver/assignments',
+            }),
+          ]),
       notify(assignment.createdById, {
         title: 'إنهاء تكليف',
-        body: `أنهى المستلم الإداري التكليف (${assignment.title}) بنجاح${earningAmount > 0 ? ` — ربح المستلم ${formatCurrency(earningAmount)}` : ''}`,
+        body: `أُنهي التكليف (${assignment.title}) بنجاح${earningAmount > 0 ? ` — ربح المستلم ${formatCurrency(earningAmount)}` : ''}`,
         type: 'ASSIGNMENT_COMPLETED',
         link: '/admin/assignments',
       }),
@@ -158,9 +208,9 @@ export async function POST(
     )
 
     return NextResponse.json({
-      message: `تم إنهاء التكليف بنجاح${earningAmount > 0 ? ` — أُضيف ربح ${formatCurrency(earningAmount)} إلى قسم أرباحك بتاريخ ${formatDateTime(updated.receiverDoneAt!)}` : ''}`,
+      message: `تم إنهاء التكليف بنجاح${earningAmount > 0 && isOwner ? ` — أُضيف ربح ${formatCurrency(earningAmount)} إلى قسم أرباحك بتاريخ ${formatDateTime(updated.receiverDoneAt!)}` : ''}`,
       assignment: { id: updated.id, status: updated.status, nursePaid },
-      earning: earningAmount > 0 ? { amount: earningAmount, percent: sharePercent } : null,
+      earning: earningAmount > 0 && isOwner ? { amount: earningAmount, percent: sharePercent } : null,
     })
   } catch (error) {
     return handleApiError(error)

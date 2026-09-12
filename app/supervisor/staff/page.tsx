@@ -13,12 +13,13 @@ import {
   Lock,
   PhoneIcon,
   ShieldAlert,
+  ShieldQuestion,
   UserPlus,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
-import { apiFetcher, apiPost } from '@/lib/api-client'
+import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
 import { formatDate, GENDER_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import {
@@ -38,6 +39,8 @@ import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
 import { StaffPhone, type StaffPhoneData } from '@/components/shared/staff-phone'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { ProfessionalAccreditationBadge } from '@/components/shared/professional-accreditation-badge'
 import {
   EntityCadreCommunity,
   type OrgCadreStatsView,
@@ -70,6 +73,11 @@ import {
  * - وإن وُجدت جهة مرتبطة بحساب المشرف فيُربط بها أيضاً (تظهر في «أطباء جهتي»)
  * - يظهر الطبيب المضاف فوراً في حساب الإدارة
  * - لا يستقبل أي تكليف أو إجراء قبل اعتماده من الإدارة ورفع مستنداته إجبارياً دون استثناء
+ *
+ * الجولة 39 — اعتماد الجهة + الاعتماد المهني:
+ * - مشرف الأطباء يعتمد الأطباء لجهته (إضافتهم لمجتمع كوادر الجهة فقط)
+ * - الاعتماد المهني (كطبيب معتمد) من حساب الإدارة حصراً بعد رفع
+ *   المستندات والموافقة عليها — شارة «معتمد من الإدارة» تبيّن ذلك لكل طبيب
  */
 
 interface StaffNurse {
@@ -82,9 +90,13 @@ interface StaffNurse {
   isFavorite: boolean
   /** الجولة 38: متاح الآن = بلا تكليف سارٍ */
   available?: boolean
+  /** الجولة 39: عدد المستندات المعتمدة من الإدارة — الاعتماد المهني */
+  approvedDocuments?: number
   nurse: {
     id: string
     name: string
+    /** الجولة 39: دور العضو — المشرف يعتمد الأطباء حصراً */
+    role: string
     /** الجولة 34: الرقم الكامل يصل فقط لمن تحقق شرط السداد — وإلا null */
     phone: string | null
     phoneMasked: string
@@ -169,6 +181,21 @@ export default function ReceiverStaffPage() {
       queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
       setCreateOpen(false)
       createForm.reset()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // ---------- الجولة 39: اعتماد الطبيب للجهة / إلغاء الاعتماد ----------
+  const [endorsing, setEndorsing] = useState<{ row: StaffNurse; status: 'ENDORSED' | 'WORKING' } | null>(null)
+
+  const endorseMutation = useMutation({
+    mutationFn: ({ affiliationId, status }: { affiliationId: string; status: 'ENDORSED' | 'WORKING' }) =>
+      apiPatch<{ message: string }>(`/api/affiliations/${affiliationId}`, { status }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
+      queryClient.invalidateQueries({ queryKey: ['org-community'] })
+      setEndorsing(null)
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -316,8 +343,32 @@ export default function ReceiverStaffPage() {
                       في تكليف
                     </Badge>
                   ))}
+                {/* الجولة 39: الاعتماد المهني من الإدارة حصراً — لا يمنحه اعتماد الجهة */}
+                <ProfessionalAccreditationBadge
+                  approvedDocuments={n.approvedDocuments ?? 0}
+                  documentsCount={n.nurse._count.documents}
+                  size="sm"
+                />
                 <span className="text-[10px] text-muted-foreground">الارتباط:</span>
                 <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
+                {/* الجولة 39: اعتماد الطبيب للجهة — المشرف يعتمد الأطباء لجهته حصراً
+                    (إضافتهم لمجتمع كوادر الجهة فقط — الاعتماد المهني يبقى للإدارة) */}
+                {n.nurse.role === 'DOCTOR' && (
+                  <Button
+                    variant={n.affiliationStatus === 'ENDORSED' ? 'outline' : 'default'}
+                    size="sm"
+                    className={n.affiliationStatus === 'ENDORSED' ? 'gap-1.5 text-xs' : 'gap-1.5 bg-primary text-xs'}
+                    onClick={() =>
+                      setEndorsing({
+                        row: n,
+                        status: n.affiliationStatus === 'ENDORSED' ? 'WORKING' : 'ENDORSED',
+                      })
+                    }
+                  >
+                    <BadgeCheck className="size-3.5" />
+                    {n.affiliationStatus === 'ENDORSED' ? 'إلغاء اعتماد الجهة' : 'اعتماد للجهة'}
+                  </Button>
+                )}
                 {fullProfileAccess && (
                   <Button
                     variant="ghost"
@@ -570,10 +621,47 @@ export default function ReceiverStaffPage() {
                   حسابه أولاً، ثم تعتمده الإدارة ليصبح جاهزاً لاستقبال التكليفات.
                 </p>
               )}
+              {/* الجولة 39: الاعتماد المهني — مستويان واضحان */}
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm">
+                <ShieldQuestion className="size-4 shrink-0 text-muted-foreground" />
+                <span className="text-muted-foreground">الاعتماد المهني:</span>
+                <ProfessionalAccreditationBadge
+                  approvedDocuments={details.approvedDocuments ?? 0}
+                  documentsCount={details.nurse._count.documents}
+                />
+                <span className="text-xs text-muted-foreground">
+                  يُمنح من حساب الإدارة حصراً بعد رفع المستندات والموافقة عليها — واعتماد الجهة
+                  يضيف الطبيب لمجتمع كوادر الجهة فقط.
+                </span>
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ---------- الجولة 39: تأكيد اعتماد الطبيب للجهة / إلغاء الاعتماد ---------- */}
+      <ConfirmDialog
+        open={!!endorsing}
+        onOpenChange={(open) => !open && setEndorsing(null)}
+        tone={endorsing?.status === 'ENDORSED' ? 'success' : 'warning'}
+        icon={BadgeCheck}
+        title={
+          endorsing?.status === 'ENDORSED'
+            ? `اعتماد (${endorsing?.row.nurse.name}) لجهتك الصحية`
+            : `إلغاء اعتماد الجهة عن (${endorsing?.row.nurse.name})`
+        }
+        description={
+          endorsing?.status === 'ENDORSED'
+            ? `سيُضاف إلى مجتمع كوادر جهة (${org?.name}) ويظهر ضمن الأطباء المعتمدين — اعتماد الجهة يضيفه للجهة فقط، أما اعتماده كطبيب معتمد فيُمنح من حساب الإدارة بعد رفع مستنداته والموافقة عليها.`
+            : `سيخرج من قائمة الأطباء المعتمدين لمجتمع كوادر جهة (${org?.name}) ويصبح ارتباطه «يعمل حالياً» — يمكن إعادة اعتماده في أي وقت.`
+        }
+        confirmLabel={endorsing?.status === 'ENDORSED' ? 'نعم، اعتمده للجهة' : 'نعم، ألغِ اعتماد الجهة'}
+        processing={endorseMutation.isPending}
+        onConfirm={() =>
+          endorsing &&
+          endorseMutation.mutate({ affiliationId: endorsing.row.affiliationId, status: endorsing.status })
+        }
+      />
 
       {/* ---------- السيرة الذاتية الكاملة — لمن مُنح الإذن من الإدارة (الجولة 32) ---------- */}
       <FullProfileDialog

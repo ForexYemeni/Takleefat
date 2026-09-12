@@ -24,8 +24,9 @@ import type { Prisma } from '@prisma/client'
  */
 
 const NURSE_ALLOWED_STATUSES = ['PENDING'] as const
-const RECEIVER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
-/** الاعتماد (مثل اعتماد الحساب) لا يتم أبداً قبل رفع مستندات الكادر */
+/** حالات المستلم الإداري ومشرف الأطباء لجهتهما — الاعتماد للجهة (الجولة 39) */
+const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
+/** الاعتماد المهني من الإدارة لا يتم أبداً قبل رفع مستندات الكادر */
 const DOCUMENT_GATED_STATUSES = ['ENDORSED', 'WORKING'] as const
 
 export async function GET(req: NextRequest) {
@@ -187,19 +188,38 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (session.user.role === 'RECEIVER') {
-      // المستلم الإداري المخول: جهته الصحية فقط + الحالات المسموحة له
+    // الجولة 39 — اعتماد الجهة: المستلم الإداري يعتمد الكادر التمريضي ومشرف
+    // الأطباء يعتمد الأطباء — في جهته الصحية حصراً وبلا شرط مستندات:
+    // «لاضافتهم للجهة الصحية فقط» — أما الاعتماد المهني (كطبيب/ككادر طبي)
+    // فمن حساب الإدارة حصراً بعد رفع المستندات والموافقة عليها.
+    if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
+      const isSupervisor = session.user.role === 'DOCTOR_SUPERVISOR'
       const org = await resolveReceiverOrg(session.user.id)
       if (!org || org.id !== hospitalId) {
-        throw new ApiError('يمكنك إدارة الكوادر المرتبطين بجهتك الصحية فقط', 403)
+        throw new ApiError(
+          isSupervisor
+            ? 'يمكنك اعتماد الأطباء لجهتك الصحية فقط'
+            : 'يمكنك اعتماد الكوادر التمريضيين لجهتك الصحية فقط',
+          403
+        )
       }
-      if (!(RECEIVER_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
-        throw new ApiError('حالة الارتباط غير متاحة للحساب المستلم — راجع الإدارة', 403)
+      if (!(SUPPORTER_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
+        throw new ApiError('حالة الارتباط غير متاحة لحسابك — راجع الإدارة', 403)
+      }
+      // مطابقة الدور مع الهدف: المستلم → كادر تمريضي | مشرف الأطباء → طبيب
+      if (nurse.role !== (isSupervisor ? 'DOCTOR' : 'NURSE')) {
+        throw new ApiError(
+          isSupervisor
+            ? 'اعتماد الأطباء من اختصاص مشرف الأطباء — والكادر التمريضي من اختصاص المستلم الإداري'
+            : 'اعتماد الكادر التمريضي من اختصاص المستلم الإداري — والأطباء من اختصاص مشرف الأطباء',
+          403
+        )
       }
     }
 
-    // بوابة المستندات: الاعتماد/العمل الحالي لا يتم قبل رفع مستندات الكادر — مثل أي كادر آخر
-    if ((DOCUMENT_GATED_STATUSES as readonly string[]).includes(finalStatus)) {
+    // بوابة المستندات للاعتماد المهني — من الإدارة حصراً (الجولة 39: اعتماد الجهة
+    // من المستلم/المشرف بلا بوابة مستندات)
+    if (session.user.role === 'ADMIN' && (DOCUMENT_GATED_STATUSES as readonly string[]).includes(finalStatus)) {
       const documentsCount = await db.document.count({ where: { userId: targetNurseId } })
       if (documentsCount === 0) {
         return jsonError(

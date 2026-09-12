@@ -2951,6 +2951,209 @@ R38_AHAPI=$(grep -c "computeAllOrgCadreStats" app/api/admin/hospitals/route.ts)
 check "خادم: قائمة جهات الإدارة تجمع إحصاءات كل المجتمعات دفعة واحدة" "2" "$R38_AHAPI"
 
 echo ""
+echo "=========== 48) الجولة 39 — اعتماد الكادر للجهة (المستلم/المشرف) + فصل الاعتماد المهني ==========="
+# المستلم الإداري يعتمد الكادر التمريضي لجهته، ومشرف الأطباء يعتمد الأطباء لجهته —
+# لإضافتهم لمجتمع كوادر الجهة فقط، والاعتماد المهني (كطبيب/ككادر طبي) يبقى من
+# حساب الإدارة حصراً بعد رفع المستندات والموافقة عليها.
+
+# تجهيز: كادر تمريضي جديد + جهة ثانية (لعزل الجهات)
+R39_N39=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_n39.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر اعتماد 39","phone":"791110941","password":"Nurse39@123","specialty":"تمريض طوارئ","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"MALE"}')
+check "تجهيز: الإدارة تنشئ كادر تمريضياً لفحوص الاعتماد → 201" "201" "$R39_N39"
+N39_ID=$(jget "['user']['id']" < "$DIR/r39_n39.json")
+login "$DIR/nurse39.jar" "791110941" "Nurse39@123"
+
+R39_H39=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_h39.json" -w "%{http_code}" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى اختبار 39","type":"HOSPITAL","city":"عدن","status":"ACTIVE"}')
+check "تجهيز: الإدارة تنشئ جهة ثانية لفحوص العزل → 201" "201" "$R39_H39"
+H39_ID=$(python3 -c "import json;print(json.load(open('$DIR/r39_h39.json'))['hospital']['id'])" 2>/dev/null)
+
+# الكادر يطلب ارتباطه بالجهة الثانية (طلب ذاتي — PENDING بلا بوابة مستندات)
+R39_SELFREQ=$(code -b "$DIR/nurse39.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$H39_ID\",\"requestedStatus\":\"WORKING\"}")
+check "تجهيز: الكادر يطلب ارتباطاً بالجهة الثانية → 201" "201" "$R39_SELFREQ"
+AFF_N39_H39=$(curl -s -b "$DIR/nurse39.jar" $BASE/api/affiliations | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['affiliations'] if a['hospitalId']=='$H39_ID']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+
+# DOC_ID — الطبيب المنشأ من الإدارة في القسم 29 (بلا ارتباط بعد)
+DOC_ID=$(jget "['user']['id']" < "$DIR/r29_doc.json")
+
+# (أ) المستلم لا يعتمد الأطباء — اعتماد الأطباء من اختصاص مشرف الأطباء
+R39_R_DOC=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$DOC_ID\",\"hospitalId\":\"$HOSP\",\"status\":\"ENDORSED\"}")
+check "المستلم الإداري لا يعتمد طبيباً (مطابقة الدور) → 403" "403" "$R39_R_DOC"
+
+# (ب) مشرف الأطباء يعتمد الطبيب لجهته — بلا بوابة مستندات (اعتماد جهة فقط)
+R39_S_DOC=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$DOC_ID\",\"hospitalId\":\"$HOSP\",\"status\":\"ENDORSED\"}")
+check "مشرف الأطباء يعتمد الطبيب لجهته (بلا شرط مستندات) → 201" "201" "$R39_S_DOC"
+
+# (ج) مشرف الأطباء لا يعتمد الكادر التمريضي — من اختصاص المستلم الإداري
+R39_S_N39=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N39_ID\",\"hospitalId\":\"$HOSP\",\"status\":\"ENDORSED\"}")
+check "مشرف الأطباء لا يعتمد كادراً تمريضياً (مطابقة الدور) → 403" "403" "$R39_S_N39"
+
+# (د) المستلم الإداري يعتمد الكادر التمريضي لجهته — بلا بوابة مستندات
+R39_R_N39=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N39_ID\",\"hospitalId\":\"$HOSP\",\"status\":\"ENDORSED\"}")
+check "المستلم الإداري يعتمد الكادر التمريضي لجهته (بلا شرط مستندات) → 201" "201" "$R39_R_N39"
+
+# (هـ) عزل الجهات: المستلم لا يعدّل ارتباطات جهة أخرى
+R39_CROSS=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/affiliations/$AFF_N39_H39 -H "Content-Type: application/json" \
+  -d '{"status":"ENDORSED"}')
+check "عزل الجهات: المستلم لا يعتمد ارتباطات جهة أخرى → 403" "403" "$R39_CROSS"
+
+# (و) عزل المشرف بلا جهة مصرّح بها (ثغرة الجولة 38 أُغلقت — كان يتجاوز الفحص)
+AFF_DOC_ID=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/affiliations | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['affiliations'] if a['nurseId']=='$DOC_ID' and a['hospitalId']=='$HOSP']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+R39_SUP34=$(code -b "$DIR/sup34.jar" -X PATCH $BASE/api/affiliations/$AFF_DOC_ID -H "Content-Type: application/json" \
+  -d '{"status":"WORKING"}')
+check "عزل المشرف: مشرف بلا جهة مصرّح بها لا يعدّل أي ارتباط → 403" "403" "$R39_SUP34"
+
+# (ز) مجتمع الكوادر يعكس اعتماد المشرف + شارة الاعتماد المهني في الصفوف
+R39_COMM=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/org/community | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+s=d.get('stats') or {}
+rows=d.get('cadres',[])
+ok=s.get('accreditedDoctors',0)>=1
+ok=ok and all('approvedDocuments' in r for r in rows)
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "مجتمع الكوادر: اعتماد المشرف ظهر في الأطباء المعتمدين + approvedDocuments لكل صف" "ok" "$R39_COMM"
+
+# (ح) شارة الاعتماد المهني في مسار كوادر الجهة (المستلم) — الحقل موجود والحالة صحيحة
+R39_RS_BADGE=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=d.get('nurses',[])
+ok=all(('approvedDocuments' in r and 'role' in r['nurse']) for r in rows)
+n39=[r for r in rows if r['nurse']['id']=='$N39_ID']
+ok=ok and n39 and n39[0]['approvedDocuments']==0 and n39[0]['affiliationStatus']=='ENDORSED'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "كوادر الجهة: شارة الاعتماد المهني (معتمد من الإدارة) — الكادر المعتمد للجهة بلا مستندات معتمدة بعد" "ok" "$R39_RS_BADGE"
+
+echo ""
+echo "=========== 49) الجولة 39 — الإنهاء والتقييم من المستلم/المشرف حتى لو أُغلق التكليف من الكادر ==========="
+
+# (أ) المشرف ينهي تكليف الطبيب الساري (لم يُستلم بعد) مباشرة — استلام تلقائي + تقييم
+SUP39_AID=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['nurse']['id']=='$DOC_ID' and a['status']!='COMPLETED' and a['status']!='CANCELLED']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+SUP39_STATE=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['id']=='$SUP39_AID']
+print(rows[0]['status'] if rows else '?')" 2>/dev/null)
+check "تجهيز: تكليف الطبيب لدى المشرف بانتظار الاستلام (ACTIVE)" "ACTIVE" "$SUP39_STATE"
+
+R39_SUPDONE=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r39_supdone.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$SUP39_AID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":5,"quality":5,"comment":"إنجاز متميز من الطبيب"}}')
+check "المشرف ينهي تكليف طبيب جهته مباشرة من ACTIVE (استلام تلقائي) مع التقييم → 200" "200" "$R39_SUPDONE"
+
+R39_SUPRATED=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['id']=='$SUP39_AID']
+a=rows[0] if rows else {}
+print('ok' if a.get('status')=='COMPLETED' and a.get('receiverDoneAt') and a.get('rating',{}).get('overall')==5 else 'bad')" 2>/dev/null)
+check "تكليف الطبيب مكتمل لدى المشرف مع التقييم المحفوظ" "ok" "$R39_SUPRATED"
+
+# (ب) الكادر يغلق التكليف من حسابه أولاً — ثم المستلم ينهي مباشرة من ACTIVE
+R39_POSTA=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"title\":\"تكليف إغلاق الكادر 39\",\"description\":\"فحص الإنهاء بعد إغلاق الكادر\",\"hospitalId\":\"$HOSP\",\"department\":\"طوارئ E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"ANY\",\"value\":40000,\"distribution\":\"ALL_MATCHING\"}")
+check "تجهيز: المستلم ينشئ تكليفاً مُعلناً → 201" "201" "$R39_POSTA"
+P39_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[p for p in d['posts'] if p['title']=='تكليف إغلاق الكادر 39']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+R39_APPLYA=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P39_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"تقديم لفحص الإنهاء"}')
+check "تجهيز: الكادر يتقدم على التكليف → 201" "201" "$R39_APPLYA"
+R39_APPA=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P39_ID/applications | jget "['applications'][0]['id']") -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
+check "تجهيز: المستلم يعتمد التقديم → 200" "200" "$R39_APPA"
+A39_ID=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['post'] and a['post'].get('id')=='$P39_ID']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+A39_STATE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['id']=='$A39_ID']
+print(rows[0]['status'] if rows else '?')" 2>/dev/null)
+check "تجهيز: التكليف المؤكد ACTIVE بانتظار استلام المستلم" "ACTIVE" "$A39_STATE"
+
+R39_NDONE=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/me/assignments/$A39_ID/nurse-complete -H "Content-Type: application/json" -d '{"receivedAmount":true}')
+check "الكادر يغلق التكليف من حسابه أولاً (تأكيد إنهاء واستلام) → 200" "200" "$R39_NDONE"
+
+R39_RDONE=$(curl -s -b "$DIR/receiver.jar" -o "$DIR/r39_rdone.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$A39_ID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":4,"punctuality":4,"comment":"أُغلق من الكادر وأنهاه المستلم مباشرة"}}')
+check "المستلم ينهي ويقيّم مباشرة من ACTIVE رغم إغلاق الكادر له → 200" "200" "$R39_RDONE"
+R39_RDONE2=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A39_ID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":4}}')
+check "منع تكرار إنهاء التكليف المنتهي من المستلم → 409" "409" "$R39_RDONE2"
+
+# (ج) الإدارة تُغلق التكليف — والمستلم يسجّل الإنهاء والتقييم بعدها
+R39_POSTB=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"title\":\"تكليف إغلاق الإدارة 39\",\"description\":\"فحص الإنهاء بعد إغلاق الإدارة\",\"hospitalId\":\"$HOSP\",\"department\":\"طوارئ E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"ANY\",\"value\":30000,\"distribution\":\"ALL_MATCHING\"}")
+check "تجهيز: تكليف ثانٍ → 201" "201" "$R39_POSTB"
+P39B_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[p for p in d['posts'] if p['title']=='تكليف إغلاق الإدارة 39']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+R39_APPLYB=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P39B_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"فحص إغلاق الإدارة"}')
+check "تجهيز: تقديم الكادر على التكليف الثاني → 201" "201" "$R39_APPLYB"
+R39_APPB=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P39B_ID/applications | jget "['applications'][0]['id']") -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
+check "تجهيز: اعتماد التقديم الثاني → 200" "200" "$R39_APPB"
+A39B_ID=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['post'] and a['post'].get('id')=='$P39B_ID']
+print(rows[0]['id'] if rows else '')" 2>/dev/null)
+R39_RECVB=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A39B_ID/receive -H "Content-Type: application/json" -d '{}')
+check "تجهيز: المستلم يستلم التكليف الثاني → 200" "200" "$R39_RECVB"
+R39_ADMCLOSE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A39B_ID -H "Content-Type: application/json" -d '{"status":"COMPLETED"}')
+check "الإدارة تغلق التكليف من حسابها (دون تقييم المستلم) → 200" "200" "$R39_ADMCLOSE"
+
+R39_RDONEB=$(curl -s -b "$DIR/receiver.jar" -o "$DIR/r39_rdoneb.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$A39B_ID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":false,"rating":{"overall":3,"discipline":3,"comment":"أُغلق من الإدارة وسجّل المستلم تقييمه بعدها"}}')
+check "المستلم ينهي ويقيّم تكليفاً أغلقتِه الإدارة مسبقاً → 200" "200" "$R39_RDONEB"
+R39_B_RATED=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[a for a in d['assignments'] if a['id']=='$A39B_ID']
+a=rows[0] if rows else {}
+print('ok' if a.get('receiverDoneAt') and a.get('rating',{}).get('overall')==3 and a.get('nursePaid') is False else 'bad')" 2>/dev/null)
+check "إجابة الدفع (لا) والتقييم مسجلان لدى المستلم بعد إغلاق الإدارة" "ok" "$R39_B_RATED"
+
+# (د) فحوص ساكنة: أزرار الاعتماد والإنهاء والشارات في الواجهات
+R39_UI_ENDORSE=$(grep -l "اعتماد للجهة" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: زر «اعتماد للجهة» في صفحتي كوادر المستلم وأطباء المشرف" "2" "$R39_UI_ENDORSE"
+R39_UI_BADGE=$([ -f components/shared/professional-accreditation-badge.tsx ] && grep -c "معتمد من الإدارة" components/shared/professional-accreditation-badge.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: شارة الاعتماد المهني «معتمد من الإدارة» موجودة" "1" "$R39_UI_BADGE"
+R39_UI_USE=$(grep -l "ProfessionalAccreditationBadge" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx components/shared/entity-cadre-community.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: شارة الاعتماد المهني مدمجة في (كوادر المستلم + أطباء المشرف + مجتمع الجهة)" "3" "$R39_UI_USE"
+R39_API_GATE=$(grep -l "role === 'ADMIN' && (DOCUMENT_GATED_STATUSES" app/api/affiliations/route.ts "app/api/affiliations/[id]/route.ts" 2>/dev/null | wc -l | tr -d ' ')
+check "api: بوابة المستندات للاعتماد أصبحت للإدارة حصراً (المستلم/المشرف يعتمدان للجهة بلا بوابة)" "2" "$R39_API_GATE"
+R39_API_SCOPE=$(grep -c "DOCTOR_SUPERVISOR" app/api/affiliations/\[id\]/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: نطاق الجهة يفحص مشرف الأطباء أيضاً (إغلاق ثغرة التجاوز)" "1" "$R39_API_SCOPE"
+R39_API_DONE=$(grep -c "resolveReceiverOrg" app/api/me/assignments/\[id\]/receiver-complete/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: نطاق مشرف الأطباء (أطباء جهته) في مسار الإنهاء والتقييم" "1" "$R39_API_DONE"
+R39_API_LIST=$(grep -c "ACTIVE_AFFILIATION_STATUSES" app/api/me/assignments/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: قائمة تكليفات المشرف تشمل تكليفات أطباء جهته" "1" "$R39_API_LIST"
+R39_UI_BTN=$(grep -l "إنهاء التكليف وتقييم" app/receiver/assignments/page.tsx app/supervisor/assignments/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: زر «إنهاء التكليف وتقييم» في المنتهية دون إنهاء المستلم (صفحتا المستلم والمشرف)" "2" "$R39_UI_BTN"
+
+echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
 if [ $FAIL -gt 0 ]; then printf 'فاشل: %s\n' "${FAILED_TESTS[@]}"; fi

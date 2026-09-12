@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { StaffPhone, type StaffPhoneData } from '@/components/shared/staff-phone'
+import { ProfessionalAccreditationBadge } from '@/components/shared/professional-accreditation-badge'
 import { ORG_TYPE_LABELS, ORG_STATUS_LABELS } from '@/lib/network'
 import { GENDER_LABELS } from '@/lib/utils'
 
@@ -32,6 +33,10 @@ import { GENDER_LABELS } from '@/lib/utils'
  * عن الجهة حسب صلاحياته، مع إمكانية استعراض أعضاء المجتمع (اختيارياً)
  * بشارات التوفر والارتباط والتقييم وأرقام التواصل وفق قواعد الخصوصية
  * (الإدارة كاملة — والمستلم/المشرف بقواعد السداد والموثوقية).
+ *
+ * الجولة 39: شارة الاعتماد المهني «معتمد من الإدارة» لكل عضو — لا يُمنح
+ * الاعتماد المهني (كطبيب/ككادر طبي) إلا برفع المستندات والموافقة عليها
+ * من حساب الإدارة، واعتماد الجهة من المستلم/المشرف يضيف للجهة فقط.
  */
 
 export interface OrgCadreStatsView {
@@ -59,6 +64,8 @@ export interface OrgCadreRow {
   affiliationStatusLabel: string
   workYears?: number | null
   available: boolean
+  /** الجولة 39: عدد المستندات المعتمدة من الإدارة — شارة الاعتماد المهني */
+  approvedDocuments?: number
   ratingAverage?: number | null
   ratingCount?: number | null
   phone: string | null
@@ -211,6 +218,11 @@ export function EntityCadreCommunity({
                         في تكليف حالياً
                       </Badge>
                     )}
+                    {/* الجولة 39: شارة الاعتماد المهني — من الإدارة حصراً بعد المستندات */}
+                    <ProfessionalAccreditationBadge
+                      approvedDocuments={c.approvedDocuments ?? 0}
+                      size="sm"
+                    />
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span>{c.role === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}</span>

@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    const [ratingRows, busy, trusted] = await Promise.all([
+    const [ratingRows, busy, trusted, approvedDocs] = await Promise.all([
       db.nurseRating.groupBy({
         by: ['nurseId'],
         where: { nurseId: { in: members.map((m) => m.nurseId) } },
@@ -90,8 +90,15 @@ export async function GET(req: NextRequest) {
       }),
       busyStaffIds(members.map((m) => m.nurseId)),
       session.user.role === 'ADMIN' ? Promise.resolve(false) : isTrustedViewer(session.user.id),
+      // الجولة 39: المستندات المعتمدة من الإدارة — شارة الاعتماد المهني في المجتمع
+      db.document.groupBy({
+        by: ['userId'],
+        where: { userId: { in: members.map((m) => m.nurseId) }, status: 'APPROVED' },
+        _count: { _all: true },
+      }),
     ])
     const ratingMap = new Map(ratingRows.map((r) => [r.nurseId, r]))
+    const approvedDocsMap = new Map(approvedDocs.map((d) => [d.userId, d._count._all]))
 
     // أرقام الكوادر حسب الصلاحيات — الإدارة كاملة، والمسؤول بقواعد الخصوصية
     const revealed =
@@ -118,6 +125,8 @@ export async function GET(req: NextRequest) {
         affiliationStatusLabel: AFFILIATION_STATUS_LABELS[m.status] ?? m.status,
         workYears: m.workYears,
         available: !busy.has(m.nurseId),
+        // الجولة 39: الاعتماد المهني من الإدارة — مستندات معتمدة من حساب الإدارة
+        approvedDocuments: approvedDocsMap.get(m.nurseId) ?? 0,
         ratingAverage: r?._avg.overall ? Number(r._avg.overall.toFixed(2)) : null,
         ratingCount: r?._count.overall ?? 0,
         ...phoneView(session.user.role, m.nurse.phone, revealed.has(m.nurseId), trusted),

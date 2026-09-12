@@ -2,17 +2,27 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings } from '@/lib/settings'
+import { resolveReceiverOrg } from '@/lib/network'
 import {
   isAssignmentPhoneOpen,
   isTrustedViewer,
   phoneView,
   receiverPhoneForStaff,
 } from '@/lib/phone-privacy'
+import type { Prisma, AffiliationStatus } from '@prisma/client'
+
+/** حالات الارتباط الساري التي تربط الطبيب بجهة المشرف (الجولة 39) */
+const ACTIVE_AFFILIATION_STATUSES: AffiliationStatus[] = ['WORKING', 'ENDORSED']
 
 /**
  * GET /api/me/assignments
- * تكليفات المستخدم الحالي (الكادر التمريضي أو المستلم الإداري)
+ * تكليفات المستخدم الحالي (الكادر التمريضي أو المستلم الإداري أو مشرف الأطباء)
  * تشمل البيانات المالية (القيمة، حصة الإدارة، حالة الدفع).
+ *
+ * الجولة 39 — نطاق مشرف الأطباء:
+ *  - تكليفاته هو (هو الطرف المساند فيها) + تكليفات أطباء جهته الصحية
+ *    (ارتباط ساري: يعمل حالياً/معتمد) — ليتمكن من إنهائها وتقييم أطباء
+ *    جهته حتى لو أُغلق التكليف من حساب الطبيب أو أُنشئ لمستلم آخر.
  *
  * الجولة 35 — القفل التبادلي (lib/phone-privacy):
  *  - المستلم/المشرف: رقم الكادر مقفل حتى تُسدَّد نسبة الإدارة وتأكدها الإدارة
@@ -36,9 +46,39 @@ export async function GET() {
       session.user.role === 'NURSE' || session.user.role === 'DOCTOR'
     const trusted = await isTrustedViewer(session.user.id)
 
+    // الجولة 39: نطاق المشرف — تكليفاته + تكليفات أطباء جهته الصحية
+    let where: Prisma.AssignmentWhereInput
+    if (isWorker) {
+      where = { nurseId: session.user.id }
+    } else if (session.user.role === 'DOCTOR_SUPERVISOR') {
+      const org = await resolveReceiverOrg(session.user.id)
+      where = {
+        OR: [
+          { receiverId: session.user.id },
+          ...(org
+            ? [
+                {
+                  nurse: {
+                    role: 'DOCTOR' as const,
+                    affiliations: {
+                      some: {
+                        hospitalId: org.id,
+                        status: { in: ACTIVE_AFFILIATION_STATUSES },
+                      },
+                    },
+                  },
+                },
+              ]
+            : []),
+        ],
+      }
+    } else {
+      where = { receiverId: session.user.id }
+    }
+
     const [assignments, settings] = await Promise.all([
       db.assignment.findMany({
-        where: isWorker ? { nurseId: session.user.id } : { receiverId: session.user.id },
+        where,
         orderBy: { createdAt: 'desc' },
         include: {
           nurse: { select: { id: true, name: true, specialty: true, phone: true } },

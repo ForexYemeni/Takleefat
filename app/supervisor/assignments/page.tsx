@@ -674,14 +674,26 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                     تاريخ البدء: {formatDate(a.startDate)}
                   </p>
 
-                  <Button
-                    className="w-full gap-2"
-                    onClick={() => receiveMutation.mutate(a.id)}
-                    disabled={receiveMutation.isPending}
-                  >
-                    <PackageCheck className="size-4" />
-                    {receiveMutation.isPending ? 'جارٍ التأكيد...' : 'تأكيد استلام التكليف'}
-                  </Button>
+                  {/* الجولة 39: الإنهاء والتقييم متاحان حتى لو أغلق الطبيب التكليف من حسابه
+                      — الإنهاء المباشر يسجّل الاستلام تلقائياً دون حاجة لخطوة منفصلة */}
+                  <div className="grid gap-2">
+                    <Button
+                      className="w-full gap-2"
+                      onClick={() => receiveMutation.mutate(a.id)}
+                      disabled={receiveMutation.isPending}
+                    >
+                      <PackageCheck className="size-4" />
+                      {receiveMutation.isPending ? 'جارٍ التأكيد...' : 'تأكيد استلام التكليف'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => setCompleting(a)}
+                    >
+                      <BadgeCheck className="size-4" />
+                      تم انتهاء التكليف — إنهاء وتقييم مباشر
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -807,6 +819,15 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                         </p>
                       )}
                     </div>
+                  )}
+
+                  {/* الجولة 39: تكليف أُغلق من الإدارة أو من الطبيب دون إنهاء المشرف —
+                      يستطيع المشرف تسجيل الإنهاء والإجابة عن الدفع وتقييم الطبيب الآن */}
+                  {a.status === 'COMPLETED' && !a.receiverDoneAt && (
+                    <Button className="w-full gap-2" onClick={() => setCompleting(a)}>
+                      <BadgeCheck className="size-4" />
+                      إنهاء التكليف وتقييم الطبيب
+                    </Button>
                   )}
 
                   {a.receiverDoneAt && (

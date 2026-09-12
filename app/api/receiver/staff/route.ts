@@ -195,6 +195,7 @@ export async function GET() {
               name: true,
               phone: true,
               gender: true,
+              role: true,
               specialty: true,
               qualification: true,
               yearsOfExperience: true,
@@ -217,6 +218,18 @@ export async function GET() {
       // الجولة 38: إحصاءات مجتمع كوادر الجهة الصحية
       computeOrgCadreStats(org.id),
     ])
+    // الجولة 39: المستندات المعتمدة من الإدارة — الاعتماد المهني (كطبيب/ككادر طبي)
+    // لا يُمنح إلا برفع المستندات والموافقة عليها من حساب الإدارة، ولا يمنحه
+    // اعتماد الجهة من المستلم/المشرف إطلاقاً
+    const approvedDocs = await db.document.groupBy({
+      by: ['userId'],
+      where: {
+        userId: { in: affiliations.map((a) => a.nurse.id) },
+        status: 'APPROVED',
+      },
+      _count: { _all: true },
+    })
+    const approvedDocsMap = new Map(approvedDocs.map((d) => [d.userId, d._count._all]))
     const favoriteSet = new Set(favorites.map((f) => f.nurseId))
     // الجولة 38: من المشغول الآن بتكليف سارٍ — لشارة «متاح الآن / في تكليف»
     const busy = await busyStaffIds(affiliations.map((a) => a.nurse.id))
@@ -245,6 +258,8 @@ export async function GET() {
         isFavorite: favoriteSet.has(a.nurse.id),
         // الجولة 38: متاح الآن = بلا تكليف سارٍ (ACTIVE/RECEIVED)
         available: !busy.has(a.nurse.id),
+        // الجولة 39: الاعتماد المهني من الإدارة — مستندات معتمدة من حساب الإدارة
+        approvedDocuments: approvedDocsMap.get(a.nurse.id) ?? 0,
         nurse: {
           ...a.nurse,
           ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
