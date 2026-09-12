@@ -24,7 +24,7 @@ import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { apiFetcher, apiPatch, apiPost, apiDelete } from '@/lib/api-client'
 import { formatDate, GENDER_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
-import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, JOIN_ACCEPT_STATUS_OPTIONS } from '@/lib/network'
 import {
   createDoctorSchema,
   type CreateDoctorInput,
@@ -209,19 +209,24 @@ export default function ReceiverStaffPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  // ---------- الجولة 40: قبول طلب انضمام طبيب لجهتك ----------
+  // ---------- الجولة 42: قبول طلب انضمام الطبيب بحالة يختارها مشرف الأطباء ----------
+  // معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت المقابلة معه
+  const [accepting, setAccepting] = useState<StaffNurse | null>(null)
+  const [acceptStatus, setAcceptStatus] = useState<string>('ENDORSED')
+
   const acceptJoinMutation = useMutation({
-    mutationFn: ({ row }: { row: StaffNurse }) =>
-      apiPatch<{ message: string }>(`/api/affiliations/${row.affiliationId}`, { status: 'ENDORSED' }),
-    onSuccess: (res, { row }) => {
+    mutationFn: ({ affiliationId, status }: { affiliationId: string; status: string }) =>
+      apiPatch<{ message: string }>(`/api/affiliations/${affiliationId}`, { status }),
+    onSuccess: (res, { status }) => {
       toast.success(
-        row.nurse.status === 'APPROVED'
+        status === 'ENDORSED'
           ? res.message
           : `${res.message} — سيُحتسب ضمن المعتمدين بعد اعتماد حسابه ورفع مستنداته من الإدارة`,
         { duration: 6000 }
       )
       queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
       queryClient.invalidateQueries({ queryKey: ['org-community'] })
+      setAccepting(null)
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -343,10 +348,13 @@ export default function ReceiverStaffPage() {
                     size="sm"
                     className="gap-1.5 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
                     disabled={acceptJoinMutation.isPending}
-                    onClick={() => acceptJoinMutation.mutate({ row: n })}
+                    onClick={() => {
+                      setAcceptStatus('ENDORSED')
+                      setAccepting(n)
+                    }}
                   >
                     <Check className="size-3.5" />
-                    قبول وإضافة للجهة
+                    قبول الطلب
                   </Button>
                   <Button
                     size="sm"
@@ -828,6 +836,72 @@ export default function ReceiverStaffPage() {
           endorseMutation.mutate({ affiliationId: endorsing.row.affiliationId, status: endorsing.status })
         }
       />
+
+      {/* ---------- الجولة 42: قبول طلب الانضمام مع اختيار حالة الطبيب في الجهة ---------- */}
+      <Dialog open={!!accepting} onOpenChange={(open) => !open && setAccepting(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BadgeCheck className="size-4 text-emerald-600" />
+              قبول طلب انضمام ({accepting?.nurse.name})
+            </DialogTitle>
+            <DialogDescription>
+              اختر حالة الطبيب في جهة ({org?.name}) عند قبوله — كل الخيارات تضيفه لكوادر الجهة
+              بحسب حالته، واعتماده المهني يبقى من حساب الإدارة بعد المستندات.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2" role="radiogroup" aria-label="حالة الطبيب في الجهة">
+            {JOIN_ACCEPT_STATUS_OPTIONS.map((opt) => {
+              const selected = acceptStatus === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setAcceptStatus(opt.value)}
+                  className={`flex items-start gap-3 rounded-2xl border p-3 text-start transition-colors ${
+                    selected
+                      ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-950/40'
+                      : 'hover:bg-muted/60'
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                      selected ? 'border-emerald-600' : 'border-muted-foreground/40'
+                    }`}
+                  >
+                    {selected && <span className="size-2 rounded-full bg-emerald-600" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-extrabold">{opt.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{opt.hint}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAccepting(null)}>
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              disabled={acceptJoinMutation.isPending}
+              className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={() =>
+                accepting &&
+                acceptJoinMutation.mutate({ affiliationId: accepting.affiliationId, status: acceptStatus })
+              }
+            >
+              <Check className="size-4" />
+              {acceptJoinMutation.isPending
+                ? 'جارٍ القبول...'
+                : `قبول وإضافة للجهة (${JOIN_ACCEPT_STATUS_OPTIONS.find((o) => o.value === acceptStatus)?.label ?? ''})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ---------- الجولة 40: تأكيد رفض طلب انضمام طبيب ---------- */}
       <ConfirmDialog

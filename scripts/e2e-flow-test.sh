@@ -902,8 +902,12 @@ check "الإدارة تعتمد جهة العمل بعد المستندات →
 
 # --- كوادر الجهة: المستلم يضيف ممرض لجهته ---
 login "$DIR/r8receiver.jar" "788880302" "Round8@123"
+# الجولة 42: القسم إجباري من كتالوج الأقسام (طوارئ E2E أُنشئ من الإدارة في بداية السكربت)
+R8_STAFF_BAD=$(code -b "$DIR/r8receiver.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
+  -d '{"name":"قسم حر","phone":"788880309","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","specialty":"قسم حر غير مسجل","yearsOfExperience":0}')
+check "الجولة 42: رفض قسم خارج كتالوج الأقسام عند إضافة ممرض للجهة → 422" "422" "$R8_STAFF_BAD"
 R8_STAFF=$(curl -s -b "$DIR/r8receiver.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
-  -d '{"name":"هند عبده","phone":"788880303","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","specialty":"تمريض عام","yearsOfExperience":0}')
+  -d '{"name":"هند عبده","phone":"788880303","password":"Staff@12345","gender":"FEMALE","qualification":"أورديلي سنة","specialty":"طوارئ E2E","yearsOfExperience":0}')
 R8_STAFF_ID=$(echo "$R8_STAFF" | jget "['nurse']['id']")
 [ -n "$R8_STAFF_ID" ] && check "المستلم يضيف ممرضة لجهته النشطة → 201 (ارتباط WORKING مباشرة)" "ok" "ok" || check "إضافة ممرض للجهة" "id" "null"
 
@@ -3209,9 +3213,9 @@ check "رسالة القبول صريحة (تم قبول الكادر وإضاف
 R50_ACC_NOTIF=$(curl -s -b "$DIR/n50a.jar" $BASE/api/notifications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-m=[n for n in d.get('notifications',[]) if n['title']=='تم قبول طلب انضمامك' and 'أصبحت ضمن كوادر الجهة' in n['body']]
+m=[n for n in d.get('notifications',[]) if n['title']=='تم قبول طلب انضمامك' and 'وحالتك فيها: معتمد' in n['body']]
 print('ok' if m else 'bad')" 2>/dev/null)
-check "إشعار الكادر: تم قبول طلب انضمامك (مع تذكير بأن الاعتماد المهني من الإدارة)" "ok" "$R50_ACC_NOTIF"
+check "إشعار الكادر: تم قبول طلب انضمامك مع الحالة المختارة (معتمد + تذكير باعتماد الإدارة)" "ok" "$R50_ACC_NOTIF"
 
 R50_MARK2=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
 import json,sys
@@ -3220,6 +3224,56 @@ rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50A_ID']
 ok=len(rows)==1 and rows[0].get('isJoinRequest') is False and rows[0]['affiliationStatus']=='ENDORSED'
 print('ok' if ok else 'bad')" 2>/dev/null)
 check "بعد القبول: الطلب يخرج من طلبات الانضمام ويصبح معتمداً للجهة (ENDORSED)" "ok" "$R50_MARK2"
+
+# (د2) الجولة 42 — القبول بخيارات الحالة: تحت الإستدعاء ثم تمت المقابلة معه
+R50_E=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_e.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر استدعاء","phone":"791110954","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"FEMALE"}')
+check "تجهيز: كادر ثالث لفحص قبول «تحت الإستدعاء» → 201" "201" "$R50_E"
+N50E_ID=$(jget "['user']['id']" < "$DIR/r50_e.json")
+login "$DIR/n50e.jar" "791110954" "R40@12345"
+R50_JOIN_E=$(code -b "$DIR/n50e.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"requestedStatus\":\"WORKING\"}")
+check "تجهيز: كادر الاستدعاء يطلب الانضمام → 201" "201" "$R50_JOIN_E"
+AFF50E=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50E_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+R50_ONCALL=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF50E -H "Content-Type: application/json" -d '{"status":"ON_CALL"}')
+check "الجولة 42: قبول الطلب بحالة «تحت الإستدعاء» (ON_CALL) → 200" "200" "$R50_ONCALL"
+R50_ONCALL_ST=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50E_ID']
+ok=len(rows)==1 and rows[0]['affiliationStatus']=='ON_CALL' and rows[0]['affiliationStatusLabel']=='تحت الإستدعاء'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "بعد القبول: حالة الكادر «تحت الإستدعاء» في كوادر الجهة" "ok" "$R50_ONCALL_ST"
+R50_ONCALL_NOTIF=$(curl -s -b "$DIR/n50e.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='تم قبول طلب انضمامك' and 'وحالتك فيها: تحت الإستدعاء' in n['body']]
+print('ok' if m else 'bad')" 2>/dev/null)
+check "إشعار الكادر يذكر الحالة المختارة «تحت الإستدعاء»" "ok" "$R50_ONCALL_NOTIF"
+
+R50_F=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_f.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر مقابلة","phone":"791110955","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":5,"gender":"MALE"}')
+check "تجهيز: كادر رابع لفحص قبول «تمت المقابلة معه» → 201" "201" "$R50_F"
+N50F_ID=$(jget "['user']['id']" < "$DIR/r50_f.json")
+login "$DIR/n50f.jar" "791110955" "R40@12345"
+R50_JOIN_F=$(code -b "$DIR/n50f.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"requestedStatus\":\"FORMER\"}")
+check "تجهيز: كادر المقابلة يطلب الانضمام → 201" "201" "$R50_JOIN_F"
+AFF50F=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50F_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+R50_F_LOCK=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF50F -H "Content-Type: application/json" -d '{"status":"EXTERNAL"}')
+check "الجولة 42: طلب الانضمام المعلق لا يقبل الحالات الإدارية (EXTERNAL) → 403" "403" "$R50_F_LOCK"
+R50_IV=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF50F -H "Content-Type: application/json" -d '{"status":"INTERVIEWED"}')
+check "الجولة 42: قبول الطلب بحالة «تمت المقابلة معه» (INTERVIEWED) → 200" "200" "$R50_IV"
+R50_FORMER=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF50F -H "Content-Type: application/json" -d '{"status":"FORMER"}')
+check "الجولة 42: تحديث الحالة بعد القبول إلى «يعمل سابقاً» (FORMER) → 200" "200" "$R50_FORMER"
 
 # (هـ) الرفض: حذف الطلب + إشعار صريح للكادر
 R50_JOIN_B=$(code -b "$DIR/n50b.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
@@ -3290,6 +3344,24 @@ R50_API_LOCK=$(grep -c "isPendingJoinRequest" "app/api/affiliations/[id]/route.t
 check "api: طلبات الانضمام مقفلة بالقبول/الرفض في PATCH وDELETE" "1" "$R50_API_LOCK"
 R50_API_MARK=$(grep -c "isJoinRequest" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
 check "api: تمييز طلبات الانضمام في استجابة كوادر الجهة" "1" "$R50_API_MARK"
+
+# (ح) الجولة 42 — خيارات قبول الطلب + القسم من كتالوج الإدارة
+R42_OPTIONS=$(grep -l "JOIN_ACCEPT_STATUS_OPTIONS" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: خيارات قبول الطلب (JOIN_ACCEPT_STATUS_OPTIONS) في صفحتي المستلم والمشرف" "2" "$R42_OPTIONS"
+R42_ONCALL=$(grep -c "ON_CALL: 'تحت الإستدعاء'" lib/network.ts | awk '{print ($1>=1)?1:0}')
+check "ui/api: تسمية الحالة الجديدة «تحت الإستدعاء» (ON_CALL) في التسميات المشتركة" "1" "$R42_ONCALL"
+R42_FIVE=$(grep -c "value: '" lib/network.ts | awk '{print ($1>=5)?1:0}')
+check "ui: خمس خيارات قبول (معتمد/حالياً/سابقاً/استدعاء/مقابلة) في JOIN_ACCEPT_STATUS_OPTIONS" "1" "$R42_FIVE"
+R42_ACCEPT_DIALOG=$(grep -l "role=\"radio\"" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: حوار قبول الطلب بخيارات إشعاعية (radiogroup) في الصفحتين" "2" "$R42_ACCEPT_DIALOG"
+R42_DEPT_FETCH=$(grep -c "api/departments/public" app/receiver/staff/page.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: منتقي القسم في نموذج إضافة ممرض للجهة يتغذى من كتالوج الإدارة (departments/public)" "1" "$R42_DEPT_FETCH"
+R42_NO_FREE=$(grep -c "register('specialty')" app/receiver/staff/page.tsx | awk '{print ($1==0)?1:0}')
+check "ui: لا حقل كتابة حرة للتخصص في نموذج إضافة الممرض (القسم من الكتالوج حصراً)" "1" "$R42_NO_FREE"
+R42_DEPT_VAL=$(grep -c "db.department.findUnique" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: تحقق القسم من كتالوج الأقسام عند إضافة ممرض للجهة (فرع المستلم)" "1" "$R42_DEPT_VAL"
+R42_ACCEPT_SET=$(grep -c "JOIN_ACCEPT_STATUSES" "app/api/affiliations/[id]/route.ts" | awk '{print ($1>=2)?1:0}')
+check "api: مجموعة حالات قبول طلب الانضمام (معتمد/حالياً/سابقاً/استدعاء/مقابلة) محكومة في PATCH" "1" "$R42_ACCEPT_SET"
 
 echo ""
 echo "=========== 51) الجولة 41 — القبول لا يكسر التطبيق + بطاقة كوادر جهتي مصغرة ==========="

@@ -110,6 +110,7 @@ enum AffiliationStatus {
   FORMER /// عمل سابقاً
   INTERVIEWED /// تمت مقابلته
   ENDORSED /// معتمد
+  ON_CALL /// تحت الإستدعاء — ضمن كوادر الجهة وجاهز للاستدعاء عند الحاجة
   PENDING /// قيد المراجعة (طلب الكادر)
   EXTERNAL /// خارجي مؤهل
   UNENDORSED /// غير معتمد

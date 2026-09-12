@@ -25,7 +25,7 @@ import type { Prisma } from '@prisma/client'
 
 const NURSE_ALLOWED_STATUSES = ['PENDING'] as const
 /** حالات المستلم الإداري ومشرف الأطباء لجهتهما — الاعتماد للجهة (الجولة 39) */
-const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
+const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'ON_CALL', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
 /** الاعتماد المهني من الإدارة لا يتم أبداً قبل رفع مستندات الكادر */
 const DOCUMENT_GATED_STATUSES = ['ENDORSED', 'WORKING'] as const
 

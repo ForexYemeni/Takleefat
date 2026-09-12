@@ -24,11 +24,25 @@ export const AFFILIATION_STATUS_LABELS: Record<string, string> = {
   FORMER: 'عمل سابقاً',
   INTERVIEWED: 'تمت مقابلته',
   ENDORSED: 'معتمد',
+  ON_CALL: 'تحت الإستدعاء',
   PENDING: 'قيد المراجعة',
   EXTERNAL: 'خارجي مؤهل',
   UNENDORSED: 'غير معتمد',
   SUSPENDED: 'موقوف',
 }
+
+/**
+ * الجولة 42 — خيارات قبول طلب الانضمام التي يختار منها مسؤول الجهة
+ * (المستلم الإداري للكادر التمريضي / مشرف الأطباء للأطباء) عند قبول الطلب.
+ * كل خيار يضيف الكادر لكوادر الجهة بحالته — والاعتماد المهني يبقى من الإدارة.
+ */
+export const JOIN_ACCEPT_STATUS_OPTIONS: { value: string; label: string; hint: string }[] = [
+  { value: 'ENDORSED', label: 'معتمد', hint: 'يُحتسب ضمن «المعتمدين» في مجتمع كوادر الجهة' },
+  { value: 'WORKING', label: 'يعمل حالياً', hint: 'عضو نشط في كوادر الجهة الآن' },
+  { value: 'FORMER', label: 'يعمل سابقاً', hint: 'يُسجّل كعمل سابق في الجهة' },
+  { value: 'ON_CALL', label: 'تحت الإستدعاء', hint: 'ضمن كوادر الجهة وجاهز للاستدعاء عند الحاجة' },
+  { value: 'INTERVIEWED', label: 'تمت المقابلة معه', hint: 'يُسجّل بعد المقابلة — دون احتساب ضمن المعتمدين' },
+]
 
 export const ORG_TYPE_LABELS: Record<string, string> = {
   HOSPITAL: 'مستشفى',

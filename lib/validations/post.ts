@@ -200,7 +200,7 @@ export const affiliationCreateSchema = z.object({
     .optional(),
   status: z
     .enum(
-      ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
+      ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'ON_CALL', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
       { error: 'حالة الارتباط غير صحيحة' }
     )
     .optional(),
@@ -220,7 +220,7 @@ export const affiliationCreateSchema = z.object({
 
 export const affiliationUpdateSchema = z.object({
   status: z.enum(
-    ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
+    ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'ON_CALL', 'PENDING', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'],
     { error: 'حالة الارتباط غير صحيحة' }
   ),
   note: z.string().max(500, 'الملاحظة طويلة جداً').optional().or(z.literal('')),

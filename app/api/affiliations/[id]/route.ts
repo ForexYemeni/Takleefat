@@ -21,8 +21,11 @@ import { AFFILIATION_STATUS_LABELS, resolveReceiverOrg } from '@/lib/network'
  *    والموافقة عليها — لا يمنحه اعتماد الجهة إطلاقاً.
  */
 
-const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
+const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'ON_CALL', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
 const DOCUMENT_GATED_STATUSES = ['ENDORSED', 'WORKING'] as const
+/** الجولة 42 — حالات قبول طلب الانضمام التي يختارها مسؤول الجهة:
+ *  معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته */
+const JOIN_ACCEPT_STATUSES = ['ENDORSED', 'WORKING', 'FORMER', 'ON_CALL', 'INTERVIEWED'] as const
 
 async function loadWithAccess(id: string, role: string, userId: string) {
   const affiliation = await db.nurseAffiliation.findUnique({
@@ -77,17 +80,17 @@ export async function PATCH(
       if (!(SUPPORTER_ALLOWED_STATUSES as readonly string[]).includes(status)) {
         throw new ApiError('حالة الارتباط غير متاحة لحسابك — راجع الإدارة', 403)
       }
-      // الجولة 40 — طلب الانضمام قرار صريح: الطلب المعلق الذي قدّمه الكادر بنفسه
-      // لا يُعامل كارتباط عادي (لا تعليق ولا تحويل لحالات إدارية) — قبوله فقط
-      // بإضافته لكوادر الجهة (ENDORSED/WORKING) ورفضه من صفحة كوادر جهتي (DELETE)
+      // الجولة 40 — طلب الانضمام قرار صريح: القبول بحالة من خيارات الجهة
+      // (معتمد/يعمل حالياً/يعمل سابقاً/تحت الإستدعاء/تمت مقابلته) والرفض من
+      // صفحة كوادر جهتي (DELETE) — الحالات الإدارية الباقية محرّمة
       const isPendingJoinRequest =
         affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
       if (
         isPendingJoinRequest &&
-        !['ENDORSED', 'WORKING'].includes(status)
+        !(JOIN_ACCEPT_STATUSES as readonly string[]).includes(status)
       ) {
         throw new ApiError(
-          'طلب الانضمام يُقبل بإضافته لكوادر الجهة أو يُرفض من صفحة كوادر جهتي — لا حالات أخرى لطلبات الانضمام',
+          'طلب الانضمام يُقبل بحالة من: معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته — أو يُرفض من صفحة كوادر جهتي',
           403
         )
       }
@@ -112,7 +115,8 @@ export async function PATCH(
       },
     })
 
-    // الجولة 40: إشعار الكادر بنتيجة قرار طلب الانضمام بلغة واضحة
+    // الجولة 40: إشعار الكادر بنتيجة قرار طلب الانضمام بلغة واضحة — والجولة 42
+    // تذكر الحالة التي اختارها مسؤول الجهة عند القبول
     const wasPendingJoinRequest =
       affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
     await notify(
@@ -120,7 +124,7 @@ export async function PATCH(
       wasPendingJoinRequest
         ? {
             title: 'تم قبول طلب انضمامك',
-            body: `قُبل طلب انضمامك إلى كوادر جهة (${affiliation.hospital.name}) — أصبحت ضمن كوادر الجهة، واعتمادك المهني (كطبيب/ككادر طبي) يبقى من حساب الإدارة بعد رفع مستنداتك`,
+            body: `قُبل طلب انضمامك إلى كوادر جهة (${affiliation.hospital.name}) وحالتك فيها: ${AFFILIATION_STATUS_LABELS[status]} — اعتمادك المهني (كطبيب/ككادر طبي) يبقى من حساب الإدارة بعد رفع مستنداتك`,
             type: 'AFFILIATION_UPDATED',
             link: '/nurse/profile',
           }
@@ -134,7 +138,7 @@ export async function PATCH(
 
     return NextResponse.json({
       message: wasPendingJoinRequest
-        ? `تم قبول (${affiliation.nurse.name}) وإضافته لكوادر جهة (${affiliation.hospital.name})`
+        ? `تم قبول (${affiliation.nurse.name}) وإضافته لكوادر جهة (${affiliation.hospital.name}) بحالة: ${AFFILIATION_STATUS_LABELS[status]}`
         : `تم تحديث حالة (${affiliation.nurse.name}) إلى: ${AFFILIATION_STATUS_LABELS[status]}`,
       affiliation: updated,
     })

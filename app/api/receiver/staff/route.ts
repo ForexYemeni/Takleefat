@@ -51,6 +51,19 @@ export async function POST(req: NextRequest) {
           422
         )
       }
+    } else {
+      // الجولة 42: القسم/التخصص للكادر التمريضي إجباري من كتالوج الأقسام المُدار
+      // من حساب الإدارة — لا كتابة حرة (نفس قاعدة كتالوج التخصصات للأطباء)
+      const catalogDepartment = await db.department.findUnique({
+        where: { name: specialty.trim() },
+        select: { id: true, isActive: true },
+      })
+      if (!catalogDepartment || !catalogDepartment.isActive) {
+        return jsonError(
+          'القسم يجب أن يكون من كتالوج الأقسام المُدار من حساب الإدارة — راجع الإدارة لإضافة القسم',
+          422
+        )
+      }
     }
 
     // الجولة 32: المؤهل العلمي من كتالوج المؤهلات العلمية المُدار من حساب الإدارة
