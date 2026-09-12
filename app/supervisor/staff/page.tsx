@@ -14,6 +14,7 @@ import {
   IdCard,
   Lock,
   PhoneIcon,
+  Repeat,
   ShieldAlert,
   ShieldQuestion,
   UserPlus,
@@ -24,7 +25,7 @@ import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { apiFetcher, apiPatch, apiPost, apiDelete } from '@/lib/api-client'
 import { formatDate, GENDER_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
-import { AFFILIATION_STATUS_LABELS, JOIN_ACCEPT_STATUS_OPTIONS } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, ORG_CADRE_STATUS_OPTIONS } from '@/lib/network'
 import {
   createDoctorSchema,
   type CreateDoctorInput,
@@ -194,17 +195,19 @@ export default function ReceiverStaffPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  // ---------- الجولة 39: اعتماد الطبيب للجهة / إلغاء الاعتماد ----------
-  const [endorsing, setEndorsing] = useState<{ row: StaffNurse; status: 'ENDORSED' | 'WORKING' } | null>(null)
+  // ---------- الجولة 43: مدير تحويل حالة العضو بعد القبول ----------
+  // يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / معتمد / تمت المقابلة معه — في أي وقت
+  const [statusEditing, setStatusEditing] = useState<StaffNurse | null>(null)
+  const [editStatus, setEditStatus] = useState<string>('ENDORSED')
 
-  const endorseMutation = useMutation({
-    mutationFn: ({ affiliationId, status }: { affiliationId: string; status: 'ENDORSED' | 'WORKING' }) =>
+  const statusMutation = useMutation({
+    mutationFn: ({ affiliationId, status }: { affiliationId: string; status: string }) =>
       apiPatch<{ message: string }>(`/api/affiliations/${affiliationId}`, { status }),
     onSuccess: (res) => {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
       queryClient.invalidateQueries({ queryKey: ['org-community'] })
-      setEndorsing(null)
+      setStatusEditing(null)
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -508,24 +511,25 @@ export default function ReceiverStaffPage() {
                   isFavorite={n.isFavorite}
                   onChanged={() => queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })}
                 />
-                {/* الجولة 39: اعتماد الطبيب للجهة — المشرف يعتمد الأطباء لجهته حصراً
-                    (إضافتهم لمجتمع كوادر الجهة فقط — الاعتماد المهني يبقى للإدارة) */}
+                {/* الجولة 43: مدير تحويل حالة العضو — من محل اعتماد الجولة 39
+                    (يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / معتمد / تمت مقابلته) */}
                 {n.nurse.role === 'DOCTOR' && (
                   <Button
-                    variant={n.affiliationStatus === 'ENDORSED' ? 'outline' : 'default'}
+                    variant="outline"
                     size="sm"
-                    className={
-                      n.affiliationStatus === 'ENDORSED' ? 'gap-1.5 text-xs' : 'gap-1.5 bg-primary text-xs'
-                    }
-                    onClick={() =>
-                      setEndorsing({
-                        row: n,
-                        status: n.affiliationStatus === 'ENDORSED' ? 'WORKING' : 'ENDORSED',
-                      })
-                    }
+                    className="gap-1.5 text-xs"
+                    disabled={statusMutation.isPending}
+                    onClick={() => {
+                      setEditStatus(
+                        ORG_CADRE_STATUS_OPTIONS.some((o) => o.value === n.affiliationStatus)
+                          ? n.affiliationStatus
+                          : 'ENDORSED'
+                      )
+                      setStatusEditing(n)
+                    }}
                   >
-                    <BadgeCheck className="size-3.5" />
-                    {n.affiliationStatus === 'ENDORSED' ? 'إلغاء اعتماد الجهة' : 'اعتماد للجهة'}
+                    <Repeat className="size-3.5" />
+                    تغيير حالة العمل
                   </Button>
                 )}
                 {fullProfileAccess && (
@@ -813,29 +817,77 @@ export default function ReceiverStaffPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ---------- الجولة 39: تأكيد اعتماد الطبيب للجهة / إلغاء الاعتماد ---------- */}
-      <ConfirmDialog
-        open={!!endorsing}
-        onOpenChange={(open) => !open && setEndorsing(null)}
-        tone={endorsing?.status === 'ENDORSED' ? 'success' : 'warning'}
-        icon={BadgeCheck}
-        title={
-          endorsing?.status === 'ENDORSED'
-            ? `اعتماد (${endorsing?.row.nurse.name}) لجهتك الصحية`
-            : `إلغاء اعتماد الجهة عن (${endorsing?.row.nurse.name})`
-        }
-        description={
-          endorsing?.status === 'ENDORSED'
-            ? `سيُضاف إلى مجتمع كوادر جهة (${org?.name}) ويظهر ضمن الأطباء المعتمدين — اعتماد الجهة يضيفه للجهة فقط، أما اعتماده كطبيب معتمد فيُمنح من حساب الإدارة بعد رفع مستنداته والموافقة عليها.`
-            : `سيخرج من قائمة الأطباء المعتمدين لمجتمع كوادر جهة (${org?.name}) ويصبح ارتباطه «يعمل حالياً» — يمكن إعادة اعتماده في أي وقت.`
-        }
-        confirmLabel={endorsing?.status === 'ENDORSED' ? 'نعم، اعتمده للجهة' : 'نعم، ألغِ اعتماد الجهة'}
-        processing={endorseMutation.isPending}
-        onConfirm={() =>
-          endorsing &&
-          endorseMutation.mutate({ affiliationId: endorsing.row.affiliationId, status: endorsing.status })
-        }
-      />
+      {/* ---------- الجولة 43: مدير تحويل حالة العضو (سابقاً/حالياً/استدعاء/معتمد/مقابلة) ---------- */}
+      <Dialog open={!!statusEditing} onOpenChange={(open) => !open && setStatusEditing(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Repeat className="size-4 text-primary" />
+              تغيير حالة العمل — ({statusEditing?.nurse.name})
+            </DialogTitle>
+            <DialogDescription>
+              حوّل حالة الطبيب في جهة ({org?.name}) بين الحالات المهنية الخمس في أي وقت —
+              الحالة الحالية معلَّمة، والحالات الإدارية تبقى من حساب الإدارة حصراً.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2" role="radiogroup" aria-label="تحويل حالة الطبيب في الجهة">
+            {ORG_CADRE_STATUS_OPTIONS.map((opt) => {
+              const selected = editStatus === opt.value
+              const isCurrent = statusEditing?.affiliationStatus === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setEditStatus(opt.value)}
+                  className={`flex items-start gap-3 rounded-2xl border p-3 text-start transition-colors ${
+                    selected
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary dark:bg-primary/10'
+                      : 'hover:bg-muted/60'
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                      selected ? 'border-primary' : 'border-muted-foreground/40'
+                    }`}
+                  >
+                    {selected && <span className="size-2 rounded-full bg-primary" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-1.5 text-sm font-extrabold">
+                      {opt.label}
+                      {isCurrent && (
+                        <Badge className="bg-primary text-[10px] text-primary-foreground">الحالة الحالية</Badge>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{opt.hint}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setStatusEditing(null)}>
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              disabled={statusMutation.isPending || editStatus === statusEditing?.affiliationStatus}
+              className="gap-2"
+              onClick={() =>
+                statusEditing &&
+                statusMutation.mutate({ affiliationId: statusEditing.affiliationId, status: editStatus })
+              }
+            >
+              <Repeat className="size-4" />
+              {statusMutation.isPending
+                ? 'جارٍ التحويل...'
+                : `تحويل الحالة إلى: ${ORG_CADRE_STATUS_OPTIONS.find((o) => o.value === editStatus)?.label ?? ''}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ---------- الجولة 42: قبول طلب الانضمام مع اختيار حالة الطبيب في الجهة ---------- */}
       <Dialog open={!!accepting} onOpenChange={(open) => !open && setAccepting(null)}>
@@ -851,7 +903,7 @@ export default function ReceiverStaffPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2" role="radiogroup" aria-label="حالة الطبيب في الجهة">
-            {JOIN_ACCEPT_STATUS_OPTIONS.map((opt) => {
+            {ORG_CADRE_STATUS_OPTIONS.map((opt) => {
               const selected = acceptStatus === opt.value
               return (
                 <button
@@ -897,7 +949,7 @@ export default function ReceiverStaffPage() {
               <Check className="size-4" />
               {acceptJoinMutation.isPending
                 ? 'جارٍ القبول...'
-                : `قبول وإضافة للجهة (${JOIN_ACCEPT_STATUS_OPTIONS.find((o) => o.value === acceptStatus)?.label ?? ''})`}
+                : `قبول وإضافة للجهة (${ORG_CADRE_STATUS_OPTIONS.find((o) => o.value === acceptStatus)?.label ?? ''})`}
             </Button>
           </DialogFooter>
         </DialogContent>

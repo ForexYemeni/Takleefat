@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { affiliationCreateSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
-import { AFFILIATION_STATUS_LABELS, resolveReceiverOrg } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, ORG_MANAGEABLE_STATUSES, resolveReceiverOrg } from '@/lib/network'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 import type { Prisma } from '@prisma/client'
 
@@ -24,8 +24,8 @@ import type { Prisma } from '@prisma/client'
  */
 
 const NURSE_ALLOWED_STATUSES = ['PENDING'] as const
-/** حالات المستلم الإداري ومشرف الأطباء لجهتهما — الاعتماد للجهة (الجولة 39) */
-const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'ON_CALL', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
+/** الجولة 43 — مسؤول الجهة يضيف كادره بالحالات المهنية الخمس حصراً (مصدر واحد
+ *  للحقيقة في lib/network.ts) — الحالات الإدارية من الإدارة حصراً */
 /** الاعتماد المهني من الإدارة لا يتم أبداً قبل رفع مستندات الكادر */
 const DOCUMENT_GATED_STATUSES = ['ENDORSED', 'WORKING'] as const
 
@@ -203,8 +203,11 @@ export async function POST(req: NextRequest) {
           403
         )
       }
-      if (!(SUPPORTER_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
-        throw new ApiError('حالة الارتباط غير متاحة لحسابك — راجع الإدارة', 403)
+      if (!(ORG_MANAGEABLE_STATUSES as readonly string[]).includes(requestedStatus)) {
+        throw new ApiError(
+          'حالة الإضافة متاحة من: معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته — أما الحالات الإدارية فمن حساب الإدارة حصراً',
+          403
+        )
       }
       // مطابقة الدور مع الهدف: المستلم → كادر تمريضي | مشرف الأطباء → طبيب
       if (nurse.role !== (isSupervisor ? 'DOCTOR' : 'NURSE')) {

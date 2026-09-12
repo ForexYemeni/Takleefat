@@ -3123,8 +3123,9 @@ print('ok' if a.get('receiverDoneAt') and a.get('rating',{}).get('overall')==3 a
 check "إجابة الدفع (لا) والتقييم مسجلان لدى المستلم بعد إغلاق الإدارة" "ok" "$R39_B_RATED"
 
 # (د) فحوص ساكنة: أزرار الاعتماد والإنهاء والشارات في الواجهات
-R39_UI_ENDORSE=$(grep -l "اعتماد للجهة" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
-check "ui: زر «اعتماد للجهة» في صفحتي كوادر المستلم وأطباء المشرف" "2" "$R39_UI_ENDORSE"
+# الجولة 43: زر الاعتماد الثنائي (اعتماد للجهة/إلغاء) تطوّر إلى مدير حالة مهني كامل
+R39_UI_ENDORSE=$(grep -l "تغيير حالة العمل" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: مدير «تغيير حالة العمل» في صفحتي كوادر المستلم وأطباء المشرف (تطور زر الجولة 39)" "2" "$R39_UI_ENDORSE"
 R39_UI_BADGE=$([ -f components/shared/professional-accreditation-badge.tsx ] && grep -c "معتمد من الإدارة" components/shared/professional-accreditation-badge.tsx | awk '{print ($1>=1)?1:0}')
 check "ui: شارة الاعتماد المهني «معتمد من الإدارة» موجودة" "1" "$R39_UI_BADGE"
 R39_UI_USE=$(grep -l "ProfessionalAccreditationBadge" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx components/shared/entity-cadre-community.tsx 2>/dev/null | wc -l | tr -d ' ')
@@ -3346,12 +3347,12 @@ R50_API_MARK=$(grep -c "isJoinRequest" app/api/receiver/staff/route.ts | awk '{p
 check "api: تمييز طلبات الانضمام في استجابة كوادر الجهة" "1" "$R50_API_MARK"
 
 # (ح) الجولة 42 — خيارات قبول الطلب + القسم من كتالوج الإدارة
-R42_OPTIONS=$(grep -l "JOIN_ACCEPT_STATUS_OPTIONS" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
-check "ui: خيارات قبول الطلب (JOIN_ACCEPT_STATUS_OPTIONS) في صفحتي المستلم والمشرف" "2" "$R42_OPTIONS"
+R42_OPTIONS=$(grep -l "ORG_CADRE_STATUS_OPTIONS" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: خيارات حالة كادر الجهة (ORG_CADRE_STATUS_OPTIONS) في صفحتي المستلم والمشرف" "2" "$R42_OPTIONS"
 R42_ONCALL=$(grep -c "ON_CALL: 'تحت الإستدعاء'" lib/network.ts | awk '{print ($1>=1)?1:0}')
 check "ui/api: تسمية الحالة الجديدة «تحت الإستدعاء» (ON_CALL) في التسميات المشتركة" "1" "$R42_ONCALL"
 R42_FIVE=$(grep -c "value: '" lib/network.ts | awk '{print ($1>=5)?1:0}')
-check "ui: خمس خيارات قبول (معتمد/حالياً/سابقاً/استدعاء/مقابلة) في JOIN_ACCEPT_STATUS_OPTIONS" "1" "$R42_FIVE"
+check "ui: خمس خيارات حالة كادر (معتمد/حالياً/سابقاً/استدعاء/مقابلة) في ORG_CADRE_STATUS_OPTIONS" "1" "$R42_FIVE"
 R42_ACCEPT_DIALOG=$(grep -l "role=\"radio\"" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
 check "ui: حوار قبول الطلب بخيارات إشعاعية (radiogroup) في الصفحتين" "2" "$R42_ACCEPT_DIALOG"
 R42_DEPT_FETCH=$(grep -c "api/departments/public" app/receiver/staff/page.tsx | awk '{print ($1>=1)?1:0}')
@@ -3360,8 +3361,8 @@ R42_NO_FREE=$(grep -c "register('specialty')" app/receiver/staff/page.tsx | awk 
 check "ui: لا حقل كتابة حرة للتخصص في نموذج إضافة الممرض (القسم من الكتالوج حصراً)" "1" "$R42_NO_FREE"
 R42_DEPT_VAL=$(grep -c "db.department.findUnique" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
 check "api: تحقق القسم من كتالوج الأقسام عند إضافة ممرض للجهة (فرع المستلم)" "1" "$R42_DEPT_VAL"
-R42_ACCEPT_SET=$(grep -c "JOIN_ACCEPT_STATUSES" "app/api/affiliations/[id]/route.ts" | awk '{print ($1>=2)?1:0}')
-check "api: مجموعة حالات قبول طلب الانضمام (معتمد/حالياً/سابقاً/استدعاء/مقابلة) محكومة في PATCH" "1" "$R42_ACCEPT_SET"
+R42_ACCEPT_SET=$(grep -c "ORG_MANAGEABLE_STATUSES" "app/api/affiliations/[id]/route.ts" | awk '{print ($1>=2)?1:0}')
+check "api: مجموعة الحالات المهنية الخمس (معتمد/حالياً/سابقاً/استدعاء/مقابلة) محكومة في PATCH" "1" "$R42_ACCEPT_SET"
 
 echo ""
 echo "=========== 51) الجولة 41 — القبول لا يكسر التطبيق + بطاقة كوادر جهتي مصغرة ==========="
@@ -3477,6 +3478,120 @@ R51_NO_STACK=$(grep -c 'sm:grid-cols-3' components/shared/entity-cadre-community
 check "ui: لا بطاقات إحصاء مكدسة عمودياً في بطاقة المجتمع" "1" "$R51_NO_STACK"
 R51_SUPER_BTN=$(grep -c "إضافة طبيب للجهة" app/supervisor/staff/page.tsx | awk '{print ($1>=2)?1:0}')
 check "ui: زر صفحة المشرف «إضافة طبيب للجهة» (وليس ممرض)" "1" "$R51_SUPER_BTN"
+
+echo ""
+echo "=========== 52) الجولة 43 — تحويل حالة العضو بعد الاعتماد (سابقاً/حالياً/استدعاء/مقابلة) ==========="
+# البلاغ: «عند اعتماد المستلم الإداري أو مشرف الأطباء لأي جهة لا يتمكن من تحويله من
+# كان يعمل سابقاً، يعمل الآن، تحت الإستدعاء...» — القبول (ج42) يُعين الحالة مرة واحدة
+# ولا توجد أداة تحويل لاحق. الحل: مدير «تغيير حالة العمل» في صف كل عضو (radiogroup
+# بالخيارات الخمسة + شارة الحالة الحالية) وتحويل من الخادم محكوم بـ
+# ORG_MANAGEABLE_STATUSES — والحالات الإدارية (خارجي مؤهل/غير معتمد/موقوف) من الإدارة حصراً.
+
+# (أ) المستلم يحوّل حالة كادره (AFF51: معتمد من قسم 51) — استدعاء ثم سابقاً ثم عودة
+R43_STATS0=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print((d.get('community') or {}).get('accreditedNurses',0))" 2>/dev/null)
+
+R43_ONCALL=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"ON_CALL"}')
+check "الجولة 43: المستلم يحوّل عضواً معتمداً إلى «تحت الإستدعاء» (ON_CALL) → 200" "200" "$R43_ONCALL"
+R43_ONCALL_ST=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['affiliationId']=='$AFF51']
+ok=len(rows)==1 and rows[0]['affiliationStatus']=='ON_CALL' and rows[0]['affiliationStatusLabel']=='تحت الإستدعاء'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "بعد التحويل: الحالة «تحت الإستدعاء» ظاهرة في كوادر الجهة" "ok" "$R43_ONCALL_ST"
+
+R43_ONCALL_NOTIF=$(curl -s -b "$DIR/n51a.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='تحديث حالة الارتباط المهني' and 'أصبحت: تحت الإستدعاء' in n['body']]
+print('ok' if m else 'bad')" 2>/dev/null)
+check "إشعار الكادر بالتحويل يذكر الحالة الجديدة «تحت الإستدعاء»" "ok" "$R43_ONCALL_NOTIF"
+
+R43_STATS1=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print((d.get('community') or {}).get('accreditedNurses',0))" 2>/dev/null)
+check "الإحصاءات تتبع التحويل: الخروج من «معتمد» يُنقص المعتمدين بواحد" "$((R43_STATS0-1))" "$R43_STATS1"
+
+R43_FORMER=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"FORMER"}')
+check "الجولة 43: تحويله إلى «يعمل سابقاً» (FORMER) → 200" "200" "$R43_FORMER"
+R43_FORMER_ST=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['affiliationId']=='$AFF51']
+ok=len(rows)==1 and rows[0]['affiliationStatus']=='FORMER' and rows[0]['affiliationStatusLabel']=='عمل سابقاً'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "بعد التحويل: الحالة «عمل سابقاً» ظاهرة في كوادر الجهة" "ok" "$R43_FORMER_ST"
+
+# (ب) الحالات الإدارية محرمة على مسؤول الجهة حتى في التحويل اللاحق (إحكام الجولة 43)
+R43_EXT=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"EXTERNAL"}')
+check "الجولة 43: مسؤول الجهة لا يحوّل إلى حالة إدارية (EXTERNAL) → 403" "403" "$R43_EXT"
+R43_UNE=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"UNENDORSED"}')
+check "الجولة 43: مسؤول الجهة لا يحوّل إلى حالة إدارية (UNENDORSED) → 403" "403" "$R43_UNE"
+R43_SUS=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"SUSPENDED"}')
+check "الجولة 43: مسؤول الجهة لا يحوّل إلى حالة إدارية (SUSPENDED) → 403" "403" "$R43_SUS"
+
+# (ج) العودة إلى «معتمد» تعيد العدّاد كما كان
+R43_BACK=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "الجولة 43: العودة إلى «معتمد» (ENDORSED) → 200" "200" "$R43_BACK"
+R43_STATS2=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print((d.get('community') or {}).get('accreditedNurses',0))" 2>/dev/null)
+check "الإحصاءات تتبع التحويل: العودة تعيد العدّاد كما كان" "$R43_STATS0" "$R43_STATS2"
+
+# (د) المشرف يحوّل حالة الطبيب (AFF51D: معتمد من قسم 51) — سابقاً ثم استدعاء ثم عودة
+R43_D0=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print((d.get('community') or {}).get('accreditedDoctors',0))" 2>/dev/null)
+
+R43_D_FORMER=$(code -b "$DIR/supervisor.jar" -X PATCH $BASE/api/affiliations/$AFF51D -H "Content-Type: application/json" -d '{"status":"FORMER"}')
+check "الجولة 43: المشرف يحوّل الطبيب إلى «يعمل سابقاً» (FORMER) → 200" "200" "$R43_D_FORMER"
+R43_D_ST=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['affiliationId']=='$AFF51D']
+ok=len(rows)==1 and rows[0]['affiliationStatus']=='FORMER' and rows[0]['affiliationStatusLabel']=='عمل سابقاً'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "بعد التحويل: حالة الطبيب «عمل سابقاً» في أطباء الجهة" "ok" "$R43_D_ST"
+
+R43_D_NOTIF=$(curl -s -b "$DIR/dr51.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='تحديث حالة الارتباط المهني' and 'أصبحت: عمل سابقاً' in n['body']]
+print('ok' if m else 'bad')" 2>/dev/null)
+check "إشعار الطبيب بالتحويل يذكر الحالة الجديدة «عمل سابقاً»" "ok" "$R43_D_NOTIF"
+
+R43_D_ONCALL=$(code -b "$DIR/supervisor.jar" -X PATCH $BASE/api/affiliations/$AFF51D -H "Content-Type: application/json" -d '{"status":"ON_CALL"}')
+check "الجولة 43: المشرف يحوّل الطبيب من سابقاً إلى «تحت الإستدعاء» (ON_CALL) → 200" "200" "$R43_D_ONCALL"
+R43_D_BACK=$(code -b "$DIR/supervisor.jar" -X PATCH $BASE/api/affiliations/$AFF51D -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "الجولة 43: المشرف يعيد الطبيب إلى «معتمد» (ENDORSED) → 200" "200" "$R43_D_BACK"
+R43_D_STATS=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print((d.get('community') or {}).get('accreditedDoctors',0))" 2>/dev/null)
+check "إحصاءات أطباء الجهة تعود كما كانت بعد دورة التحويل" "$R43_D0" "$R43_D_STATS"
+
+R43_D_RCV=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51D -H "Content-Type: application/json" -d '{"status":"FORMER"}')
+check "مطابقة الدور في التحويل: المستلم لا يحوّل حالة طبيب → 403" "403" "$R43_D_RCV"
+
+# (هـ) فحوص ساكنة — مدير تحويل الحالة (الجولة 43)
+R43_UI_OPTS=$(grep -l "ORG_CADRE_STATUS_OPTIONS" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: مدير الحالة يستهلك ORG_CADRE_STATUS_OPTIONS في الصفحتين" "2" "$R43_UI_OPTS"
+R43_UI_CUR=$(grep -l "الحالة الحالية" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: شارة «الحالة الحالية» معلّمة في حوار التحويل بالصفحتين" "2" "$R43_UI_CUR"
+R43_UI_NOOP=$(grep -c 'editStatus === statusEditing?.affiliationStatus' app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | awk -F: '{s+=$2} END {print (s>=2)?1:0}')
+check "ui: زر التأكيد معطّل عند اختيار نفس الحالة (لا تحويل بلا تغيير)" "1" "$R43_UI_NOOP"
+R43_NET=$(grep -c "ORG_MANAGEABLE_STATUSES" lib/network.ts | awk '{print ($1>=1)?1:0}')
+check "api: ORG_MANAGEABLE_STATUSES مصدر واحد للحقيقة في lib/network.ts" "1" "$R43_NET"
+R43_API_BOTH=$(grep -l "ORG_MANAGEABLE_STATUSES" "app/api/affiliations/[id]/route.ts" app/api/affiliations/route.ts 2>/dev/null | wc -l | tr -d ' ')
+check "api: الخمس حالات المهنية محكومة في PATCH وPOST معاً" "2" "$R43_API_BOTH"
+R43_NO_OLD=$(grep -c "SUPPORTER_ALLOWED_STATUSES" app/api/affiliations/route.ts "app/api/affiliations/[id]/route.ts" 2>/dev/null | awk -F: '{s+=$2} END {print (s==0)?0:s}')
+check "api: القائمة الواسعة القديمة (SUPPORTER_ALLOWED_STATUSES) أزيلت كلياً" "0" "$R43_NO_OLD"
 
 echo ""
 echo "==========================================="

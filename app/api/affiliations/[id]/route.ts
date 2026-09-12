@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { affiliationUpdateSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
-import { AFFILIATION_STATUS_LABELS, resolveReceiverOrg } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, ORG_MANAGEABLE_STATUSES, resolveReceiverOrg } from '@/lib/network'
 
 /**
  * PATCH /api/affiliations/[id] — تغيير حالة الارتباط المهني
@@ -19,13 +19,17 @@ import { AFFILIATION_STATUS_LABELS, resolveReceiverOrg } from '@/lib/network'
  *    ومشرف الأطباء للأطباء في جهته حصراً — بلا شرط مستندات.
  *  - الاعتماد المهني (كطبيب/ككادر طبي): من حساب الإدارة حصراً بعد رفع المستندات
  *    والموافقة عليها — لا يمنحه اعتماد الجهة إطلاقاً.
+ *
+ * الجولة 43 — مدير تحويل حالة العضو: بعد القبول يستطيع مسؤول الجهة تحويل حالة
+ * العضو في أي وقت بين الخمس حالات المهنية (معتمد/يعمل حالياً/يعمل سابقاً/
+ * تحت الإستدعاء/تمت مقابلته) — والحالات الإدارية من الإدارة حصراً.
  */
 
-const SUPPORTER_ALLOWED_STATUSES = ['WORKING', 'FORMER', 'INTERVIEWED', 'ENDORSED', 'ON_CALL', 'EXTERNAL', 'UNENDORSED', 'SUSPENDED'] as const
 const DOCUMENT_GATED_STATUSES = ['ENDORSED', 'WORKING'] as const
-/** الجولة 42 — حالات قبول طلب الانضمام التي يختارها مسؤول الجهة:
- *  معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته */
-const JOIN_ACCEPT_STATUSES = ['ENDORSED', 'WORKING', 'FORMER', 'ON_CALL', 'INTERVIEWED'] as const
+/** الجولة 43 — مسؤول الجهة يدير الخمس حالات المهنية حصراً (مصدر واحد للحقيقة في
+ *  lib/network.ts): معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته —
+ *  قبولاً لطلب انضمام أو تحويلاً لاحقاً لحالة عضو قائم. الحالات الإدارية
+ *  (قيد المراجعة/خارجي مؤهل/غير معتمد/موقوف) من الإدارة حصراً. */
 
 async function loadWithAccess(id: string, role: string, userId: string) {
   const affiliation = await db.nurseAffiliation.findUnique({
@@ -77,20 +81,16 @@ export async function PATCH(
     if (error || !affiliation) return error!
 
     if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
-      if (!(SUPPORTER_ALLOWED_STATUSES as readonly string[]).includes(status)) {
-        throw new ApiError('حالة الارتباط غير متاحة لحسابك — راجع الإدارة', 403)
-      }
-      // الجولة 40 — طلب الانضمام قرار صريح: القبول بحالة من خيارات الجهة
-      // (معتمد/يعمل حالياً/يعمل سابقاً/تحت الإستدعاء/تمت مقابلته) والرفض من
-      // صفحة كوادر جهتي (DELETE) — الحالات الإدارية الباقية محرّمة
+      // الجولة 43 — تحويل حالة العضو بعد القبول: نفس الخيارات المهنية الخمس
+      // (معتمد/يعمل حالياً/يعمل سابقاً/تحت الإستدعاء/تمت مقابلته) — والحالات
+      // الإدارية الباقية محرّمة على مسؤول الجهة في كل الأحوال
       const isPendingJoinRequest =
         affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
-      if (
-        isPendingJoinRequest &&
-        !(JOIN_ACCEPT_STATUSES as readonly string[]).includes(status)
-      ) {
+      if (!(ORG_MANAGEABLE_STATUSES as readonly string[]).includes(status)) {
         throw new ApiError(
-          'طلب الانضمام يُقبل بحالة من: معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته — أو يُرفض من صفحة كوادر جهتي',
+          isPendingJoinRequest
+            ? 'طلب الانضمام يُقبل بحالة من: معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته — أو يُرفض من صفحة كوادر جهتي'
+            : 'يمكنك تحويل حالة الكادر بين: معتمد / يعمل حالياً / يعمل سابقاً / تحت الإستدعاء / تمت مقابلته — أما الحالات الإدارية فمن حساب الإدارة حصراً',
           403
         )
       }
@@ -115,8 +115,8 @@ export async function PATCH(
       },
     })
 
-    // الجولة 40: إشعار الكادر بنتيجة قرار طلب الانضمام بلغة واضحة — والجولة 42
-    // تذكر الحالة التي اختارها مسؤول الجهة عند القبول
+    // إشعار الكادر بنتيجة قرار طلب الانضمام بلغة واضحة — والجولتان 42/43
+    // تذكران الحالة التي اختارها مسؤول الجهة عند القبول أو التحويل اللاحق
     const wasPendingJoinRequest =
       affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
     await notify(
