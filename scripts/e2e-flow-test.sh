@@ -3721,6 +3721,10 @@ P44V_ID=$(echo "$P44V" | jget "['post']['id']")
 curl -s -b "$DIR/n44b.jar" -X POST $BASE/api/posts/$P44V_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"متقدم خارجي"}' > /dev/null
 curl -s -b "$DIR/n44c.jar" -X POST $BASE/api/posts/$P44V_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"من كوادر الجهة"}' > /dev/null
 
+# إذن «رؤية البيانات الكاملة» ممنوح للمستلم من فحوص الجولة 34 — نُغلقها مؤقتاً
+# لقياس قاعدة الإخفاء الجديدة (الجولة 44) على المستلم العادي ثم نعيدها
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" -d '{"fullProfileAccess":false}' > /dev/null
+
 HIDE44=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P44V_ID/applications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['applications']
@@ -3728,6 +3732,7 @@ ext=[a for a in d if a['nurse']['id']=='$N44B_ID'][0]
 same=[a for a in d if a['nurse']['id']=='$N44C_ID'][0]
 print(ext['nurse']['documentsHidden'], len(ext['nurse']['documents'])==0, ext['nurse']['documentsVerified'], same['nurse']['documentsHidden'], len(same['nurse']['documents']))" 2>/dev/null)
 check "R44: الخارجي: مستندات مخفية + تم التحقق (معتمد) | عضو الجهة: مستنداته ظاهرة" "True True True False 1" "$HIDE44"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" -d '{"fullProfileAccess":true}' > /dev/null
 HIDE44_ADMIN=$(curl -s -b "$DIR/admin.jar" $BASE/api/posts/$P44V_ID/applications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['applications']
