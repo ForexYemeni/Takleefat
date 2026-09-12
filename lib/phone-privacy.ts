@@ -74,19 +74,28 @@ export function isAssignmentPhoneOpen(a: {
  *    — هذا هو الاستثناء الوحيد لقفل الجولة 38 الاتجاهي.
  *  - أي تكليف فيه رسوم → يبقى مفتوحاً بالقاعدة السابقة حصراً (سداد + تأكيد).
  *  - الإنهاء أو الإلغاء يُغلق بيانات الاتصال فوراً في كل الحالات.
+ * الجولة 46 — البلاغ الحرفي: «بيانات الاتصال يُفتح بعد سداد نسبة الإدارة
+ * رغم انه عرض بدون رسوم»:
+ *  - الإسناد المباشر من الإدارة (بلا قيمة وبلا حصة: adminFee/value = null)
+ *    لا يوجد فيه أي مبلغ يُسدَّد أصلاً — يُعامل معاملة «عرض بدون رسوم»
+ *    ويُفتح الاتصال فيه أثناء السير بلا شرط سداد إطلاقاً.
  */
 export function isAssignmentContactOpen(
   a: {
     paymentStatus: PaymentStatus | string
     status: AssignmentStatus | string
     adminFee?: number | null
+    value?: number | null
   },
   applicationFee = 0
 ): boolean {
   const active = a.status === 'RECEIVED' || a.status === 'ACTIVE'
   if (!active) return false // الإنهاء/الإلغاء يُخفي بيانات الاتصال فوراً
-  const feeless = (a.adminFee ?? 0) === 0 && applicationFee === 0
-  return a.paymentStatus === 'PAID' || feeless
+  if (a.paymentStatus === 'PAID') return true
+  // إسناد مباشر بلا قيمة وبلا حصة — لا شيء يُسدَّد أصلاً
+  const directFeeless = a.adminFee == null && a.value == null
+  const feeless = directFeeless || ((a.adminFee ?? 0) === 0 && applicationFee === 0)
+  return feeless
 }
 
 /**
@@ -99,11 +108,15 @@ export function isAssignmentFeelessActive(
   a: {
     status: AssignmentStatus | string
     adminFee?: number | null
+    value?: number | null
   },
   applicationFee = 0
 ): boolean {
   const active = a.status === 'RECEIVED' || a.status === 'ACTIVE'
-  return active && (a.adminFee ?? 0) === 0 && applicationFee === 0
+  if (!active) return false
+  // الجولة 46: الإسناد المباشر بلا قيمة وبلا حصة — لا شيء يُسدَّد أصلاً
+  const directFeeless = a.adminFee == null && a.value == null
+  return directFeeless || ((a.adminFee ?? 0) === 0 && applicationFee === 0)
 }
 
 /**
@@ -155,8 +168,13 @@ export async function revealedStaffIds(
             OR: [
               { paymentStatus: 'PAID' as const },
               // الجولة 45: تكليفات بلا أي رسوم — adminFee المحفوظ 0 حصراً
-              // (null تعني تكليفاً تاريخياً قبل احتساب الحصة — تبقى مقفلة)
+              // (التكليفات القديمة ذات القيمة وحصة ناقصة تبقى مقفلة حتى السداد)
               { adminFee: 0 },
+              // الجولة 46 — البلاغ الحرفي: «بيانات الاتصال يُفتح بعد سداد نسبة
+              // الإدارة رغم انه عرض بدون رسوم»: الإسناد المباشر من الإدارة بلا
+              // قيمة وبلا حصة (adminFee/value null) — لا يوجد أي مبلغ يُسدَّد
+              // أصلاً، فيُفتح الاتصال أثناء السير مثل عرض بدون رسوم تماماً
+              { adminFee: null, value: null },
             ],
           }),
     },

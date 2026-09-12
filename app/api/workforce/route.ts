@@ -1,40 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
+import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/workforce — دليل الكوادر/الأطباء في كامل المنصة — الجولة 33
  * ------------------------------------------------------------------
- * امتداد أذونات «رؤية البيانات الكاملة» (User.fullProfileAccess):
- * بدلاً من اقتصار زر السيرة الذاتية على كوادر/أطباء جهته حصراً، يستطيع
- * صاحب الإذن استعراض دليل الكوادر/الأطباء في المنصة كلها:
- *  - المستلم الإداري الحاصل على الإذن → دليل كامل الكوادر التمريضيين (NURSE)
- *  - مشرف الأطباء الحاصل على الإذن → دليل كامل الأطباء (DOCTOR)
- *  - بدون الإذن → 403 برسالة واضحة
+ * الجولة 46 — البلاغ الحرفي: «لا تظهر في قسم كوادر جهتي تبويب الكوادر في
+ * المنصة الا اذا يوجد كوادر جهتي»: الدليل متاح لكل مستلم إداري ومشرف
+ * أطباء مباشرة — بلا شرط إذن «رؤية البيانات الكاملة»:
+ *  - المستلم الإداري → دليل كامل الكوادر التمريضيين (NURSE)
+ *  - مشرف الأطباء → دليل كامل الأطباء (DOCTOR)
+ * والخصوصية محفوظة: أرقام التواصل تُدار من الخادم وفق قاعدة السداد
+ * (lib/phone-privacy)، والمستندات لا تُرسل هنا أصلاً — السيرة الكاملة
+ * مع محتوى المستندات تُدار من /api/workforce/[id] (الجولة 46).
  *
  * التصفيح: search (الاسم فقط — البحث بالهاتف أُغلق لحماية الخصوصية في الجولة 34)
  * + specialty (التخصص) + status
  * كل صف: الهوية المهنية + التقييم + عدد المستندات + الجهة الحالية.
- * الجولة 34: أرقام التواصل مخفية عن المستلم/المشرف — تُفتح فقط لمن لديه
- * تكليف مسدد النسبة مع صاحب الرقم (lib/phone-privacy).
  */
 export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
-
-    const me = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { fullProfileAccess: true },
-    })
-    if (!me?.fullProfileAccess) {
-      return jsonError(
-        session.user.role === 'DOCTOR_SUPERVISOR'
-          ? 'دليل الأطباء الكامل متاح لمن مُنحه حساب الإدارة إذن رؤية البيانات الكاملة — راجع الإدارة لمنحك هذا الإذن'
-          : 'دليل الكوادر الكامل متاح لمن مُنحه حساب الإدارة إذن رؤية البيانات الكاملة — راجع الإدارة لمنحك هذا الإذن',
-        403
-      )
-    }
 
     const isSupervisor = session.user.role === 'DOCTOR_SUPERVISOR'
     const audienceRole = isSupervisor ? 'DOCTOR' : 'NURSE'

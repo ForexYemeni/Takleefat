@@ -8,7 +8,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { whatsappLink } from '@/lib/utils'
-import { PHONE_LOCKED_HINT, PHONE_UNLOCK_STEPS } from '@/lib/phone-privacy'
+import {
+  contactUnlockSteps,
+  useContactLockHint,
+} from '@/lib/contact-hint'
 
 /**
  * عرض رقم تواصل الكادر/الطبيب — الجولة 34
@@ -17,6 +20,9 @@ import { PHONE_LOCKED_HINT, PHONE_UNLOCK_STEPS } from '@/lib/phone-privacy'
  * - مفتوح: الرقم الكامل + زر اتصال + زر واتساب مباشر
  * يحاكي استجابة الخادم (phone / phoneMasked / phoneLocked) — الواجهة
  * لا تعرض شيئاً يخفيه الخادم، وإنما تُجمّل ما وصلها بشكل احترافي.
+ * الجولة 46: التلميح الافتراضي عند القفل أصبح واعياً بنمط الرسوم —
+ * «سداد نسبة الإدارة» في النمط العادي، و«بلا أي سداد» أثناء عرض بدون
+ * رسوم إدارة — بدل نص ثابت مضلل في العرض (البلاغ الحرفي).
  */
 export interface StaffPhoneData {
   phone: string | null
@@ -40,6 +46,9 @@ export function StaffPhone({
   withActions?: boolean
   lockedHint?: string
 }) {
+  // الجولة 46: تلميح واعٍ بنمط الرسوم — يُستخدم عند غياب تلميح صريح
+  const autoHint = useContactLockHint()
+
   if (!data) {
     return (
       <span
@@ -72,17 +81,7 @@ export function StaffPhone({
                 {lockedHint}
               </p>
             ) : (
-              <>
-                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-bold">
-                  <ShieldQuestion className="size-3.5" />
-                  {PHONE_LOCKED_HINT}
-                </p>
-                <ol className="list-inside list-decimal space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                  {PHONE_UNLOCK_STEPS.map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ol>
-              </>
+              <PhoneLockHintContent hint={autoHint} />
             )}
           </TooltipContent>
         </Tooltip>
@@ -118,17 +117,47 @@ export function StaffPhone({
 }
 
 /**
- * شريحة واتساب مشروطة بحالة سداد نسبة الإدارة وسريان التكليف — لصفحات التكليفات:
- * - التكليف مسدد وسارٍ (لم يُنهَ ولا يُلغَ) → زر واتساب أخضر للتواصل مع الكادر
- * - غير مسدد أو أُنهي التكليف → شريحة قفل بالتلميح (الجولة 36: الإنهاء يُغلق)
+ * محتوى تلميح القفل — الجولة 46: يعرض النص المناسب لنمط الرسوم الحالي
+ * (سداد نسبة الإدارة / رسوم التقديم / بلا أي سداد في عرض بدون رسوم)
+ */
+function PhoneLockHintContent({ hint, compact = false }: { hint: string; compact?: boolean }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="flex items-start gap-1.5 text-xs font-bold leading-relaxed">
+        <ShieldQuestion className="mt-0.5 size-3.5 shrink-0" />
+        {hint}
+      </p>
+      {!compact && (
+        <ol className="list-inside list-decimal space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          {contactUnlockSteps().map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+/**
+ * شريحة واتساب مشروطة بحالة فتح بيانات الاتصال — لصفحات التكليفات:
+ * الجولة 46 — البلاغ الحرفي: «بيانات الاتصال يُفتح بعد سداد نسبة الإدارة
+ * رغم انه عرض بدون رسوم»:
+ *  - القرار يُبنى على قرار الخادم (phoneLocked) حصراً — وهو القاعدة الموحدة:
+ *    السداد + التأكيد، أو بلا أي رسوم أثناء السير (عرض بدون رسوم / إسناد
+ *    مباشر بلا قيمة) — فلا يعود القفل يظهر رغم انعدام الرسوم.
+ *  - تلميح القفل واعٍ بنمط الرسوم (lockHint) بدل النص الثابت المضلل.
  */
 export function AssignmentContactChip({
-  paymentStatus,
-  assignmentStatus,
+  paymentStatus: _paymentStatus,
+  assignmentStatus: _assignmentStatus,
   phone,
   masked,
   personName,
   message,
+  /** قرار الخادم في فتح بيانات الاتصال — القاعدة الموحدة (الجولة 46) */
+  phoneLocked,
+  /** تلميح واعٍ بنمط الرسوم يُعرض عند القفل */
+  lockHint,
 }: {
   paymentStatus: string
   assignmentStatus: string
@@ -136,12 +165,17 @@ export function AssignmentContactChip({
   masked?: string
   personName: string
   message?: string
+  phoneLocked?: boolean
+  lockHint?: string
 }) {
-  const open =
-    paymentStatus === 'PAID' &&
-    assignmentStatus !== 'CANCELLED' &&
-    assignmentStatus !== 'COMPLETED'
-  if (open && phone) {
+  const autoHint = useContactLockHint()
+  // قرار الخادم هو المرجع — والاحتياط للتوافق: القاعدة التاريخية بالسداد
+  const locked = phoneLocked ?? !(
+    _paymentStatus === 'PAID' &&
+    _assignmentStatus !== 'CANCELLED' &&
+    _assignmentStatus !== 'COMPLETED'
+  )
+  if (!locked && phone) {
     return (
       <a
         href={whatsappLink(
@@ -167,11 +201,8 @@ export function AssignmentContactChip({
             تواصل مقفل
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-60 p-3 text-start">
-          <p className="text-xs font-bold">{PHONE_LOCKED_HINT}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            {PHONE_UNLOCK_STEPS[1]} — ثم يُفتح زر التواصل تلقائياً لهذا التكليف
-          </p>
+        <TooltipContent side="top" className="max-w-64 p-3 text-start">
+          <PhoneLockHintContent hint={lockHint ?? autoHint} compact />
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

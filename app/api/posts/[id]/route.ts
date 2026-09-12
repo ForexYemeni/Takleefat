@@ -4,7 +4,8 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { updatePostSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
 import { canNurseSeePost, escalateDueProgressivePosts, progressiveAudienceIds, DISTRIBUTION_LABELS } from '@/lib/network'
-import { isAssignmentPhoneOpen, isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isAssignmentContactOpen, isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { calcApplicationFee, getSettings } from '@/lib/settings'
 import type { Gender } from '@prisma/client'
 
 /**
@@ -87,8 +88,11 @@ export async function GET(
     // الجولة 34: قناع الأرقام لوجهة المالك — المتقدمون بلا تكليف فأرقامهم مقفلة،
     // والكادر المُسند يُفتح رقم صاحبه في التكليف الساري المسدد فقط
     // الجولة 36: «الموثوق جداً» يرى كل الأرقام — والإنهاء يُغلق
+    // الجولة 46: القاعدة الموحدة isAssignmentContactOpen — السداد، أو بلا أي
+    // رسوم (عرض بدون رسوم / إسناد مباشر بلا قيمة) أثناء السير
     if (session.user.role !== 'ADMIN') {
       const trusted = await isTrustedViewer(session.user.id)
+      const applicationFee = calcApplicationFee(await getSettings())
       const revealed = await revealedStaffIds(
         session.user.id,
         post.applications.map((a) => a.nurse.id),
@@ -105,7 +109,7 @@ export async function GET(
         ...a,
         nurse: {
           ...a.nurse,
-          ...phoneView(session.user.role, a.nurse.phone, isAssignmentPhoneOpen(a), trusted),
+          ...phoneView(session.user.role, a.nurse.phone, isAssignmentContactOpen(a, applicationFee), trusted),
         },
       }))
       return NextResponse.json({

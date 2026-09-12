@@ -19,6 +19,7 @@ import { formatDate, formatCurrency, ASSIGNMENT_STATUS_LABELS } from '@/lib/util
 import { StatusBadge } from '@/components/shared/status-badge'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
 import { AssignmentAlertCard } from '@/components/shared/assignment-alert-card'
+import { ActiveAssignmentCard, type ActiveAssignmentData } from '@/components/shared/active-assignment-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,8 @@ interface MyAssignment {
   facility: string
   department: string | null
   startDate: string
+  /** الجولة 46: وقت انتهاء التكليف — للعد التنازلي الحي في نظرة عامة */
+  endDate: string | null
   status: string
   value: number | null
   adminFee: number | null
@@ -99,8 +102,47 @@ export default function NurseOverviewPage() {
 
   const status = session?.user?.status
   const recentAssignments = (assignments.data?.assignments ?? []).slice(0, 5)
-  const activeAssignment = (assignments.data?.assignments ?? []).find((a) => a.status === 'ACTIVE')
   const suggestedPost = (openPosts.data?.posts ?? []).find((p) => p.status === 'OPEN')
+
+  // الجولة 46 — البلاغ الحرفي: «عندما يكون لدى الكادر التمريضي او الطبيب تكليف
+  // يجب ان تظهر بطاقة صغيرة احترافية جدا في اعلى صفحة نظرة عامة مع العد التنازلي»:
+  // نختار التكليف الساري: الجاري الآن (بدأ ولم ينتهِ وقته) أولاً، وإلا أقرب
+  // تكليف قادم — وتُعرض البطاقة المدمجة بعدّ تنازلي حي أعلى الصفحة.
+  const currentAssignment = (() => {
+    const live = (assignments.data?.assignments ?? []).filter(
+      (a) => a.status === 'ACTIVE' || a.status === 'RECEIVED'
+    )
+    if (live.length === 0) return null
+    const now = Date.now()
+    const running = live
+      .filter((a) => {
+        const s = new Date(a.startDate).getTime()
+        const e = a.endDate ? new Date(a.endDate).getTime() : null
+        return now >= s && (e == null || now < e)
+      })
+      .sort((a, b) => {
+        const ea = a.endDate ? new Date(a.endDate).getTime() : Infinity
+        const eb = b.endDate ? new Date(b.endDate).getTime() : Infinity
+        return ea - eb
+      })[0]
+    if (running) return running
+    return [...live].sort(
+      (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    )[0]
+  })()
+
+  const currentCard: ActiveAssignmentData | null = currentAssignment
+    ? {
+        id: currentAssignment.id,
+        title: currentAssignment.title,
+        facility: currentAssignment.facility,
+        department: currentAssignment.department,
+        startDate: currentAssignment.startDate,
+        endDate: currentAssignment.endDate,
+        status: currentAssignment.status,
+        receiverName: currentAssignment.receiver.name,
+      }
+    : null
 
   // الجولة 37: تكليفات معلّقة لم تُسدّد رسوم الإدارة — تنبيه بارز أعلى نظرة عامة
   const feeSettings = assignments.data?.settings
@@ -176,19 +218,10 @@ export default function NurseOverviewPage() {
         />
       )}
 
-      {/* بطاقة وجود تكليف — أعلى النظرة العامة */}
-      {activeAssignment ? (
-        <AssignmentAlertCard
-          tone="active"
-          eyebrow="لديك تكليف جارٍ الآن"
-          title={activeAssignment.title}
-          subtitle={`${activeAssignment.facility}${activeAssignment.department ? ` — ${activeAssignment.department}` : ''} • الجهة: ${activeAssignment.receiver.name}`}
-          chips={
-            <>
-              <StatusBadge status={activeAssignment.status} labels={ASSIGNMENT_STATUS_LABELS} />
-              <span className="text-xs text-muted-foreground">البدء: {formatDate(activeAssignment.startDate)}</span>
-            </>
-          }
+      {/* بطاقة التكليف الحالي بعد تنازلي حي — أعلى النظرة العامة (الجولة 46) */}
+      {currentCard ? (
+        <ActiveAssignmentCard
+          assignment={currentCard}
           href="/doctor/assignments"
           ctaLabel="متابعة التكليف"
         />

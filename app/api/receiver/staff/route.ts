@@ -193,7 +193,19 @@ export async function GET(req: NextRequest) {
     // الجولة 44: كل جهات المسؤول المعتمدة — مع اختيار جهة العرض (?orgId=)
     const orgs = await resolveReceiverOrgs(session.user.id)
     if (orgs.length === 0) {
-      return NextResponse.json({ org: null, orgs: [], nurses: [] })
+      // الجولة 46: يُعاد الإذن دائماً — واجهة «كوادر جهتي» تحتاجه حتى بلا جهة
+      // (تبويب «كل الكوادر في المنصة» ظاهر دائماً الآن بلا شرط إذن أصلاً)
+      const me = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { fullProfileAccess: true },
+      })
+      return NextResponse.json({
+        org: null,
+        orgs: [],
+        fullProfileAccess: me?.fullProfileAccess ?? false,
+        community: { accreditedNurses: 0, accreditedDoctors: 0, availableNow: 0 },
+        nurses: [],
+      })
     }
     const requestedId = req.nextUrl.searchParams.get('orgId')?.trim() ?? ''
     const org = orgs.find((o) => o.id === requestedId) ?? orgs[0]

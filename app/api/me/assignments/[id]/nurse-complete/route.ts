@@ -18,6 +18,13 @@ const nurseCompleteSchema = z.object({
  * تأكيد الكادر التمريضي: تم الانتهاء من التكليف وتم استلام مبلغ التكليف.
  * يُسجَّل التأكيد ويُشعَر المستلم الإداري والإدارة — بلا تغيير الحالة النهائية
  * (الإنهاء الرسمي يتم من المستلم الإداري عبر receiver-complete).
+ *
+ * الجولة 46 — البلاغ الحرفي: «لا يتمكن الممرض من انهاء التكليف الا بعد
+ * انتهاء الوقت 100%»:
+ *  - التكليف ذو وقت انتهاء محدد (endDate) لا يُنهيه الكادر إلا بعد بلوغ
+ *    وقت الانتهاء حصرياً — الحماية على الخادم أيضاً (409 قبل الوقت).
+ *  - أما المستلم الإداري ومشرف الأطباء فيمكنهم الإنهاء المبكر مع ذكر
+ *    السبب إلزامياً (receiver-complete) — كما طلب البلاغ.
  */
 export async function POST(
   req: NextRequest,
@@ -42,6 +49,26 @@ export async function POST(
     }
     if (assignment.nurseDoneAt) {
       return jsonError('لقد أكدت إنهاء هذا التكليف مسبقاً', 409)
+    }
+
+    // الجولة 46: لا إنهاء من الكادر قبل اكتمال وقت التكليف 100%
+    if (assignment.endDate) {
+      const end = new Date(assignment.endDate).getTime()
+      if (Number.isFinite(end) && Date.now() < end) {
+        const remainMs = end - Date.now()
+        const remainH = Math.floor(remainMs / 3600000)
+        const remainM = Math.ceil((remainMs % 3600000) / 60000)
+        const remainText =
+          remainH > 0
+            ? remainM > 0
+              ? `${remainH} ساعة و${remainM} دقيقة تقريباً`
+              : `${remainH} ساعة تقريباً`
+            : `${Math.max(1, remainM)} دقيقة تقريباً`
+        return jsonError(
+          `لا يمكن إنهاء التكليف قبل انتهاء وقته المحدد بالكامل — الوقت المتبقي: ${remainText}. إذا كان هناك ظرف طارئ فتواصل مع المستلم الإداري لإنهاء التكليف من جهته مع ذكر السبب`,
+          409
+        )
+      }
     }
 
     const updated = await db.assignment.update({

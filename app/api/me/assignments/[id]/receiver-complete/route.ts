@@ -17,6 +17,16 @@ const ratingAxis = z
 const receiverCompleteSchema = z.object({
   // هل تم الدفع للكادر؟ — إلزامي (نعم / لا)
   nursePaid: z.boolean({ error: 'يجب تحديد هل تم الدفع للكادر أم لا' }),
+  // الجولة 46 — البلاغ الحرفي: «المستلم الاداري او مشرف الاطباء يتمكن من
+  // انهاء التكليف قبل اكتماله مع ذكر السبب» — سبب الإنهاء المبكر إلزامي
+  // عند الإنهاء قبل بلوغ وقت انتهاء التكليف (يُدقق في المتن أدناه)
+  reason: z
+    .string()
+    .trim()
+    .min(3, 'اذكر سبب إنهاء التكليف قبل اكتمال وقته — 3 أحرف على الأقل')
+    .max(500, 'سبب الإنهاء طويل جداً — 500 حرف كحد أقصى')
+    .optional()
+    .or(z.literal('')),
   // التقييم الاحترافي للكادر
   rating: z.object({
     overall: ratingAxis,
@@ -46,6 +56,11 @@ const receiverCompleteSchema = z.object({
  * 2) تقييم احترافي (نجوم + محاور + تعليق) — يظهر في ملف الكادر وسيرته الذاتية
  * 3) ربح المستلم الإداري صاحب التكليف (نسبة من التكليف تُحتسب من حساب الإدارة)
  * 4) الحالة النهائية: مكتمل + إشعار الكادر والإدارة
+ *
+ * الجولة 46 — الإنهاء المبكر بسببي إلزامي:
+ *  - المستلم الإداري ومشرف الأطباء يمكنهم إنهاء التكليف قبل اكتمال وقته —
+ *    مع ذكر السبب إلزامياً (reason) ويُحفظ في earlyEndReason ويُوثَّق في
+ *    سجل التكليف ويُرسل للكادر في الإشعار — بشفافية كاملة.
  */
 export async function POST(
   req: NextRequest,
@@ -99,7 +114,21 @@ export async function POST(
       return jsonError('تم إنهاء هذا التكليف مسبقاً', 409)
     }
 
-    const { nursePaid, rating } = parsed.data
+    const { nursePaid, rating, reason } = parsed.data
+
+    // الجولة 46 — الإنهاء المبكر يتطلب سبباً إلزامياً: التكليف الساري
+    // الذي لم يبلغ وقت انتهائه بعد لا يُنهى من المساند إلا بذكر السبب
+    const timeComplete =
+      !assignment.endDate || Number.isNaN(new Date(assignment.endDate).getTime())
+        ? true
+        : Date.now() >= new Date(assignment.endDate).getTime()
+    const isEarlyEnd = !timeComplete && assignment.status !== 'COMPLETED'
+    if (isEarlyEnd && !reason?.trim()) {
+      return jsonError(
+        'أنهاء التكليف قبل اكتمال وقته يتطلب ذكر السبب إلزامياً — اشرح سبب الإنهاء المبكر',
+        422
+      )
+    }
 
     // نسبة صاحب التكليف — تُحتسب من قيمة التكليف وتُخصم من حساب الإدارة
     // الجولة 32: نسبة مخصصة على الحساب إن عيّنتها الإدارة، وإلا التلقائي (نصف نسبة الإدارة)
@@ -118,6 +147,8 @@ export async function POST(
           receivedAt: assignment.receivedAt ?? new Date(),
           receiverDoneAt: assignment.receiverDoneAt ?? new Date(),
           nursePaid,
+          // الجولة 46: سبب الإنهاء المبكر — يُحفظ عند الإنهاء قبل اكتمال الوقت
+          ...(isEarlyEnd && reason?.trim() ? { earlyEndReason: reason.trim() } : {}),
         },
       }),
       // تقييم احترافي واحد لكل تكليف (upsert للسماح بإعادة الإرسال عند الفشل الجزئي)
@@ -166,15 +197,15 @@ export async function POST(
         assignmentId: id,
         userId: session.user.id,
         action: isOwner ? 'إنهاء التكليف من المستلم الإداري' : 'إنهاء التكليف من مشرف الأطباء',
-        note: `تم إنهاء التكليف — تم الدفع للكادر: ${nursePaid ? 'نعم' : 'لا'} — تقييم الكادر: ${rating.overall}/5${earningAmount > 0 ? ` — ربح المستلم: ${formatCurrency(earningAmount)}` : ''}`,
+        note: `تم إنهاء التكليف${isEarlyEnd ? ' قبل اكتمال وقته' : ''} — تم الدفع للكادر: ${nursePaid ? 'نعم' : 'لا'} — تقييم الكادر: ${rating.overall}/5${isEarlyEnd && reason?.trim() ? ` — سبب الإنهاء المبكر: ${reason.trim()}` : ''}${earningAmount > 0 ? ` — ربح المستلم: ${formatCurrency(earningAmount)}` : ''}`,
       },
     })
 
     const stars = '★'.repeat(rating.overall) + '☆'.repeat(5 - rating.overall)
     await Promise.all([
       notify(assignment.nurseId, {
-        title: 'تم إنهاء التكليف وتقييمك',
-        body: `أنهى ${isOwner ? 'المستلم الإداري' : 'مشرف الأطباء'} التكليف (${assignment.title}) — تم الدفع لك: ${nursePaid ? 'نعم' : 'لا'} — تقييمك ${stars} (${rating.overall}/5)${rating.comment?.trim() ? ` — «${rating.comment.trim()}»` : ''}`,
+        title: isEarlyEnd ? 'تم إنهاء التكليف قبل اكتمال وقته وتقييمك' : 'تم إنهاء التكليف وتقييمك',
+        body: `أنهى ${isOwner ? 'المستلم الإداري' : 'مشرف الأطباء'} التكليف (${assignment.title})${isEarlyEnd ? ' قبل اكتمال وقته المحدد' : ''} — تم الدفع لك: ${nursePaid ? 'نعم' : 'لا'} — تقييمك ${stars} (${rating.overall}/5)${isEarlyEnd && reason?.trim() ? ` — سبب الإنهاء المبكر: ${reason.trim()}` : ''}${rating.comment?.trim() ? ` — «${rating.comment.trim()}»` : ''}`,
         type: 'ASSIGNMENT_COMPLETED',
         link: assignment.nurse.role === 'DOCTOR' ? '/doctor/assignments' : '/nurse/assignments',
       }),
@@ -191,7 +222,7 @@ export async function POST(
           ]),
       notify(assignment.createdById, {
         title: 'إنهاء تكليف',
-        body: `أُنهي التكليف (${assignment.title}) بنجاح${earningAmount > 0 ? ` — ربح المستلم ${formatCurrency(earningAmount)}` : ''}`,
+        body: `أُنهي التكليف (${assignment.title}) بنجاح${isEarlyEnd ? ' قبل اكتمال وقته' : ''}${isEarlyEnd && reason?.trim() ? ` — السبب: ${reason.trim()}` : ''}${earningAmount > 0 ? ` — ربح المستلم ${formatCurrency(earningAmount)}` : ''}`,
         type: 'ASSIGNMENT_COMPLETED',
         link: '/admin/assignments',
       }),
@@ -200,7 +231,7 @@ export async function POST(
     await notifyAdmins(
       {
         title: 'إنهاء تكليف',
-        body: `أُنهي التكليف (${assignment.title}) بنجاح — تقييم الكادر ${rating.overall}/5`,
+        body: `أُنهي التكليف (${assignment.title}) بنجاح${isEarlyEnd ? ' قبل اكتمال وقته — السبب: ' + (reason?.trim() ?? 'غير مذكور') : ''} — تقييم الكادر ${rating.overall}/5`,
         type: 'ASSIGNMENT_COMPLETED',
         link: '/admin/assignments',
       },

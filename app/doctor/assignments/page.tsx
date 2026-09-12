@@ -1090,12 +1090,13 @@ function NurseAssignmentCard({
           </p>
         )}
 
-        {/* إنهاء التكليف واستلام المبلغ */}
+        {/* إنهاء التكليف واستلام المبلغ — الجولة 46: لا إنهاء قبل اكتمال الوقت 100% */}
         {canConfirmDone && (
-          <Button size="sm" className="w-full gap-2" onClick={() => setConfirmDone(true)}>
-            <CheckCircle2 className="size-4" />
-            تم الانتهاء من التكليف واستلام مبلغ التكليف
-          </Button>
+          <NurseCompleteGate
+            endDate={a.endDate}
+            pending={completeMutation.isPending}
+            onConfirm={() => setConfirmDone(true)}
+          />
         )}
 
         {/* فتح/إغلاق التفاصيل: سجل طرق الدفع + الوصف */}
@@ -1207,5 +1208,75 @@ function NurseAssignmentCard({
         onOpenChange={(open) => !open && setViewScreenshot(null)}
       />
     </Card>
+  )
+}
+
+// ---------- بوابة إنهاء التكليف من الكادر — الجولة 46 ----------
+
+/**
+ * البلاغ الحرفي: «لا يتمكن الممرض من انهاء التكليف الا بعد انتهاء الوقت 100%».
+ * زر التأكيد لا يظهر إلا بعد بلوغ وقت انتهاء التكليف حصرياً — وقبل ذلك
+ * تظهر بطاقة هادئة بعدّ تنازلي حي للمتبقي (بتحديث كل ثانية، ويُفعّل الزر
+ * تلقائياً لحظة اكتمال الوقت دون إعادة تحميل). التكليف بلا وقت انتهاء
+ * محدد يعرض الزر مباشرة كما كان تاريخياً.
+ */
+function NurseCompleteGate({
+  endDate,
+  pending,
+  onConfirm,
+}: {
+  endDate: string | null
+  pending: boolean
+  onConfirm: () => void
+}) {
+  const [now, setNow] = useState<number | null>(null)
+
+  useEffect(() => {
+    const t0 = setTimeout(() => setNow(Date.now()), 0)
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => {
+      clearTimeout(t0)
+      clearInterval(t)
+    }
+  }, [])
+
+  const end = endDate ? new Date(endDate).getTime() : null
+  const hasEnd = end != null && Number.isFinite(end)
+  const complete = !hasEnd || (now != null && now >= end!)
+
+  if (complete) {
+    return (
+      <Button size="sm" className="w-full gap-2" onClick={onConfirm} disabled={pending}>
+        <CheckCircle2 className="size-4" />
+        تم الانتهاء من التكليف واستلام مبلغ التكليف
+      </Button>
+    )
+  }
+
+  const remain = now != null ? Math.max(0, end! - now) : null
+  const h = remain != null ? Math.floor(remain / 3600000) : 0
+  const m = remain != null ? Math.floor((remain % 3600000) / 60000) : 0
+  const s = remain != null ? Math.floor((remain % 60000) / 1000) : 0
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-xs font-extrabold text-amber-800 dark:text-amber-200">
+          <Clock className="size-3.5 shrink-0" />
+          ينتهي التكليف بعد{' '}
+          <span dir="ltr" className="tabular-nums">
+            {pad(h)}:{pad(m)}:{pad(s)}
+          </span>
+        </p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          يمكنك تأكيد الإنهاء واستلام المبلغ بعد انتهاء وقت التكليف بالكامل (100%) —
+          عند وجود ظرف طارئ يُنهيه المستلم الإداري أو مشرف الأطباء من جهته مع ذكر السبب
+        </p>
+      </div>
+      <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-extrabold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+        الإنهاء بعد اكتمال الوقت
+      </span>
+    </div>
   )
 }

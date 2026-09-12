@@ -43,6 +43,7 @@ import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant
 import { CreatePostDialog } from '@/components/shared/create-post-dialog'
 import { ShiftCountdown } from '@/components/shared/shift-countdown'
 import { AssignmentContactChip } from '@/components/shared/staff-phone'
+import { contactLockHint } from '@/lib/contact-hint'
 import { Stars, StarRatingInput } from '@/components/shared/star-rating'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -132,6 +133,10 @@ interface PlatformSettings {
   paymentAccountNumber: string
   paymentAccountName: string
   paymentNotes: string
+  /** الجولة 46: حقول العرض بدون رسوم — لتلميحات اتصال واعية بنمط الرسوم */
+  promoActive: boolean
+  promoUntil: string | null
+  promoNote: string
 }
 
 interface Hospital {
@@ -254,7 +259,9 @@ export default function ReceiverAssignmentsPage() {
         />
       )}
 
-      {tab === 'confirmed' && <ConfirmedAssignments assignments={assignments} />}
+      {tab === 'confirmed' && (
+        <ConfirmedAssignments assignments={assignments} settings={settings} />
+      )}
 
       <CreatePostDialog
         open={createOpen}
@@ -602,7 +609,13 @@ function ApplicantMiniCard({
 // الجولة 34: زر مراسلة الطبيب أصبح مشروطاً بسداد نسبة الإدارة
 // (AssignmentContactChip) — يظهر مقفلاً حتى السداد ويفتح واتساب بعده تلقائياً
 
-function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment[] }) {
+function ConfirmedAssignments({
+  assignments,
+  settings,
+}: {
+  assignments: ReceiverAssignment[]
+  settings?: PlatformSettings
+}) {
   const queryClient = useQueryClient()
   const [completing, setCompleting] = useState<ReceiverAssignment | null>(null)
 
@@ -671,6 +684,8 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                       phone={a.nurse.phone}
                       masked={a.nurse.phoneMasked}
                       personName={a.nurse.name}
+                      phoneLocked={a.nurse.phoneLocked}
+                      lockHint={contactLockHint(settings)}
                     />
                   </div>
 
@@ -881,11 +896,14 @@ function CompleteAssignmentDialog({
   const [overall, setOverall] = useState(0)
   const [axes, setAxes] = useState<Record<string, number>>({})
   const [comment, setComment] = useState('')
+  // الجولة 46: سبب الإنهاء المبكر — إلزامي عند الإنهاء قبل اكتمال وقت التكليف
+  const [reason, setReason] = useState('')
 
   const mutation = useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
       apiPost<{ message: string }>(`/api/me/assignments/${id}/receiver-complete`, {
         nursePaid,
+        reason: reason ?? '',
         rating: {
           overall,
           punctuality: axes.punctuality || undefined,
@@ -908,14 +926,32 @@ function CompleteAssignmentDialog({
 
   if (!assignment) return null
 
-  const canSubmit = nursePaid !== null && overall > 0
+  // الجولة 46 — البلاغ الحرفي: «المستلم الاداري او مشرف الاطباء يتمكن من
+  // انهاء التكليف قبل اكتماله مع ذكر السبب» — الإنهاء المبكر مسموح للمساند
+  // حصراً (الطبيب لا يُنهي إلا بعد اكتمال الوقت) — مع سبب إلزامي
+  const end = assignment.endDate ? new Date(assignment.endDate).getTime() : null
+  const isEarlyEnd =
+    end != null &&
+    Number.isFinite(end) &&
+    Date.now() < end &&
+    assignment.status !== 'COMPLETED' &&
+    assignment.status !== 'CANCELLED'
+  const remain = end != null ? Math.max(0, end - Date.now()) : 0
+  const remainH = Math.floor(remain / 3600000)
+  const remainM = Math.floor((remain % 3600000) / 60000)
+
+  const canSubmit = nursePaid !== null && overall > 0 && (!isEarlyEnd || reason.trim().length >= 3)
 
   const submit = () => {
     if (!canSubmit) {
+      if (isEarlyEnd && reason.trim().length < 3) {
+        toast.error('اذكر سبب إنهاء التكليف قبل اكتمال وقته')
+        return
+      }
       toast.error('حدد هل تم الدفع للممرض وقيّم الطبيب أولاً')
       return
     }
-    mutation.mutate(assignment.id)
+    mutation.mutate({ id: assignment.id, reason: reason.trim() || undefined })
   }
 
   return (
@@ -935,6 +971,33 @@ function CompleteAssignmentDialog({
         </DialogHeader>
 
         <div className="space-y-5">
+          {/* الجولة 46: تنبيه الإنهاء المبكر + سبب إلزامي — يظهر فقط قبل اكتمال الوقت */}
+          {isEarlyEnd && (
+            <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-bl from-amber-50 to-transparent p-4 dark:border-amber-800 dark:from-amber-950/30">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-amber-800 dark:text-amber-200">
+                <Clock className="size-4" />
+                إنهاء مبكر قبل اكتمال وقت التكليف
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-800 tabular-nums dark:bg-amber-900/60 dark:text-amber-200">
+                  المتبقي: {remainH > 0 ? `${remainH} ساعة ` : ''}{remainM} دقيقة
+                </span>
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                أنت تنهي التكليف قبل انتهاء وقته المحدد بالكامل — سببك إلزامي ويُوثَّق في سجل
+                التكليف ويُرسل للطبيب بشفافية كاملة.
+              </p>
+              <div className="mt-3 space-y-1.5">
+                <Label htmlFor="early-end-reason">سبب الإنهاء المبكر (إلزامي)</Label>
+                <Textarea
+                  id="early-end-reason"
+                  rows={2}
+                  placeholder="مثال: تعذر اكتمال المناوبة لظرف تشغيلي طارئ في الجهة — تم التنسيق مع الطبيب"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           {/* السؤال الأول: هل تم الدفع للممرض؟ */}
           <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
             <p className="flex items-center gap-2 text-sm font-extrabold text-amber-800 dark:text-amber-200">
@@ -1016,7 +1079,11 @@ function CompleteAssignmentDialog({
               onClick={submit}
             >
               <BadgeCheck className="size-4" />
-              {mutation.isPending ? 'جارٍ الإنهاء...' : 'إنهاء التكليف وإرسال التقييم'}
+              {mutation.isPending
+                ? 'جارٍ الإنهاء...'
+                : isEarlyEnd
+                  ? 'إنهاء التكليف مبكراً وإرسال التقييم'
+                  : 'إنهاء التكليف وإرسال التقييم'}
             </Button>
           </DialogFooter>
         </div>

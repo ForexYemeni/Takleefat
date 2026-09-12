@@ -26,6 +26,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { StaffPhone } from '@/components/shared/staff-phone'
+import { useContactLockHint } from '@/lib/contact-hint'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import {
   APPLICATION_STATUS_LABELS,
@@ -123,6 +124,9 @@ export function ApplicantCV({
   const [viewerDoc, setViewerDoc] = useState<ViewableDocument | null>(null)
   const [rejecting, setRejecting] = useState(false)
   const [rejectNote, setRejectNote] = useState('')
+  // الجولة 46: تلميح واعٍ بنمط الرسوم — «سداد النسبة» يظهر في النمط العادي حصراً،
+  // وأثناء عرض بدون رسوم يظهر التلميح الصحيح (الفتح بعد الاعتماد بلا أي سداد)
+  const lockHint = useContactLockHint()
 
   const { nurse } = applicant
 
@@ -181,7 +185,7 @@ export function ApplicantCV({
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
               <Lock className="size-3" />
-              يُفتح بعد سداد نسبة الإدارة
+              {lockHint}
             </span>
           )}
         </div>

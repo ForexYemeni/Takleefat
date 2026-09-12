@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
-import { resolveReceiverOrgs } from '@/lib/network'
 
 /**
  * GET /api/posts/[id]/applications — تقديمات التكليف المُعلن
  * للمستلم الإداري المالك (وللإدارة) — تشمل السيرة الذاتية الاحترافية:
- * البيانات، بيانات التواصل، المستندات (البطاقة والمزاولة) لكل متقدم.
+ * البيانات، بيانات التواصل، المستندات كاملة لكل متقدم.
  * الجولة 34: أرقام المتقدمين تُقنّع للمالك — تُفتح بتكليف مسدد النسبة
  * بين الطرفين (lib/phone-privacy) — الإدارة ترى الأرقام دائماً.
+ * الجولة 46 — البلاغ الحرفي: «عند التقديم على تكليف لأي كان كادر تمريضي
+ * او طبيب يجب ان تظهر المستندات بشكل طبيعي جداً» — مستندات كل متقدم
+ * تُرسل كاملة مع بقية السيرة (مثل كوادر الجهة) — الإخفاء بقي حصراً
+ * لسياق تصفّح «كل الكوادر في المنصة» (/api/workforce).
  */
 export async function GET(
   _req: NextRequest,
@@ -156,70 +159,37 @@ export async function GET(
       )
     }
 
-    // ---------- الجولة 44: خصوصية المستندات في السيرة الذاتية ----------
-    // «عند عرض السيرة الذاتية يجب ان تكون المستندات المرفوعة مخفية عنه وتظهر
-    // انه تم التحقق ولا تعرض الا اذا كان الكادر يعمل بنفس الجهة»:
-    //  - الإدارة: ترى المستندات دائماً
-    //  - المستلم/المشرف: تُخفى المستندات عن أي متقدم لا يعمل في جهته (ارتباط
-    //    معتمد غير معلق) — وبدلها تظهر حالة «تم التحقق» + عدد المعتمد من الإدارة
-    //  - الاستثناءان: المتقدم من كوادر جهته، أو مُنح صاحب الحساب إذن
-    //    «رؤية البيانات الكاملة» (fullProfileAccess) من الإدارة حصراً
-    let fullProfileAccess = false
-    const sameOrgSet = new Set<string>()
+    // ---------- الجولة 46 — البلاغ الحرفي:
+    // «عند التقديم على تكليف لأي كان كادر تمريضي او طبيب يجب ان تظهر
+    // المستندات بشكل طبيعي جداً ... كوادر جهتي اتمكن من رؤية المستندات عادي جداً»:
+    // كل من قدّم على تكليفِك يُراجَع سيرته ومستنداته بشكل طبيعي — مثل كوادر
+    // الجهة تماماً: فالمستلم/المشرف يختار الكادر من بينهم ويحتاج رؤية
+    // المستندات كاملة قبل الاعتماد (الإدارة ترى كل شيء دائماً).
+    // الإخفاء بقي حصراً لسياق تصفّح «كل الكوادر في المنصة» (workforce).
     const verifiedMap = new Map<string, number>()
     if (session.user.role !== 'ADMIN') {
       const applicantIds = applicationsWithRatings.map((a) => a.nurse.id)
-      const [me, verifiedRows] = await Promise.all([
-        db.user.findUnique({
-          where: { id: session.user.id },
-          select: { fullProfileAccess: true },
-        }),
-        db.document.groupBy({
+      if (applicantIds.length > 0) {
+        const verifiedRows = await db.document.groupBy({
           by: ['userId'],
           where: { userId: { in: applicantIds }, status: 'APPROVED' },
           _count: { _all: true },
-        }),
-      ])
-      fullProfileAccess = me?.fullProfileAccess ?? false
-      for (const v of verifiedRows) verifiedMap.set(v.userId, v._count._all)
-      if (!fullProfileAccess && applicantIds.length > 0) {
-        const orgs = await resolveReceiverOrgs(session.user.id)
-        if (orgs.length > 0) {
-          const links = await db.nurseAffiliation.findMany({
-            where: {
-              nurseId: { in: applicantIds },
-              hospitalId: { in: orgs.map((o) => o.id) },
-              status: { not: 'PENDING' },
-            },
-            select: { nurseId: true },
-          })
-          for (const l of links) sameOrgSet.add(l.nurseId)
-        }
+        })
+        for (const v of verifiedRows) verifiedMap.set(v.userId, v._count._all)
       }
     }
 
     return NextResponse.json({
       applications: applicationsWithRatings.map((a) => {
-        const canSeeDocuments =
-          session.user.role === 'ADMIN' || fullProfileAccess || sameOrgSet.has(a.nurse.id)
         return {
           ...a,
           applicationId: a.id,
           nurse: {
             ...a.nurse,
             ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
-            // الجولة 44 + 45: إخفاء المستندات عن غير أهل الجهة — مع شارات الحالة
-            // (معتمدة / مرفوضة / قيد المراجعة) بدل المحتوى
-            ...(canSeeDocuments
-              ? {}
-              : {
-                  documents: [] as typeof a.nurse.documents,
-                  documentStatuses: a.nurse.documents.map((d) => ({
-                    type: d.type,
-                    status: d.status,
-                  })),
-                }),
-            documentsHidden: !canSeeDocuments,
+            // الجولة 46: المستندات تُعرض بشكل طبيعي مع بقية السيرة —
+            // مع شارات حالة المراجعة (معتمدة/مرفوضة/قيد المراجعة) لكل مستند
+            documentsHidden: false,
             documentsVerified: (verifiedMap.get(a.nurse.id) ?? 0) > 0,
             approvedDocuments: verifiedMap.get(a.nurse.id) ?? 0,
           },

@@ -171,7 +171,6 @@ export default function ReceiverStaffPage() {
   }, [myOrgs.length])
 
   /** إذن رؤية البيانات الكاملة — يفتحه حساب الإدارة حصراً (الجولة 32) */
-  const fullProfileAccess = data?.fullProfileAccess ?? false
 
   const createForm = useForm<ReceiverCreateNurseFormValues, unknown, ReceiverCreateNurseInput>({
     resolver: zodResolver(receiverCreateNurseSchema),
@@ -440,24 +439,25 @@ export default function ReceiverStaffPage() {
         </div>
       )}
 
-      {/* ---------- الجولة 33: تبويبات «كوادر جهتي» / «كل الكوادر» — يظهران بالإذن ---------- */}
-      {fullProfileAccess && (
-        <Tabs value={view} onValueChange={(v) => setView(v as 'org' | 'all')}>
-          <TabsList className="h-auto flex-wrap justify-start gap-1">
-            <TabsTrigger value="org" className="gap-1.5">
-              <Building2 className="size-3.5" />
-              كوادر جهتي
-              <span className="text-xs text-muted-foreground">{staffRows.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="all" className="gap-1.5 text-emerald-700 dark:text-emerald-400">
-              <Globe2 className="size-3.5" />
-              كل الكوادر في المنصة
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
+      {/* ---------- الجولة 33/46: تبويبات «كوادر جهتي» / «كل الكوادر» — ظاهرة دائماً ----------
+          البلاغ الحرفي: «لا تظهر في قسم كوادر جهتي تبويب الكوادر في المنصة
+          الا اذا يوجد كوادر جهتي» — التبويبان يظهران الآن دائماً حتى لو كانت
+          قائمة كوادر الجهة فارغة أو بلا جهة مرتبطة بعد */}
+      <Tabs value={view} onValueChange={(v) => setView(v as 'org' | 'all')}>
+        <TabsList className="h-auto flex-wrap justify-start gap-1">
+          <TabsTrigger value="org" className="gap-1.5">
+            <Building2 className="size-3.5" />
+            كوادر جهتي
+            <span className="text-xs text-muted-foreground">{staffRows.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="all" className="gap-1.5 text-emerald-700 dark:text-emerald-400">
+            <Globe2 className="size-3.5" />
+            كل الكوادر في المنصة
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {view === 'all' && fullProfileAccess ? (
+      {view === 'all' ? (
         <WorkforceDirectory audience="NURSE" />
       ) : !org ? (
         <EmptyState
@@ -559,20 +559,19 @@ export default function ReceiverStaffPage() {
                     تغيير حالة العمل
                   </Button>
                 )}
-                {fullProfileAccess && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
-                    onClick={() => {
-                      setProfileUserId(n.nurse.id)
-                      setProfileOpen(true)
-                    }}
-                  >
-                    <IdCard className="size-3.5" />
-                    السيرة الذاتية
-                  </Button>
-                )}
+                {/* الجولة 46: السيرة الذاتية متاحة لكل المستلمين — المستندات تُدار من الخادم */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
+                  onClick={() => {
+                    setProfileUserId(n.nurse.id)
+                    setProfileOpen(true)
+                  }}
+                >
+                  <IdCard className="size-3.5" />
+                  السيرة الذاتية
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
