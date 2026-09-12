@@ -2363,7 +2363,8 @@ R34_LIB=$([ -f lib/phone-privacy.ts ] && grep -c "revealedStaffIds\|phoneView\|m
 check "api: مكتبة الخصوصية المركزية lib/phone-privacy.ts موجودة بالقواعد الثلاث" "1" "$R34_LIB"
 
 R34_MASKED=$(grep -rl "phone-privacy" app/api --include="*.ts" | wc -l | tr -d ' ')
-check "api: قناع الأرقام مطبق في 11 مسار API على الأقل (المفضلة/الشبكة/الدليل/التقديمات/التكليفات)" "11" "$R34_MASKED"
+# الجولة 38: +1 مع مسار مجتمع كوادر الجهة (app/api/org/community) = 12 مساراً
+check "api: قناع الأرقام مطبق في 12 مسار API على الأقل (المفضلة/الشبكة/الدليل/التقديمات/التكليفات/المجتمع)" "12" "$R34_MASKED"
 
 R34_COMP=$([ -f components/shared/staff-phone.tsx ] && grep -c "StaffPhone\|AssignmentContactChip" components/shared/staff-phone.tsx | awk '{print ($1>=2)?1:0}')
 check "ui: مكوّنا القفل StaffPhone + AssignmentContactChip موجودان (قناع + قفل + اتصال + واتساب)" "1" "$R34_COMP"
