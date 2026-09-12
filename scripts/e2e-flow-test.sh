@@ -3647,9 +3647,12 @@ REG44A=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/j
   -d '{"role":"NURSE","name":"كادر بداية الجولة","phone":"744440404","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"MALE"}')
 N44A_ID=$(echo "$REG44A" | jget "['user']['id']")
 login "$DIR/n44a.jar" "744440404" "R44@Nurse"
-curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+# رفع المستند أولاً — الاعتماد يتطلب مستنداً واحداً على الأقل (قاعدة الجولة 8)
 UP44A=$(code -b "$DIR/n44a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
-check "R44: كادر البداية يرفع مستنده (شرط التقديم) → 200" "200" "$UP44A"
+check "R44: كادر البداية يرفع مستنده (شرط التقديم والاعتماد) → 201" "201" "$UP44A"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+N44A_ST=$(curl -s -b "$DIR/n44a.jar" $BASE/api/auth/session | jget "['user']['status']")
+check "R44: كادر البداية معتمد من الإدارة" "APPROVED" "$N44A_ST"
 
 START44_H=$(python3 -c "import datetime;d=datetime.datetime.utcnow()+datetime.timedelta(hours=3)-datetime.timedelta(hours=1);print(d.strftime('%H:%M'))")
 END44_H=$(python3 -c "import datetime;d=datetime.datetime.utcnow()+datetime.timedelta(hours=3)+datetime.timedelta(hours=2);print(d.strftime('%H:%M'))")
@@ -3695,8 +3698,8 @@ REG44B=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/j
   -d '{"role":"NURSE","name":"متقدم خارجي موثق","phone":"744440505","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":4,"gender":"FEMALE"}')
 N44B_ID=$(echo "$REG44B" | jget "['user']['id']")
 login "$DIR/n44b.jar" "744440505" "R44@Nurse"
-curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44B_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 curl -s -b "$DIR/n44b.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=PRACTICE_LICENSE" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44B_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 DOC44B_ID=$(curl -s -b "$DIR/n44b.jar" $BASE/api/me/documents | jget "['documents'][0]['id']")
 curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC44B_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 
@@ -3705,8 +3708,8 @@ REG44C=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/j
   -d '{"role":"NURSE","name":"متقدم من كوادر الجهة","phone":"744440606","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
 N44C_ID=$(echo "$REG44C" | jget "['user']['id']")
 login "$DIR/n44c.jar" "744440606" "R44@Nurse"
-curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44C_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 curl -s -b "$DIR/n44c.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44C_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 R44_ORG=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/staff | jget "['org']['id']")
 END44C=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
   -d "{\"nurseId\":\"$N44C_ID\",\"hospitalId\":\"$R44_ORG\",\"status\":\"WORKING\"}")

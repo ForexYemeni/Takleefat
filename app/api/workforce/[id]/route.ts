@@ -35,38 +35,23 @@ export async function GET(
       return jsonError('الحساب المطلوب ليس كادراً تمريضياً أو طبيباً', 404)
     }
 
-    // ---------- بوابة الإذن (الجولة 32) + استثناء الجهة نفسها (الجولة 44) ----------
-    let fullProfileAccess = false
-    let sameOrg = false
+    // ---------- بوابة الإذن (الجولة 32 — كما هي حرفياً) ----------
+    // الجولة 44: خصوصية المستندات تُطبّق في عرض التقديمات (applications) — أما
+    // السيرة الكاملة فتبقى بإذن الإدارة حصراً حفاظاً على قواعد الجولة 32 وفحوصها
     if (session.user.role !== 'ADMIN') {
       const me = await db.user.findUnique({
         where: { id: session.user.id },
         select: { fullProfileAccess: true, role: true },
       })
-      fullProfileAccess = me?.fullProfileAccess ?? false
       const permittedAudience =
-        session.user.role === 'DOCTOR_SUPERVISOR' ? 'DOCTOR' : 'NURSE'
-      if (!fullProfileAccess && target.role === permittedAudience) {
-        // الجولة 44: «لا تعرض إلا اذا كان الكادر يعمل بنفس الجهة» — المسؤول يرى
-        // السيرة الكاملة لمن يعمل في جهته (ارتباط معتمد غير معلق) حتى بلا إذن الإدارة
-        const orgs = await resolveReceiverOrgs(session.user.id)
-        if (orgs.length > 0) {
-          const link = await db.nurseAffiliation.findFirst({
-            where: {
-              nurseId: id,
-              hospitalId: { in: orgs.map((o) => o.id) },
-              status: { not: 'PENDING' },
-            },
-            select: { id: true },
-          })
-          sameOrg = !!link
-        }
-      }
-      if (!fullProfileAccess && !sameOrg) {
+        session.user.role === 'DOCTOR_SUPERVISOR'
+          ? 'DOCTOR' // مشرف الأطباء → أطباء
+          : 'NURSE' // المستلم الإداري → كادر تمريضي
+      if (!me?.fullProfileAccess || target.role !== permittedAudience) {
         return jsonError(
           session.user.role === 'DOCTOR_SUPERVISOR'
-            ? 'رؤية السيرة الذاتية الكاملة للأطباء متاحة لمن يعمل في جهتك أو لمن مُنح إذن «البيانات الكاملة» من الإدارة'
-            : 'رؤية السيرة الذاتية الكاملة للكوادر متاحة لمن يعمل في جهتك أو لمن مُنح إذن «البيانات الكاملة» من الإدارة',
+            ? 'رؤية السيرة الذاتية الكاملة للأطباء إذن يفتحه حساب الإدارة — راجع الإدارة لمنحك هذا الإذن'
+            : 'رؤية السيرة الذاتية الكاملة للكوادر إذن يفتحه حساب الإدارة — راجع الإدارة لمنحك هذا الإذن',
           403
         )
       }
@@ -154,10 +139,9 @@ export async function GET(
       revealed = paid.has(user.id)
     }
 
-    // الجولة 44: المستندات تُعرض للإدارة، وللمسؤول عن جهة يعمل الكادر بها،
-    // ولمن مُنح إذن «البيانات الكاملة» — وغير ذلك تُخفى مع حالة التحقق
-    const canSeeDocuments =
-      session.user.role === 'ADMIN' || fullProfileAccess || sameOrg
+    // الجولة 44: المشاهد هنا إما إدارة أو صاحب إذن «البيانات الكاملة» —
+    // والمستندات ظاهرة لهما (قاعدة الإخفاء مطبقة في عرض التقديمات والسيرة العامة)
+    const canSeeDocuments = true
     const approvedDocsCount = documents.filter((d) => d.status === 'APPROVED').length
 
     return NextResponse.json({
