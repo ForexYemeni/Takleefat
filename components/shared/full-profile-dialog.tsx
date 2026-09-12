@@ -8,6 +8,7 @@ import {
   Briefcase,
   Building2,
   CalendarClock,
+  Clock,
   FileText,
   GraduationCap,
   IdCard,
@@ -18,6 +19,7 @@ import {
   Star,
   Stethoscope,
   UserRound,
+  XCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -27,7 +29,7 @@ import { Stars } from '@/components/shared/star-rating'
 import { EmptyState } from '@/components/shared/empty-state'
 import { StaffPhone } from '@/components/shared/staff-phone'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
-import { DOCUMENT_TYPE_LABELS, GENDER_LABELS, formatDate, formatDateTime } from '@/lib/utils'
+import { DOCUMENT_TYPE_LABELS, GENDER_LABELS, cn, formatDate, formatDateTime } from '@/lib/utils'
 
 /**
  * السيرة الذاتية الكاملة — إعادة بناء الجولة 33 بمستوى سيرة مهنية احترافية
@@ -131,10 +133,11 @@ export function FullProfileDialog({
 
   const profile = data?.profile
   const documents = data?.documents ?? []
-  // الجولة 44: المستندات مخفية عن هذا المشاهد — حالة «تم التحقق» بدل القائمة
+  // الجولة 45: المستندات مخفية عن غير نفس الجهة — شارات الحالة بدل المحتوى
   const documentsHidden = data?.documentsHidden ?? false
   const documentsVerified = data?.documentsVerified ?? false
   const approvedDocuments = data?.approvedDocuments ?? 0
+  const documentStatuses = data?.documentStatuses ?? []
   const isDoctor = profile?.role === 'DOCTOR'
   const approvedDocs = documents.filter((d) => d.status === 'APPROVED').length
 
@@ -370,21 +373,51 @@ export function FullProfileDialog({
                   icon={documentsHidden ? ShieldCheck : FileText}
                 >
                   {documentsHidden ? (
-                    // الجولة 44: المستندات مخفية — تظهر حالة التحقق فقط
-                    <div className="flex items-start gap-3 rounded-xl border-2 border-emerald-200 bg-gradient-to-bl from-emerald-50 to-transparent p-3.5 dark:border-emerald-900 dark:from-emerald-950/20">
-                      <span className="shrink-0 rounded-lg bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-                        <ShieldCheck className="size-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-200">
-                          {documentsVerified ? 'تم التحقق من مستندات الكادر' : 'مستندات الكادر محفوظة وخاصة'}
-                          {documentsVerified && approvedDocuments > 0 && ` (${approvedDocuments} معتمدة)`}
-                        </p>
-                        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                          المستندات الرسمية تُعرض فقط عندما يعمل الكادر في جهتك أو بإذن خاص من الإدارة —
-                          حفاظاً على خصوصية بياناتهم.
-                        </p>
+                    // الجولة 45: المستندات مخفية عن غير نفس الجهة — تظهر شارات الحالة
+                    // (معتمدة / مرفوضة / قيد المراجعة) بدل المحتوى (البلاغ الحرفي)
+                    <div className="space-y-2.5">
+                      <div className="flex items-start gap-3 rounded-xl border-2 border-emerald-200 bg-gradient-to-bl from-emerald-50 to-transparent p-3.5 dark:border-emerald-900 dark:from-emerald-950/20">
+                        <span className="shrink-0 rounded-lg bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                          <ShieldCheck className="size-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-200">
+                            {documentsVerified ? 'تم التحقق من مستندات الكادر' : 'مستندات الكادر محفوظة وخاصة'}
+                            {documentsVerified && approvedDocuments > 0 && ` (${approvedDocuments} معتمدة)`}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                            محتوى المستندات يُعرض فقط عندما يعمل الكادر في جهتك الصحية —
+                            أما حالتها المراجعية فمعروضة أدناه.
+                          </p>
+                        </div>
                       </div>
+                      {documentStatuses.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {documentStatuses.map((ds) => (
+                            <span
+                              key={ds.type}
+                              className={cn(
+                                'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-extrabold',
+                                ds.status === 'APPROVED'
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : ds.status === 'REJECTED'
+                                    ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                                    : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                              )}
+                            >
+                              {ds.status === 'APPROVED' ? (
+                                <BadgeCheck className="size-3" />
+                              ) : ds.status === 'REJECTED' ? (
+                                <XCircle className="size-3" />
+                              ) : (
+                                <Clock className="size-3" />
+                              )}
+                              {DOCUMENT_TYPE_LABELS[ds.type] ?? ds.type}:{' '}
+                              {ds.status === 'APPROVED' ? 'معتمدة' : ds.status === 'REJECTED' ? 'مرفوضة' : 'قيد المراجعة'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : documents.length === 0 ? (
                     <p className="rounded-xl border border-dashed py-4 text-center text-sm text-muted-foreground">
@@ -601,6 +634,8 @@ async function apiFetchProfile(userId: string): Promise<{
   documentsHidden?: boolean
   documentsVerified?: boolean
   approvedDocuments?: number
+  /** الجولة 45: حالات المستندات (نوع + حالة) — تُعرض شاراتها عند إخفاء المحتوى */
+  documentStatuses?: Array<{ type: string; status: string }>
 }> {
   const { apiFetcher } = await import('@/lib/api-client')
   return apiFetcher(`/api/workforce/${userId}`)

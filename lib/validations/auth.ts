@@ -94,12 +94,16 @@ export const registerSchema = z
       .optional(),
   })
   .superRefine((data, ctx) => {
-    // الاسم مع اللقب فقط: كلمتان على الأقل
+    // الجولة 45 — البلاغ الحرفي: «حقل الاسم واللقب يجب ان يكون اسمين فقط لا يقبل اكثر»
+    // كلمتان حصراً: أقل (اسم بلا لقب) أو أكثر (أسماء وسطى) كلاهما مرفوض من الخادم
     const words = data.name.trim().split(/\s+/).filter(Boolean)
-    if (words.length < 2) {
+    if (words.length !== 2) {
       ctx.addIssue({
         code: 'custom',
-        message: 'أدخل الاسم مع اللقب — مثال: أحمد صالح (الاسم واللقب فقط)',
+        message:
+          words.length > 2
+            ? 'اسمين فقط — لا يقبل أكثر من الاسم واللقب (مثال: أحمد صالح)'
+            : 'أدخل اسماً ولقباً فقط — كلمتين حصراً (مثال: أحمد صالح)',
         path: ['name'],
       })
     }

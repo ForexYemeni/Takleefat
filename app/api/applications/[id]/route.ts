@@ -105,6 +105,9 @@ export async function PATCH(
 
     const settings = await getSettings()
     const adminFee = calcAdminFee(application.post.value, settings)
+    // الجولة 45: رسوم التقديم تُحتسب هنا لتحديد التكليف «بلا أي رسوم» مسبقاً
+    const applicationFee = calcApplicationFee(settings)
+    const feeless = adminFee === 0 && applicationFee === 0
 
     const [updatedApplication, assignment] = await db.$transaction([
       db.application.update({
@@ -132,13 +135,20 @@ export async function PATCH(
           createdById: session.user.id,
           value: application.post.value,
           adminFee,
+          // الجولة 45 — البلاغ الحرفي: «عندما يكون العرض بدون رسوم يتم العمل بشكل
+          // سلس واحترافي جداً» — التكليف بلا أي رسوم يُسجّل مسدداً تلقائياً
+          // (لا مبلغ واجب ولا بطاقة سداد ولا انتظار تأكيد) فيُفتح الاتصال
+          // مباشرة ويُغلق فور إنهاء التكليف بقاعدة isAssignmentContactOpen
+          paymentStatus: feeless ? 'PAID' : 'UNPAID',
           postId: application.post.id,
           logs: {
             create: [
               {
                 userId: session.user.id,
                 action: 'اعتماد التقديم',
-                note: `تم اعتماد تقديم الكادر وإنشاء التكليف بقيمة ${formatCurrency(application.post.value)}`,
+                note: feeless
+                  ? `تم اعتماد تقديم الكادر وإنشاء التكليف بقيمة ${formatCurrency(application.post.value)} — ضمن عرض بدون رسوم إدارة`
+                  : `تم اعتماد تقديم الكادر وإنشاء التكليف بقيمة ${formatCurrency(application.post.value)}`,
               },
             ],
           },
@@ -147,9 +157,8 @@ export async function PATCH(
       }),
     ])
 
-    // إشعار الكادر المقبول مع تفاصيل الدفع — الكادر وحده من يرى طرق الدفع والمبالغ
-    // يُحصّل نوع واحد فقط حسب نمط الرسوم: حصة الإدارة أو رسوم التقديم
-    const applicationFee = calcApplicationFee(settings)
+    // إشعار الكادر المقبول — الجولة 45: التكليف بلا أي رسوم يصل برسالة سلسة
+    // بلا أي تفاصيل سداد أو طرق دفع، ومعه فتح بيانات الاتصال أثناء السير
     const dueAmount = adminFee + applicationFee
     const dueBreakdown =
       adminFee > 0 && applicationFee > 0
@@ -157,12 +166,22 @@ export async function PATCH(
         : adminFee > 0
           ? 'حصة الإدارة'
           : 'رسوم التقديم'
-    await notify(application.nurseId, {
-      title: 'تهانينا! تم اعتماد تقديمك',
-      body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (${dueBreakdown}) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName} — بعد الدفع ارفع لقطة شاشة إثبات الدفع من صفحة تكليفاتك`,
-      type: 'APPLICATION_APPROVED',
-      link: audienceLink,
-    })
+    await notify(
+      application.nurseId,
+      feeless
+        ? {
+            title: 'تهانينا! تم اعتماد تقديمك',
+            body: `تم اعتماد تقديمك على (${application.post.title}) — هذا التكليف ضمن عرض بدون رسوم إدارة: لا حصة إدارة ولا رسوم تقديم، لا حاجة لأي سداد. بيانات الاتصال متاحة لك الآن أثناء سير التكليف وتُغلق تلقائياً بعد إنهائه`,
+            type: 'APPLICATION_APPROVED',
+            link: audienceLink,
+          }
+        : {
+            title: 'تهانينا! تم اعتماد تقديمك',
+            body: `تم اعتماد تقديمك على (${application.post.title}). المبلغ الواجب دفعه للإدارة ${formatCurrency(dueAmount)} (${dueBreakdown}) عبر ${settings.paymentMethod} — رقم الحساب: ${settings.paymentAccountNumber || '—'} — اسم الحساب: ${settings.paymentAccountName} — بعد الدفع ارفع لقطة شاشة إثبات الدفع من صفحة تكليفاتك`,
+            type: 'APPLICATION_APPROVED',
+            link: audienceLink,
+          }
+    )
 
     // الجولة الخامسة عشرة: الإدارة ترى الاعتماد وإنشاء التكليف (غير المُعتمِد نفسه)
     await notifyAdmins(

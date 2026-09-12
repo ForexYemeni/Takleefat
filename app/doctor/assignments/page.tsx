@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Clock,
   FileWarning,
+  Gift,
   ImagePlus,
   MapPin,
   Search,
@@ -32,6 +33,7 @@ import {
   formatDateTime,
   formatCurrency,
   cn,
+  isPromoActive,
   ASSIGNMENT_STATUS_LABELS,
   APPLICATION_STATUS_LABELS,
   POST_GENDER_LABELS,
@@ -94,6 +96,10 @@ interface PlatformSettings {
   paymentAccountNumber: string
   paymentAccountName: string
   paymentNotes: string
+  // الجولة 45: حقول العرض بدون الرسوم — ترد في استجابة /api/settings
+  promoActive?: boolean
+  promoUntil?: string | null
+  promoNote?: string
 }
 
 interface FeeBreakdown {
@@ -158,8 +164,10 @@ interface MyAssignment {
 
 function computeFees(value: number, settings: PlatformSettings): FeeBreakdown {
   // يُحصّل نوع واحد فقط حسب نمط الرسوم: حصة إدارة أو رسوم تقديم
+  // الجولة 45: أثناء العرض النشط بدون رسوم إدارة تُحتسب الحصة صفراً — مطابقة للخادم
+  const promo = isPromoActive(settings)
   const adminFee =
-    settings.feeMode === 'ADMIN'
+    !promo && settings.feeMode === 'ADMIN'
       ? settings.adminFeeType === 'FIXED'
         ? Math.max(0, Math.round(settings.adminFeeFixed))
         : Math.round((value * settings.adminPercentage) / 100)
@@ -175,6 +183,15 @@ function computeFees(value: number, settings: PlatformSettings): FeeBreakdown {
 }
 
 function feeLabel(settings: PlatformSettings): string {
+  // الجولة 45: العرض النشط يطغى على الوصف — «عرض بدون رسوم إدارة»
+  if (isPromoActive(settings)) {
+    const until = settings.promoUntil
+      ? new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' }).format(
+          new Date(settings.promoUntil)
+        )
+      : 'حتى إشعار آخر'
+    return `عرض بدون رسوم إدارة حتى ${until}`
+  }
   if (settings.feeMode === 'APPLICATION') {
     return `رسوم تقديم ${settings.applicationFee.toLocaleString('ar-YE')} ريال`
   }
@@ -250,8 +267,14 @@ function NurseAssignmentsContent() {
   const assignments = assignmentsData?.assignments ?? []
 
   // لا تقديم على تكليفات جديدة قبل تأكيد الإدارة دفع رسوم/نسبة الإدارة
+  // الجولة 45: التكليفات بلا أي رسوم (عرض بدون رسوم) لا تحجب التقديم أبداً
+  const applicationFeeDue =
+    settings?.feeMode === 'APPLICATION' ? Math.max(0, settings.applicationFee) : 0
   const unpaidAssignments = assignments.filter(
-    (a) => a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
+    (a) =>
+      a.paymentStatus !== 'PAID' &&
+      a.status !== 'CANCELLED' &&
+      ((a.adminFee ?? 0) > 0 || applicationFeeDue > 0)
   )
   const hasUnpaidFees = unpaidAssignments.length > 0
 
@@ -490,7 +513,15 @@ function AvailablePosts({
                     </p>
                   )}
 
-                  {fees && settings && (
+                  {/* الجولة 45: عرض بدون رسوم — بانر سلاسة بدل تفاصيل السداد */}
+                  {fees && settings && fees.dueToAdmin === 0 && (
+                    <p className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-[11px] font-bold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                      <Gift className="size-3.5 shrink-0" />
+                      عرض بدون رسوم إدارة — التقديم والعمل بلا أي سداد، وبيانات الاتصال متاحة أثناء سير التكليف
+                    </p>
+                  )}
+
+                  {fees && settings && fees.dueToAdmin > 0 && (
                     <div className="rounded-xl border bg-white/70 p-3 text-xs dark:bg-black/20">
                       <p className="mb-1.5 font-bold">تفاصيل الرسوم</p>
                       <div className="space-y-1">
@@ -646,12 +677,21 @@ function ApplyDialog({
         <DialogHeader>
           <DialogTitle>التقديم على: {post.title}</DialogTitle>
           <DialogDescription>
-            راجع تفاصيل الرسوم قبل إرسال التقديم — تُدفع الرسوم للإدارة بعد اعتماد تقديمك
+            {fees && fees.dueToAdmin === 0
+              ? 'هذا التكليف ضمن عرض بدون رسوم إدارة — أرسل تقديمك مباشرة وابدأ العمل بسلاسة'
+              : 'راجع تفاصيل الرسوم قبل إرسال التقديم — تُدفع الرسوم للإدارة بعد اعتماد تقديمك'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {fees && settings && (
+          {/* الجولة 45: عرض بدون رسوم — لا تفاصيل سداد إطلاقاً */}
+          {fees && settings && fees.dueToAdmin === 0 && (
+            <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 text-xs font-extrabold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <Gift className="size-4 shrink-0" />
+              لا مبلغ واجب سداده — بيانات الاتصال متاحة أثناء سير التكليف وتُغلق تلقائياً بعد إنهائه
+            </p>
+          )}
+          {fees && settings && fees.dueToAdmin > 0 && (
             <div className="rounded-xl border bg-secondary/40 p-3 text-sm">
               <div className="space-y-1.5">
                 <FeeRow label="قيمة التكليف" amount={formatCurrency(fees.value)} />
@@ -725,8 +765,14 @@ function MyApplications({
 }) {
   // الجولة 37: بطاقات السداد — تكليفات مؤكدة لم تُسدّد رسومها للإدارة
   // تظهر في أعلى تقديماتي مباشرة: المبلغ الفعلي + طرق الدفع + رفع إثبات الدفع
+  // الجولة 45: التكليف بلا أي رسوم (عرض بدون رسوم) لا يعرض بطاقة سداد إطلاقاً
+  const applicationFee =
+    settings?.feeMode === 'APPLICATION' ? Math.max(0, settings.applicationFee) : 0
   const unpaidFees = assignments.filter(
-    (a) => a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
+    (a) =>
+      a.paymentStatus !== 'PAID' &&
+      a.status !== 'CANCELLED' &&
+      ((a.adminFee ?? 0) > 0 || applicationFee > 0)
   )
 
   if (applications.length === 0 && unpaidFees.length === 0) {
@@ -825,7 +871,15 @@ function ApplicationCard({
           </p>
         )}
 
-        {app.status === 'APPROVED' && settings && (
+        {/* الجولة 45: عرض بدون رسوم — لا مبلغ ولا طرق دفع: رسالة سلاسة فقط */}
+        {app.status === 'APPROVED' && settings && app.fees.dueToAdmin === 0 && (
+          <p className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <Gift className="size-3.5 shrink-0" />
+            عرض بدون رسوم — لا مبلغ واجب سداده، وبيانات الاتصال متاحة أثناء سير التكليف وتُغلق بعد إنهائه
+          </p>
+        )}
+
+        {app.status === 'APPROVED' && settings && app.fees.dueToAdmin > 0 && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
@@ -949,8 +1003,11 @@ function NurseAssignmentCard({
   const dueToAdmin = (a.adminFee ?? 0) + applicationFee
   const canConfirmDone = !a.nurseDoneAt && a.status !== 'CANCELLED' && a.status !== 'COMPLETED'
   // الجولة 37: التكليف غير المسدد يعرض بطاقة السداد مباشرة — والتفاصيل المطوية للسجل بعد التأكيد
-  const unpaidFee = a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
-  const hasFinanceSection = settings && a.status !== 'CANCELLED' && !unpaidFee
+  // الجولة 45: التكليف بلا أي رسوم (عرض بدون رسوم) لا يعرض بطاقة سداد إطلاقاً
+  const feeless = dueToAdmin === 0
+  const unpaidFee = !feeless && a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
+  // الجولة 45: التكليف بلا أي رسوم لا يعرض سجل طرق الدفع إطلاقاً
+  const hasFinanceSection = settings && a.status !== 'CANCELLED' && !unpaidFee && !feeless
   const hasDetails = !!hasFinanceSection || !!a.description
 
   return (
@@ -982,7 +1039,7 @@ function NurseAssignmentCard({
             </MiniChip>
           )}
           <MiniChip icon={UserRound}>{a.receiver.name}</MiniChip>
-          {/* الجولة 38: اتصال المستلم/المشرف خاص — قفل مطلق باتجاه واحد */}
+          {/* الجولة 38 + 45: اتصال المستلم/المشرف خاص — ويُفتح للتكليفات بلا أي رسوم أثناء السير (قرار الخادم) */}
           <StaffPhone data={a.receiver} personName={a.receiver.name} lockedHint={RECEIVER_CONTACT_LOCKED_HINT} />
           {a.receivedAt && (
             <MiniChip icon={BadgeCheck} tone="emerald">
@@ -999,6 +1056,14 @@ function NurseAssignmentCard({
             settings={settings}
             highlight={payId === a.id}
           />
+        ) : feeless && a.status !== 'CANCELLED' ? (
+          // الجولة 45: عرض بدون رسوم — بلا بطاقة سداد ولا طرق دفع: سلاسة كاملة
+          <p className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 text-[11px] font-bold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <Gift className="size-3.5 shrink-0" />
+            {a.status === 'COMPLETED'
+              ? 'تكليف ضمن عرض بدون رسوم — اكتمل بلا أي سداد'
+              : 'عرض بدون رسوم إدارة — بيانات الاتصال متاحة الآن وتُغلق تلقائياً بعد إنهاء التكليف'}
+          </p>
         ) : (
           a.status !== 'CANCELLED' && (
             <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">

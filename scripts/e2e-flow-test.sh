@@ -97,7 +97,7 @@ check "منع المستلم غير المعتمد من إنشاء تكليف �
 NURSE_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE" | jget "['users'][0]['id']")
 RCV_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | jget "['users'][0]['id']")
 APPR_NODOC=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$NURSE_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}')
-check "رفض اعتماد كادر بلا مستندات → 422" "422" "$APPR_NODOC"
+check "رفض اعتماد كادر بلا-مستندات → 422" "422" "$APPR_NODOC"
 
 echo "=========== 2) رفع المستندات (صور فقط + ضغط) ==========="
 UP=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
@@ -206,12 +206,12 @@ check "منع المستلم من تعديل الإعدادات → 403" "403" "
 
 echo "=========== 10) سياسة الاعتماد الصارمة + الجهة الصحية للإدارة ==========="
 REG2=$(curl -s -o /dev/null -w "%{http_code}" -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر بلا مستندات","phone":"744444460","password":"NoDocs@1234","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":6}')
+  -d '{"role":"NURSE","name":"كادر بلا-مستندات","phone":"744444460","password":"NoDocs@1234","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":6}')
 check "تسجيل كادر ثانٍ (بلا مستندات) → 201" "201" "$REG2"
 
 STRICT_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE&status=PENDING" | jget "['users'][0]['id']")
 STRICT=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$STRICT_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}')
-check "السياسة الصارمة: لا اعتماد لأي كادر بلا مستندات → 422" "422" "$STRICT"
+check "السياسة الصارمة: لا اعتماد لأي كادر بلا-مستندات → 422" "422" "$STRICT"
 
 R_HOSP=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=RECEIVER" | jget "['users'][0]['hospitalName']")
 check "الجهة الصحية المسجلة تظهر في لوحة الإدارة" "مستشفى الاختبار التخصصي" "$R_HOSP"
@@ -563,7 +563,7 @@ echo "   $DELP_MSG"
 echo "=========== 20) الملف التفصيلي للمستلم الإداري (قبل الاعتماد وبعده) ==========="
 # مستلم جديد PENDING — يُعرض ملفه بالكامل قبل الاعتماد
 REG_P20=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"RECEIVER","name":"مستلم قيد المراجعة","phone":"755550201","password":"Pending@1234","hospitalName":"مستشفى المراجعة العام"}')
+  -d '{"role":"RECEIVER","name":"مستلم قيد-المراجعة","phone":"755550201","password":"Pending@1234","hospitalName":"مستشفى المراجعة العام"}')
 P20_ID=$(echo "$REG_P20" | jget "['user']['id']")
 [ -n "$P20_ID" ] && check "إنشاء مستلم جديد (PENDING) لعرض ملفه" "ok" "ok"
 
@@ -640,7 +640,7 @@ AFF_LIST=$(curl -s -b "$DIR/admin.jar" "$BASE/api/affiliations?hospitalId=$ORG_I
 AFF_ENDORSE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$AFF_LIST -H "Content-Type: application/json" -d '{"status":"ENDORSED"}' | jget "['affiliation']['status']")
 check "الإدارة تعتمد الارتباط (بعد المستندات)" "ENDORSED" "$AFF_ENDORSE"
 
-# بوابة المستندات: كادر بلا مستندات لا يُعتمد ارتباطه
+# بوابة المستندات: كادر بلا-مستندات لا يُعتمد ارتباطه
 REG_N2=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
   -d '{"role":"NURSE","name":"كادر الشبكة","phone":"766660202","password":"Net@12345","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
 N2_ID=$(echo "$REG_N2" | jget "['user']['id']")
@@ -649,7 +649,7 @@ login "$DIR/nurse2.jar" "766660202" "Net@12345"
 curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N2_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 AFF_NODOC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
   -d "{\"nurseId\":\"$N2_ID\",\"hospitalId\":\"$ORG_ID\",\"status\":\"ENDORSED\"}")
-check "منع اعتماد ارتباط كادر بلا مستندات → 422" "422" "$AFF_NODOC"
+check "منع اعتماد ارتباط كادر بلا-مستندات → 422" "422" "$AFF_NODOC"
 
 # --- المفضلة الخاصة بكل مستلم ---
 FAV1=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/favorites -H "Content-Type: application/json" \
@@ -797,15 +797,15 @@ check "رفض مؤهل خارج الخيارات الثلاثة → 422" "422" "
 
 # --- قواعد الجولة الثالثة عشرة: التخصص وسنوات الخبرة إجبارية للكادر ---
 R8_NO_SPEC=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"نورا بلا تخصص","phone":"788880391","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":2}')
+  -d '{"role":"NURSE","name":"نورا بلا-تخصص","phone":"788880391","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","yearsOfExperience":2}')
 check "رفض تسجيل كادر بلا تخصص (إجباري) → 422" "422" "$R8_NO_SPEC"
 
 R8_NO_YEARS=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"نورا بلا خبرة","phone":"788880392","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","specialty":"عناية مركزة"}')
+  -d '{"role":"NURSE","name":"نورا بلا-خبرة","phone":"788880392","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","specialty":"عناية مركزة"}')
 check "رفض تسجيل كادر بسنوات خبرة مفقودة (إجباري) → 422" "422" "$R8_NO_YEARS"
 
 R8_EMPTY_YEARS=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"نورا خبرة فارغة","phone":"788880393","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","specialty":"عناية مركزة","yearsOfExperience":""}')
+  -d '{"role":"NURSE","name":"نورا خبرة-فارغة","phone":"788880393","password":"Round8@123","qualification":"دبلوم ثلاث سنوات","gender":"FEMALE","specialty":"عناية مركزة","yearsOfExperience":""}')
 check "رفض سنوات خبرة فارغة (سلسلة فارغة) → 422" "422" "$R8_EMPTY_YEARS"
 
 R8_N=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
@@ -893,7 +893,7 @@ check "الارتباط المعلق يُعتمد تلقائياً مع اعتم
 
 # بوابة المستندات على اعتماد الارتباط — ثم الاعتماد بعد رفع مستند
 R8_GATE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R8_AFF_ID -H "Content-Type: application/json" -d '{"status":"WORKING"}')
-check "لا اعتماد ارتباط لكادر بلا مستندات → 422" "422" "$R8_GATE"
+check "لا اعتماد ارتباط لكادر بلا-مستندات → 422" "422" "$R8_GATE"
 UP_R8=$(code -b "$DIR/r8nurse.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
 check "الكادر يرفع مستنده → 201" "201" "$UP_R8"
 R8_ENDORSE=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/affiliations/$R8_AFF_ID -H "Content-Type: application/json" \
@@ -1213,7 +1213,7 @@ check "خصوصية البطاقة: لا تكشف رقم هاتف الكادر" 
 
 # كادر غير معتمد → 404 (لا تعداد ولا تسريب)
 REG_P14=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر بطاقة معلقة","phone":"788880601","password":"Round14@12","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"MALE","yearsOfExperience":2}')
+  -d '{"role":"NURSE","name":"كادر بطاقة-معلقة","phone":"788880601","password":"Round14@12","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","gender":"MALE","yearsOfExperience":2}')
 PND_ID=$(echo "$REG_P14" | jget "['user']['id']")
 PND_CARD=$(code $BASE/n/$PND_ID)
 check "بطاقة كادر غير معتمد → 404 (حماية التعداد)" "404" "$PND_CARD"
@@ -1719,13 +1719,13 @@ check "دخول مشرف الأطباء ودوره DOCTOR_SUPERVISOR" "DOCTOR_SU
 
 # --- فحوص حية: حساب الطبيب (تسجيل ذاتي + إنشاء من الإدارة) ---
 R29_DOCDUP=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. أحمد قلبي","phone":"791110902","password":"Doctor@123","specialty":"قلبية E2E","qualification":"أورديلي سنة","yearsOfExperience":7,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"أحمد قلبي","phone":"791110902","password":"Doctor@123","specialty":"قلبية E2E","qualification":"أورديلي سنة","yearsOfExperience":7,"gender":"MALE"}')
 check "رفض مؤهل غير تابع لقائمة الأطباء → 422" "422" "$R29_DOCDUP"
 R29_DOCREG=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. تسجيل ذاتي","phone":"791110903","password":"Doctor@123","specialty":"قلبية E2E","qualification":"دكتوراه","yearsOfExperience":7,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"تسجيل ذاتي","phone":"791110903","password":"Doctor@123","specialty":"قلبية E2E","qualification":"دكتوراه","yearsOfExperience":7,"gender":"MALE"}')
 check "تسجيل ذاتي للطبيب بمؤهلات التخصص الطبي → 201" "201" "$R29_DOCREG"
 R29_DOC=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_doc.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. أحمد قلبي","phone":"791110902","password":"Doctor@123","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":7,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"أحمد قلبي","phone":"791110902","password":"Doctor@123","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":7,"gender":"MALE"}')
 check "الإدارة تنشئ طبيباً معتمداً بمؤهل طب → 201" "201" "$R29_DOC"
 login "$DIR/doctor.jar" "791110902" "Doctor@123"
 DOC_ROLE=$(curl -s -b "$DIR/doctor.jar" $BASE/api/auth/session | jget "['user']['role']")
@@ -1809,7 +1809,7 @@ check "تكليف مؤكد ظهر لدى الطبيب بعد الاعتماد" "
 # مطابقة AUTO_MATCH العلائقية: طبيب بلا تخصص مصرّح لا يرى تكليف التخصص
 # (الجولة 31: التخصص من كتالوج التخصصات — ولا يطابق نصياً «قلبية E2E» ليبقى عزل المطابقة سليماً)
 R29_DOC2=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r29_doc2.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. بلا تخصص مصرّح","phone":"791110904","password":"Doctor@123","specialty":"مخاطية E2E","qualification":"ماجستير","yearsOfExperience":3,"gender":"FEMALE"}')
+  -d '{"role":"DOCTOR","name":"بلا تخصص-مصرّح","phone":"791110904","password":"Doctor@123","specialty":"مخاطية E2E","qualification":"ماجستير","yearsOfExperience":3,"gender":"FEMALE"}')
 check "إنشاء طبيب ثانٍ بتخصص من الكتالوج (بلا تخصص عمل مصرّح) → 201" "201" "$R29_DOC2"
 login "$DIR/doctor2.jar" "791110904" "Doctor@123"
 R29_AM=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r29_am.json" -w "%{http_code}" -X POST $BASE/api/posts -H "Content-Type: application/json" \
@@ -1985,11 +1985,11 @@ check "إنشاء مشرف بجهة من كتالوج الإدارة → 201" "2
 
 # --- التخصص الطبي من كتالوج الإدارة حصراً — المسارات الثلاثة ---
 R31_BADSPEC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. تخصص حر","phone":"791110913","password":"Doctor@123","specialty":"تخصص حر غير مسجل","qualification":"ماجستير","yearsOfExperience":2,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"تخصص حر","phone":"791110913","password":"Doctor@123","specialty":"تخصص حر غير مسجل","qualification":"ماجستير","yearsOfExperience":2,"gender":"MALE"}')
 check "رفض طبيب بتخصص خارج كتالوج الإدارة (مسار الإدارة) → 422" "422" "$R31_BADSPEC"
 
 R31_BADSPEC_REG=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"د. تسجيل حر","phone":"791110914","password":"Doctor@123","specialty":"تخصص حر غير مسجل","qualification":"دكتوراه","yearsOfExperience":2,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"تسجيل حر","phone":"791110914","password":"Doctor@123","specialty":"تخصص حر غير مسجل","qualification":"دكتوراه","yearsOfExperience":2,"gender":"MALE"}')
 check "رفض تسجيل ذاتي بتخصص خارج الكتالوج → 422" "422" "$R31_BADSPEC_REG"
 
 R31_BADSPEC_STAFF=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/receiver/staff -H "Content-Type: application/json" \
@@ -2963,14 +2963,14 @@ echo "=========== 48) الجولة 39 — اعتماد الكادر للجهة (
 
 # تجهيز: كادر تمريضي جديد + جهة ثانية (لعزل الجهات)
 R39_N39=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_n39.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر اعتماد 39","phone":"791110941","password":"Nurse39@123","specialty":"تمريض طوارئ","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"كادر اعتماد-39","phone":"791110941","password":"Nurse39@123","specialty":"تمريض طوارئ","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"MALE"}')
 check "تجهيز: الإدارة تنشئ كادر تمريضياً لفحوص الاعتماد → 201" "201" "$R39_N39"
 N39_ID=$(jget "['user']['id']" < "$DIR/r39_n39.json")
 login "$DIR/nurse39.jar" "791110941" "Nurse39@123"
 
 # مستلم لجهة الأساس ($HOSP = مستشفى E2E الأساس — جهة المشرف) لفحوص اعتماده
 R39_RCV=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_rcv.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"RECEIVER","name":"مستلم اعتماد 39","phone":"791110942","password":"Rcv39@1234","hospitalName":"مستشفى E2E الأساس"}')
+  -d '{"role":"RECEIVER","name":"مستلم اعتماد-39","phone":"791110942","password":"Rcv39@1234","hospitalName":"مستشفى E2E الأساس"}')
 check "تجهيز: الإدارة تنشئ مستلم جهة الأساس → 201" "201" "$R39_RCV"
 RCV39_ID=$(jget "['user']['id']" < "$DIR/r39_rcv.json")
 login "$DIR/rcv39.jar" "791110942" "Rcv39@1234"
@@ -3149,19 +3149,19 @@ echo "=========== 50) الجولة 40 — طلبات الانضمام قرار �
 
 # تجهيز: كادران + طبيب جديدون من الإدارة
 R50_A=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_a.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر طلب انضمام","phone":"791110951","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":2,"gender":"FEMALE"}')
+  -d '{"role":"NURSE","name":"كادر طلب-انضمام","phone":"791110951","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":2,"gender":"FEMALE"}')
 check "تجهيز: الإدارة تنشئ كادراً لفحوص طلب الانضمام → 201" "201" "$R50_A"
 N50A_ID=$(jget "['user']['id']" < "$DIR/r50_a.json")
 login "$DIR/n50a.jar" "791110951" "R40@12345"
 
 R50_B=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_b.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر رفض انضمام","phone":"791110952","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":1,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"كادر رفض-انضمام","phone":"791110952","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":1,"gender":"MALE"}')
 check "تجهيز: الإدارة تنشئ كادراً ثانياً لفحوص الرفض → 201" "201" "$R50_B"
 N50B_ID=$(jget "['user']['id']" < "$DIR/r50_b.json")
 login "$DIR/n50b.jar" "791110952" "R40@12345"
 
 R50_D=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_d.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"طبيب طلب انضمام","phone":"791110953","password":"R40@12345","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":4,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"طبيب طلب-انضمام","phone":"791110953","password":"R40@12345","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":4,"gender":"MALE"}')
 check "تجهيز: الإدارة تنشئ طبيباً لفحوص طلب انضمام الأطباء → 201" "201" "$R50_D"
 N50D_ID=$(jget "['user']['id']" < "$DIR/r50_d.json")
 login "$DIR/dr50.jar" "791110953" "R40@12345"
@@ -3175,7 +3175,7 @@ R50_NOTIF_R=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/notifications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 ns=d.get('notifications',[])
-m=[n for n in ns if n['title']=='طلب انضمام جديد لجهتك الصحية' and 'كادر طلب انضمام' in n['body'] and 'مستشفى E2E الأساس' in n['body'] and n.get('link')=='/receiver/staff']
+m=[n for n in ns if n['title']=='طلب انضمام جديد لجهتك الصحية' and 'كادر طلب-انضمام' in n['body'] and 'مستشفى E2E الأساس' in n['body'] and n.get('link')=='/receiver/staff']
 print('ok' if m and d.get('unreadCount',0)>0 else 'bad')" 2>/dev/null)
 check "إشعار فوري للمستلم الإداري: طلب انضمام جديد لجهتك (برابط كوادر جهتي)" "ok" "$R50_NOTIF_R"
 
@@ -3323,7 +3323,7 @@ check "طلب الطبيب مميّز (isJoinRequest) في أطباء جهتي �
 R50_D_NOTIF_S=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/notifications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-m=[n for n in d.get('notifications',[]) if n['title']=='طلب انضمام جديد لجهتك الصحية' and 'طبيب طلب انضمام' in n['body'] and n.get('link')=='/supervisor/staff']
+m=[n for n in d.get('notifications',[]) if n['title']=='طلب انضمام جديد لجهتك الصحية' and 'طبيب طلب-انضمام' in n['body'] and n.get('link')=='/supervisor/staff']
 print('ok' if m else 'bad')" 2>/dev/null)
 check "إشعار فوري لمشرف الأطباء بطلب الطبيب (مطابقة الدور — برابط أطباء جهتي)" "ok" "$R50_D_NOTIF_S"
 
@@ -3376,7 +3376,7 @@ echo "=========== 51) الجولة 41 — القبول لا يكسر التطب�
 
 # (أ) تجهيز: كادر معتمد بمستندات يطلب الانضمام لجهة الأساس
 R51_A=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r51_a.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر قبول 41","phone":"791110961","password":"R41@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"كادر قبول-41","phone":"791110961","password":"R41@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"MALE"}')
 check "تجهيز: الإدارة تنشئ كادراً لدورة قبول 41 → 201" "201" "$R51_A"
 N51A_ID=$(jget "['user']['id']" < "$DIR/r51_a.json")
 login "$DIR/n51a.jar" "791110961" "R41@12345"
@@ -3425,7 +3425,7 @@ check "بعد القبول: السجل المهني للكادر المقبول 
 
 # (ج) نفس الدورة للمشرف: طبيب معتمد يطلب ثم المشرف يقبل ومسح صحة حساب المشرف
 R51_D=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r51_d.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
-  -d '{"role":"DOCTOR","name":"طبيب قبول 41","phone":"791110962","password":"R41@12345","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":5,"gender":"MALE"}')
+  -d '{"role":"DOCTOR","name":"طبيب قبول-41","phone":"791110962","password":"R41@12345","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":5,"gender":"MALE"}')
 check "تجهيز: الإدارة تنشئ طبيباً لدورة قبول 41 → 201" "201" "$R51_D"
 N51D_ID=$(jget "['user']['id']" < "$DIR/r51_d.json")
 login "$DIR/dr51.jar" "791110962" "R41@12345"
@@ -3644,7 +3644,7 @@ check "R44: الوردية الليلية العابرة لمنتصف الليل
 
 # ---------- (د) إشعار بداية التكليف — تكليف بدأ منذ ساعة ----------
 REG44A=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"كادر بداية الجولة","phone":"744440404","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"كادر بداية-الجولة","phone":"744440404","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"MALE"}')
 N44A_ID=$(echo "$REG44A" | jget "['user']['id']")
 login "$DIR/n44a.jar" "744440404" "R44@Nurse"
 # رفع المستند أولاً — الاعتماد يتطلب مستنداً واحداً على الأقل (قاعدة الجولة 8)
@@ -3695,7 +3695,7 @@ check "R44: إشعار البداية وصل للمستلم الإداري أي�
 # ---------- (هـ) خصوصية المستندات في السيرة الذاتية ----------
 # كادر خارج الجهة + مستند معتمد → يرى المستلم حالة «تم التحقق» بلا مستندات
 REG44B=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"متقدم خارجي موثق","phone":"744440505","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":4,"gender":"FEMALE"}')
+  -d '{"role":"NURSE","name":"متقدم خارجي-موثق","phone":"744440505","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":4,"gender":"FEMALE"}')
 N44B_ID=$(echo "$REG44B" | jget "['user']['id']")
 login "$DIR/n44b.jar" "744440505" "R44@Nurse"
 curl -s -b "$DIR/n44b.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=PRACTICE_LICENSE" > /dev/null
@@ -3705,7 +3705,7 @@ curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC44B_ID -H "Co
 
 # كادر من كوادر الجهة نفسها (ارتباط WORKING من المستلم)
 REG44C=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"متقدم من كوادر الجهة","phone":"744440606","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
+  -d '{"role":"NURSE","name":"متقدم كوادر-الجهة","phone":"744440606","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
 N44C_ID=$(echo "$REG44C" | jget "['user']['id']")
 login "$DIR/n44c.jar" "744440606" "R44@Nurse"
 curl -s -b "$DIR/n44c.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
@@ -3827,6 +3827,134 @@ E44_CARD=$(grep -c "بطاقة مصغّرة احترافية" app/receiver/assig
 check "R44: بطاقة «تكليفاتي المعلنة» المصغّرة الاحترافية" "1" "$E44_CARD"
 E44_CD=$(grep -c "ShiftCountdown startDate={post.startDate}" app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}')
 check "R44: العداد الحي داخل بطاقة التكليف المعلن" "1" "$E44_CD"
+
+# ============================================================
+# القسم 54 — الجولة 45: قفل إعادة رفع المستندات بعد الاعتماد (إلا بعد الرفض)
+# + حقل مدة العرض النصي + العرض بدون رسوم: سداد تلقائي واتصال متبادل يُغلق
+# عند الإنهاء + مستندات السيرة الكاملة مخفية بشارات الحالة + اسمين حصراً
+# مع اهتزاز الحقول الخاطئة وتلوينها
+# ============================================================
+
+TODAY45=$(date +%F)
+PROMO_UNTIL45=$(date -d "+7 days" +%F 2>/dev/null || date -v+7d +%F)
+
+# ---------- (أ) قفل إعادة رفع المستندات (N1) ----------
+REG45=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"قفل الرفع","phone":"744450101","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}')
+N45A_ID=$(echo "$REG45" | jget "['user']['id']")
+login "$DIR/n45a.jar" "744450101" "R45@Nurse"
+UP45A=$(code -b "$DIR/n45a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
+check "R45: رفع البطاقة الشخصية أول مرة → 201" "201" "$UP45A"
+UP45A2=$(code -b "$DIR/n45a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
+check "R45: إعادة رفع مستند قيد المراجعة ممنوعة (قفل الخادم) → 409" "409" "$UP45A2"
+DOC45A_ID=$(curl -s -b "$DIR/n45a.jar" $BASE/api/me/documents | jget "['documents'][0]['id']")
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC45A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+UP45A3=$(code -b "$DIR/n45a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
+check "R45: إعادة رفع مستند معتمد من الإدارة ممنوعة → 409" "409" "$UP45A3"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC45A_ID -H "Content-Type: application/json" -d '{"status":"REJECTED"}' > /dev/null
+UP45A4=$(code -b "$DIR/n45a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
+check "R45: بعد رفض الإدارة يُسمح بإعادة الرفع حصراً → 201" "201" "$UP45A4"
+LOCK45=$(grep -c "معتمد — مقفل\|canReupload" components/shared/document-upload-wizard.tsx | awk '{print ($1>=2)?1:0}')
+check "R45: المعالج يقفل الإعادة بشارة «معتمد — مقفل» (للمرفوض حصراً)" "1" "$LOCK45"
+
+# ---------- (ب) مستندات السيرة الكاملة: مخفية بشارات الحالة (N5) ----------
+WF45_EXT=$(curl -s -b "$DIR/receiver.jar" $BASE/api/workforce/$N44B_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d['documentsHidden'], len(d['documents'])==0, len(d.get('documentStatuses',[]))>0, d['documentsVerified'])" 2>/dev/null)
+check "R45: السيرة الكاملة — كادر خارج جهة المستلم: مستندات مخفية + شارات الحالة" "True True True True" "$WF45_EXT"
+WF45_SAME=$(curl -s -b "$DIR/receiver.jar" $BASE/api/workforce/$N44C_ID | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(d['documentsHidden'], len(d['documents'])>=1)" 2>/dev/null)
+check "R45: السيرة الكاملة — كادر من نفس الجهة: مستنداته ظاهرة كاملة" "False True" "$WF45_SAME"
+WFS45=$(grep -c "documentStatuses" app/api/workforce/\[id\]/route.ts | awk '{print ($1>=1)?1:0}')
+check "R45: api السيرة الكاملة ترسل documentStatuses (معتمدة/مرفوضة/قيد المراجعة)" "1" "$WFS45"
+BADGE45=$(grep -c "معتمدة" components/shared/full-profile-dialog.tsx | awk '{print ($1>=1)?1:0}')
+check "R45: حوار السيرة الكاملة يعرض شارات حالة المستندات" "1" "$BADGE45"
+
+# ---------- (ج) العرض بدون رسوم: سداد تلقائي + اتصال متبادل يُغلق عند الإنهاء (N2+N3) ----------
+SET45=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/settings -H "Content-Type: application/json" \
+  -d '{"feeMode":"ADMIN","applicationFee":1000,"adminFeeType":"PERCENTAGE","adminPercentage":10,"adminFeeFixed":0,"paymentMethod":"محفظة جيب","paymentAccountNumber":"E2E-45","paymentAccountName":"منصة تكليفات","paymentNotes":"","promoActive":true,"promoUntil":"'$PROMO_UNTIL45'","promoNote":"عرض الجولة 45"}')
+check "R45: الإدارة تشغّل العرض بدون رسوم" "True" "$(echo "$SET45" | jget "['settings']['promoActive']")"
+P45=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY45\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":50000,\"distribution\":\"ALL_MATCHING\"}")
+P45_ID=$(echo "$P45" | jget "['post']['id']")
+curl -s -b "$DIR/n44a.jar" -X POST $BASE/api/posts/$P45_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"تكليف العرض"}' > /dev/null
+APP45_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P45_ID/applications | jget "['applications'][0]['applicationId']")
+APPR45=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP45_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
+check "R45: اعتماد تقديم أثناء العرض بدون رسوم → 200" "200" "$APPR45"
+A45=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x.get('postId')=='$P45_ID'][0]
+print(a['id'], a['adminFee'], a['paymentStatus'])" 2>/dev/null)
+A45_ID=$(echo "$A45" | awk '{print $1}')
+check "R45: التكليف أثناء العرض: حصة صفر + مسدد تلقائياً — بلا بطاقة سداد" "0 PAID" "$(echo "$A45" | awk '{print $2, $3}')"
+STAFF45=$(curl -s -b "$DIR/n44a.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x['id']=='$A45_ID'][0]
+print(a['receiver']['phoneLocked'], a['receiver']['phone'] is not None)" 2>/dev/null)
+check "R45: بيانات اتصال المستلم تُعرض للكادر في التكليف بلا رسوم" "False True" "$STAFF45"
+RCV45=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x['id']=='$A45_ID'][0]
+print(a['nurse']['phoneLocked'], a['nurse']['phone'] is not None)" 2>/dev/null)
+check "R45: رقم الكادر مفتوح للمستلم في التكليف بلا رسوم (بلا أي سداد)" "False True" "$RCV45"
+RCDONE45=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A45_ID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":5,"punctuality":5,"quality":5,"communication":4,"discipline":5,"comment":"تكليف عرض بدون رسوم اكتمل بسلاسة"}}')
+check "R45: إنهاء التكليف بلا رسوم → 200" "200" "$RCDONE45"
+STAFF45C=$(curl -s -b "$DIR/n44a.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x['id']=='$A45_ID'][0]
+print(a['receiver']['phoneLocked'], a['receiver']['phone'] is None)" 2>/dev/null)
+check "R45: بعد الإنهاء تختفي بيانات اتصال المستلم عن الكادر فوراً" "True True" "$STAFF45C"
+RCV45C=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x['id']=='$A45_ID'][0]
+print(a['nurse']['phoneLocked'], a['nurse']['phone'] is None)" 2>/dev/null)
+check "R45: بعد الإنهاء يُغلق رقم الكادر عن المستلم فوراً" "True True" "$RCV45C"
+FEE45=$(grep -c "feeless" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s>=4)?1:0}')
+check "R45: صفحتا الكادر والطبيب تستثنيان التكليف بلا رسوم من بطاقات السداد" "1" "$FEE45"
+DAYS45=$(grep -c "s-promo-days\|handlePromoDaysChange" app/admin/settings/page.tsx | awk '{print ($1>=2)?1:0}')
+check "R45: مدة العرض حقل كتابة نصي بدل الاختيار (s-promo-days)" "1" "$DAYS45"
+BTN45=$(grep -c "أزرار سريعة" app/admin/settings/page.tsx | awk '{print ($1==0)?1:0}')
+check "R45: أُزيلت أزرار المدة السريعة لصالح الحقل النصي" "1" "$BTN45"
+
+# إيقاف العرض ثم فحص ارتدادي: تكليف برسوم يبقى مقفلاً حتى السداد
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/settings -H "Content-Type: application/json" \
+  -d '{"feeMode":"ADMIN","applicationFee":1000,"adminFeeType":"PERCENTAGE","adminPercentage":10,"adminFeeFixed":0,"paymentMethod":"محفظة جيب","paymentAccountNumber":"E2E-45","paymentAccountName":"منصة تكليفات","paymentNotes":"","promoActive":false,"promoUntil":"","promoNote":""}' > /dev/null
+P45B=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY45\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":50000,\"distribution\":\"ALL_MATCHING\"}")
+P45B_ID=$(echo "$P45B" | jget "['post']['id']")
+curl -s -b "$DIR/n44a.jar" -X POST $BASE/api/posts/$P45B_ID/apply -H "Content-Type: application/json" -d '{}' > /dev/null
+APP45B_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P45B_ID/applications | jget "['applications'][0]['applicationId']")
+curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP45B_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' > /dev/null
+A45B=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x.get('postId')=='$P45B_ID'][0]
+print(a['adminFee'], a['paymentStatus'])" 2>/dev/null)
+check "R45: بعد إيقاف العرض: تكليف برسوم يبقى غير مسدد (حصة 5000)" "5000 UNPAID" "$A45B"
+
+# ---------- (د) اسمين حصراً + اهتزاز الحقول الخاطئة (N4) ----------
+NAME45_MORE=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"أحمد محمد صالح عبيد","phone":"744450202","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}')
+check "R45: الخادم يرفض أكثر من اسمين (3+ كلمات) → 422" "422" "$NAME45_MORE"
+NAME45_ONE=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"أحمد","phone":"744450203","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}')
+check "R45: الخادم يرفض اسماً بلا لقب (كلمة واحدة) → 422" "422" "$NAME45_ONE"
+NAME45_OK=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"قفل الرفع الثاني","phone":"744450204","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}' | jget "['user']['id']")
+[ -n "$NAME45_OK" ] && check "R45: الاسم ثنائي الكلمة مسموح → تسجيل ناجح" "ok" "ok" || check "R45: فشل تسجيل الاسم ثنائي الكلمة" "id" "null"
+NAMETWO=$(grep -c "nameWords.length !== 2" "app/(auth)/register/page.tsx" | awk '{print ($1>=1)?1:0}')
+check "R45: عميل التسجيل يقبض اسمين حصراً (لا أكثر ولا أقل)" "1" "$NAMETWO"
+SHAKE45=$(grep -c "field-error-shake" app/globals.css "app/(auth)/register/page.tsx" | awk -F: '{s+=$2} END {print (s>=2)?1:0}')
+check "R45: الحقول الخاطئة تهتز وتتلون بالأحمر مع العودة إليها" "1" "$SHAKE45"
 
 echo ""
 echo "==========================================="

@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Briefcase,
   CalendarClock,
+  Clock,
   FileText,
   GraduationCap,
   IdCard,
@@ -30,6 +31,7 @@ import {
   APPLICATION_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
   GENDER_LABELS,
+  cn,
   formatDate,
   whatsappLink,
 } from '@/lib/utils'
@@ -86,6 +88,8 @@ export interface ApplicantData {
     documents: ApplicantDocument[]
     /** الجولة 44: المستندات مخفية عن هذا المشاهد — تظهر حالة «تم التحقق» بدلها */
     documentsHidden?: boolean
+    /** الجولة 45: حالات المستندات (نوع + حالة) — تُعرض شاراتها عند الإخفاء */
+    documentStatuses?: Array<{ type: string; status: string }>
     /** الجولة 44: هل لديه مستندات معتمدة من الإدارة؟ */
     documentsVerified?: boolean
     /** الجولة 44: عدد المستندات المعتمدة من الإدارة */
@@ -332,7 +336,8 @@ export function ApplicantCV({
 
       {/* المستندات — صور البطاقة والمزاولة */}
       {nurse.documentsHidden ? (
-        // الجولة 44: المستندات مخفية عن هذا المشاهد — حالة «تم التحقق» فقط
+        // الجولة 44 + 45: المستندات مخفية عن هذا المشاهد — حالة «تم التحقق»
+        // + شارات حالة كل مستند: معتمدة / مرفوضة / قيد المراجعة (البلاغ الحرفي)
         <div className="space-y-2">
           <p className="text-sm font-bold">المستندات الرسمية</p>
           <div className="flex items-start gap-3 rounded-2xl border-2 border-emerald-200 bg-gradient-to-bl from-emerald-50 to-transparent p-4 dark:border-emerald-900 dark:from-emerald-950/20">
@@ -350,10 +355,36 @@ export function ApplicantCV({
                 )}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                المستندات الرسمية (البطاقة والمزاولة) مخفية حفاظاً على خصوصية الكادر — لا
-                تُعرض إلا إذا كان الكادر من كوادر جهتك الصحية، أما حالته المهنية وتقييماته
-                فكلها أمامك في هذه السيرة الذاتية.
+                محتوى المستندات الرسمية (البطاقة والمزاولة) مخفي حفاظاً على خصوصية الكادر —
+                لا يُعرض إلا إذا كان الكادر من كوادر جهتك الصحية، أما حالتها المراجعية فمعروضة أدناه.
               </p>
+              {(nurse.documentStatuses?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {nurse.documentStatuses!.map((ds) => (
+                    <span
+                      key={ds.type}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-extrabold',
+                        ds.status === 'APPROVED'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                          : ds.status === 'REJECTED'
+                            ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                      )}
+                    >
+                      {ds.status === 'APPROVED' ? (
+                        <BadgeCheck className="size-3" />
+                      ) : ds.status === 'REJECTED' ? (
+                        <XCircle className="size-3" />
+                      ) : (
+                        <Clock className="size-3" />
+                      )}
+                      {DOCUMENT_TYPE_LABELS[ds.type] ?? ds.type}:{' '}
+                      {ds.status === 'APPROVED' ? 'معتمدة' : ds.status === 'REJECTED' ? 'مرفوضة' : 'قيد المراجعة'}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

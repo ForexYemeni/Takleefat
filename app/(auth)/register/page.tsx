@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { QUALIFICATION_OPTIONS } from '@/lib/utils'
+import { QUALIFICATION_OPTIONS, cn } from '@/lib/utils'
 import { ORG_TYPE_LABELS } from '@/lib/network'
 import { getServerIssueMessage } from '@/lib/client-diagnostics'
 
@@ -180,6 +180,43 @@ export default function RegisterPage() {
   const [orgId, setOrgId] = useState('')
   const [newOrg, setNewOrg] = useState({ name: '', type: 'HOSPITAL', city: '', address: '', phone: '' })
 
+  // الجولة 45 — البلاغ الحرفي: «عند وجود اي خطاء في اي حقل يجب ان يهتز الحقل
+  // ويتلون للون الاحمر مع عودة الى نفس الحقل»:
+  //  - fieldErrors: خطأ كل حقل (يُظهر الحدود الحمراء + رسالة تحته)
+  //  - shakeTick: عدّاد يعيد تشغيل حركة الاهتزاز عند كل محاولة فاشلة
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [shakeTick, setShakeTick] = useState(0)
+
+  /** تسجيل خطأ حقل: تلوينه أحمر + اهتزازه + عودة التمرير إليه مع تركيزه */
+  const failField = (field: string, message: string): false => {
+    setFieldErrors((prev) => ({ ...prev, [field]: message }))
+    setError(message)
+    setShakeTick((t) => t + 1)
+    window.setTimeout(() => {
+      const wrap = document.getElementById(`reg-${field}-wrap`)
+      wrap?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      wrap
+        ?.querySelector<HTMLElement>('input, textarea, button[role="combobox"]')
+        ?.focus({ preventScroll: true })
+    }, 80)
+    return false
+  }
+
+  /** محو خطأ حقل عند تعديله */
+  const clearFieldError = (field: string) =>
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+
+  /** صنف غلاف الحقل: اهتزاز + أحمر عند وجود خطأ (مع مفتاح يعيد الحركة) */
+  const fieldWrap = (field: string) => ({
+    key: `${field}-${fieldErrors[field] ? shakeTick : 'ok'}`,
+    className: cn('space-y-2', fieldErrors[field] && 'field-error field-error-shake'),
+  })
+
   useEffect(() => {
     fetch('/api/departments/public')
       .then((r) => r.json())
@@ -226,47 +263,55 @@ export default function RegisterPage() {
     setError(null)
 
     // ---------- تحقق العميل (نفس قواعد الخادم) ----------
+    // الجولة 45 — البلاغ الحرفي: «حقل الاسم واللقب يجب ان يكون اسمين فقط لا يقبل اكثر»
     const nameWords = name.trim().split(/\s+/).filter(Boolean)
-    if (name.trim().length < 3 || nameWords.length < 2) {
-      return setError('أدخل الاسم مع اللقب في حقل واحد — مثال: أحمد صالح')
+    if (name.trim().length < 3 || nameWords.length !== 2) {
+      return failField(
+        'name',
+        nameWords.length > 2
+          ? 'اسمين فقط — لا يقبل أكثر من الاسم واللقب (مثال: أحمد صالح)'
+          : 'أدخل اسماً ولقباً فقط — كلمتين حصراً في حقل واحد (مثال: أحمد صالح)'
+      )
     }
     if (!/^7\d{8}$/.test(phone)) {
-      return setError('رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام فقط — مثال: 773178684')
+      return failField('phone', 'رقم الهاتف يجب أن يبدأ بـ 7 ويتكوّن من 9 أرقام فقط — مثال: 773178684')
     }
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-      return setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي حروفاً وأرقاماً')
+      return failField('password', 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي حروفاً وأرقاماً')
     }
     if (role === 'NURSE' || role === 'DOCTOR') {
       if (specialty.trim().length === 0) {
-        return setError(
+        return failField(
+          'specialty',
           role === 'DOCTOR'
             ? 'التخصص مطلوب — اختر التخصص الطبي من القائمة'
             : 'التخصص مطلوب — اختر القسم من القائمة'
         )
       }
       if (yearsOfExperience === '') {
-        return setError('سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)')
+        return failField('yearsOfExperience', 'سنوات الخبرة مطلوبة — أدخل عدد السنوات (0 للمتخرج الجديد)')
       }
       if (!/^\d+$/.test(yearsOfExperience) || Number(yearsOfExperience) > 50) {
-        return setError('سنوات الخبرة يجب أن تكون رقماً صحيحاً بين 0 و 50')
+        return failField('yearsOfExperience', 'سنوات الخبرة يجب أن تكون رقماً صحيحاً بين 0 و 50')
       }
       if (!qualification) {
-        return setError(
+        return failField(
+          'qualification',
           role === 'DOCTOR'
             ? 'المؤهل العلمي مطلوب — اختر من القائمة (بكالوريوس طب وجراحة / ماجستير / دكتوراه / شهادة زمالة)'
             : 'المؤهل العلمي مطلوب — اختر من القائمة (أورديلي / دبلوم / بكالوريوس)'
         )
       }
       if (!gender) {
-        return setError('الجنس مطلوب — اختر ذكر أو أنثى')
+        return failField('gender', 'الجنس مطلوب — اختر ذكر أو أنثى')
       }
     }
     if (role === 'RECEIVER') {
       if (orgMode === 'existing' && !orgId) {
-        return setError('اختر الجهة الصحية من القائمة أو أضفها كجهة جديدة')
+        return failField('org', 'اختر الجهة الصحية من القائمة أو أضفها كجهة جديدة')
       }
       if (orgMode === 'new' && newOrg.name.trim().length < 2) {
-        return setError('أدخل اسم الجهة الصحية الجديدة')
+        return failField('org', 'أدخل اسم الجهة الصحية الجديدة')
       }
     }
 
@@ -306,7 +351,20 @@ export default function RegisterPage() {
 
       const data = await response.json().catch(() => null)
       if (!response.ok) {
-        setError(data?.error ?? 'تعذر إنشاء الحساب، حاول مرة أخرى')
+        const msg: string = data?.error ?? 'تعذر إنشاء الحساب، حاول مرة أخرى'
+        // الجولة 45: أخطاء الخادم تُفلش إلى الحقل المعنيّ (اهتزاز + أحمر + تمرير)
+        const FIELD_MATCHERS: Array<[RegExp, string]> = [
+          [/الاسم/, 'name'],
+          [/الهاتف|رقم/, 'phone'],
+          [/كلمة المرور/, 'password'],
+          [/التخصص|القسم/, 'specialty'],
+          [/سنوات|الخبرة/, 'yearsOfExperience'],
+          [/المؤهل/, 'qualification'],
+          [/الجهة/, 'org'],
+        ]
+        const hit = FIELD_MATCHERS.find(([re]) => re.test(msg))
+        if (hit) failField(hit[1], msg)
+        setError(msg)
         return
       }
 
@@ -425,22 +483,29 @@ export default function RegisterPage() {
         <section className="space-y-4">
           <SectionHead step={2} title="البيانات الأساسية" hint="بيانات الدخول والتواصل — تأكد من صحتها" />
 
-          {/* الاسم مع اللقب — حقل واحد */}
-          <div className="space-y-2">
-            <Label htmlFor="name">الاسم مع اللقب *</Label>
+          {/* الاسم مع اللقب — حقل واحد: اسمين حصراً (الجولة 45) */}
+          <div id="reg-name-wrap" {...fieldWrap('name')}>
+            <Label htmlFor="name">الاسم واللقب — اسمين فقط *</Label>
             <Input
               id="name"
-              placeholder="مثال: أحمد صالح"
+              placeholder="مثال: أحمد صالح — لا تُضف أسماء وسطى"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                clearFieldError('name')
+              }}
             />
-            <p className="text-[11px] text-muted-foreground">
-              حقل واحد يحوي الاسم مع اللقب فقط — دون الأسماء الوسطى
-            </p>
+            {fieldErrors.name ? (
+              <p className="text-[11px] font-bold text-red-600">{fieldErrors.name}</p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                الاسم واللقب فقط — كلمتان اثنتان ولا يقبل أكثر أو أقل
+              </p>
+            )}
           </div>
 
           {/* الهاتف — 9 أرقام حصراً */}
-          <div className="space-y-2">
+          <div id="reg-phone-wrap" {...fieldWrap('phone')}>
             <Label htmlFor="phone">رقم الهاتف *</Label>
             <div className="relative">
               <PhoneIcon className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -453,10 +518,17 @@ export default function RegisterPage() {
                 placeholder="7xxxxxxxx"
                 className="ps-10 text-start"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                onChange={(e) => {
+                  setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))
+                  clearFieldError('phone')
+                }}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">9 أرقام فقط — يبدأ بـ 7</p>
+            {fieldErrors.phone ? (
+              <p className="text-[11px] font-bold text-red-600">{fieldErrors.phone}</p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">9 أرقام فقط — يبدأ بـ 7</p>
+            )}
           </div>
         </section>
 
@@ -477,7 +549,7 @@ export default function RegisterPage() {
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* التخصص — إجباري من كتالوجات الإدارة (أقسام للكادر / تخصصات طبية للطبيب) */}
-                <div className="space-y-2">
+                <div id="reg-specialty-wrap" {...fieldWrap('specialty')}>
                   <Label htmlFor="specialty">{role === 'DOCTOR' ? 'التخصص الطبي *' : 'التخصص *'}</Label>
                   {(role === 'DOCTOR' ? specialties : departments).length === 0 ? (
                     <>
@@ -485,7 +557,10 @@ export default function RegisterPage() {
                         id="specialty"
                         placeholder={role === 'DOCTOR' ? 'مثال: باطنية' : 'مثال: تمريض طوارئ'}
                         value={specialty}
-                        onChange={(e) => setSpecialty(e.target.value)}
+                        onChange={(e) => {
+                          setSpecialty(e.target.value)
+                          clearFieldError('specialty')
+                        }}
                       />
                       <p className="text-[11px] text-muted-foreground">
                         القائمة غير متوفرة حالياً — اكتب تخصصك يدوياً
@@ -493,7 +568,13 @@ export default function RegisterPage() {
                     </>
                   ) : (
                     <>
-                      <Select value={specialty} onValueChange={setSpecialty}>
+                      <Select
+                        value={specialty}
+                        onValueChange={(v) => {
+                          setSpecialty(v)
+                          clearFieldError('specialty')
+                        }}
+                      >
                         <SelectTrigger id="specialty">
                           <SelectValue placeholder={role === 'DOCTOR' ? 'اختر التخصص الطبي' : 'اختر القسم / التخصص'} />
                         </SelectTrigger>
@@ -505,16 +586,14 @@ export default function RegisterPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-[11px] text-muted-foreground">
-                        {role === 'DOCTOR'
-                          ? 'إجباري — من كتالوج التخصصات الطبية المُدار من حساب الإدارة'
-                          : 'إجباري — نفس الأقسام التي تُعمل بها التكليفات وتُدار من حساب الإدارة'}
-                      </p>
+                      {fieldErrors.specialty && (
+                        <p className="text-[11px] font-bold text-red-600">{fieldErrors.specialty}</p>
+                      )}
                     </>
                   )}
                 </div>
                 {/* سنوات الخبرة — إجبارية */}
-                <div className="space-y-2">
+                <div id="reg-yearsOfExperience-wrap" {...fieldWrap('yearsOfExperience')}>
                   <Label htmlFor="yearsOfExperience">سنوات الخبرة *</Label>
                   <Input
                     id="yearsOfExperience"
@@ -524,19 +603,32 @@ export default function RegisterPage() {
                     max={50}
                     placeholder="مثال: 5 — أو 0 للمتخرج الجديد"
                     value={yearsOfExperience}
-                    onChange={(e) => setYearsOfExperience(e.target.value)}
+                    onChange={(e) => {
+                      setYearsOfExperience(e.target.value)
+                      clearFieldError('yearsOfExperience')
+                    }}
                   />
-                  <p className="text-[11px] text-muted-foreground">
-                    إجباري — أدخل 0 إذا كنت متخرجاً جديداً بلا خبرة
-                  </p>
+                  {fieldErrors.yearsOfExperience ? (
+                    <p className="text-[11px] font-bold text-red-600">{fieldErrors.yearsOfExperience}</p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      إجباري — أدخل 0 إذا كنت متخرجاً جديداً بلا خبرة
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* المؤهل العلمي — خيارات الدور (3 للكادر / 4 للطبيب) */}
-                <div className="space-y-2">
+                <div id="reg-qualification-wrap" {...fieldWrap('qualification')}>
                   <Label htmlFor="qualification">المؤهل العلمي *</Label>
-                  <Select value={qualification} onValueChange={setQualification}>
+                  <Select
+                    value={qualification}
+                    onValueChange={(v) => {
+                      setQualification(v)
+                      clearFieldError('qualification')
+                    }}
+                  >
                     <SelectTrigger id="qualification">
                       <SelectValue placeholder="اختر المؤهل" />
                     </SelectTrigger>
@@ -548,17 +640,27 @@ export default function RegisterPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    {role === 'DOCTOR'
-                      ? 'بكالوريوس طب وجراحة — ماجستير — دكتوراه — شهادة زمالة'
-                      : 'أورديلي سنة — دبلوم ثلاث سنوات — بكالوريوس أربع سنوات'}
-                  </p>
+                  {fieldErrors.qualification ? (
+                    <p className="text-[11px] font-bold text-red-600">{fieldErrors.qualification}</p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      {role === 'DOCTOR'
+                        ? 'بكالوريوس طب وجراحة — ماجستير — دكتوراه — شهادة زمالة'
+                        : 'أورديلي سنة — دبلوم ثلاث سنوات — بكالوريوس أربع سنوات'}
+                    </p>
+                  )}
                 </div>
                 {/* الجنس — إجباري */}
-                <div className="space-y-2">
+                <div id="reg-gender-wrap" {...fieldWrap('gender')}>
                   <Label>الجنس *</Label>
-                  <Select value={gender} onValueChange={setGender}>
-                    <SelectTrigger>
+                  <Select
+                    value={gender}
+                    onValueChange={(v) => {
+                      setGender(v)
+                      clearFieldError('gender')
+                    }}
+                  >
+                    <SelectTrigger id="reg-gender">
                       <SelectValue placeholder="اختر الجنس" />
                     </SelectTrigger>
                     <SelectContent>
@@ -566,7 +668,11 @@ export default function RegisterPage() {
                       <SelectItem value="FEMALE">أنثى</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">إجباري — ذكر أو أنثى</p>
+                  {fieldErrors.gender ? (
+                    <p className="text-[11px] font-bold text-red-600">{fieldErrors.gender}</p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">إجباري — ذكر أو أنثى</p>
+                  )}
                 </div>
               </div>
             </>
@@ -574,7 +680,15 @@ export default function RegisterPage() {
 
           {/* ---------- الجهة الصحية للمستلم الإداري ---------- */}
           {role === 'RECEIVER' && (
-            <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+            <div
+              id="reg-org-wrap"
+              className={cn(
+                'space-y-4 rounded-2xl border p-4',
+                fieldErrors.org
+                  ? 'field-error field-error-shake border-red-400 bg-red-50/30'
+                  : 'border-primary/20 bg-primary/5'
+              )}
+            >
               <div className="flex items-center justify-between gap-2">
                 <Label className="flex items-center gap-2">
                   <Hospital className="size-4 text-primary" />
@@ -605,8 +719,14 @@ export default function RegisterPage() {
 
               {orgMode === 'existing' ? (
                 <div className="space-y-2">
-                  <Select value={orgId} onValueChange={setOrgId}>
-                    <SelectTrigger>
+                  <Select
+                    value={orgId}
+                    onValueChange={(v) => {
+                      setOrgId(v)
+                      clearFieldError('org')
+                    }}
+                  >
+                    <SelectTrigger id="reg-org">
                       <SelectValue placeholder="اختر الجهة الصحية من قائمة الإدارة" />
                     </SelectTrigger>
                     <SelectContent>
@@ -618,9 +738,13 @@ export default function RegisterPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    نفس الجهات الصحية المعتمدة المضافة من حساب الإدارة
-                  </p>
+                  {fieldErrors.org ? (
+                    <p className="text-xs font-bold text-red-600">{fieldErrors.org}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      نفس الجهات الصحية المعتمدة المضافة من حساب الإدارة
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -634,7 +758,10 @@ export default function RegisterPage() {
                       id="newOrgName"
                       placeholder="مثال: مستشفى الخير التخصصي"
                       value={newOrg.name}
-                      onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
+                      onChange={(e) => {
+                        setNewOrg({ ...newOrg, name: e.target.value })
+                        clearFieldError('org')
+                      }}
                     />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -698,7 +825,7 @@ export default function RegisterPage() {
         <section className="space-y-4">
           <SectionHead step={4} title="أمان الحساب" hint="كلمة مرور قوية تحمي حسابك المهني" />
 
-          <div className="space-y-2">
+          <div id="reg-password-wrap" {...fieldWrap('password')}>
             <Label htmlFor="password">كلمة المرور *</Label>
             <div className="relative">
               <Lock className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -708,7 +835,10 @@ export default function RegisterPage() {
                 placeholder="8 أحرف على الأقل مع حروف وأرقام"
                 className="ps-10 pe-10"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  clearFieldError('password')
+                }}
               />
               <button
                 type="button"

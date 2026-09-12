@@ -167,3 +167,49 @@
     transform: translateY(0) scale(1);
   }
 }
+
+/* الجولة 45 — اهتزاز حقل به خطأ عند التحقق من النموذج (البلاغ الحرفي:
+   «عند وجود اي خطاء في اي حقل يجب ان يهتز الحقل ويتلون للون الاحمر») */
+@keyframes field-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-7px);
+  }
+  30% {
+    transform: translateX(6px);
+  }
+  45% {
+    transform: translateX(-5px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+
+.field-error-shake {
+  animation: field-shake 0.5s ease-in-out both;
+}
+
+/* تلوين الحقل الخاطئ بالأحمر — يدعم حالات التركيز أيضاً */
+.field-error > * input,
+.field-error > * textarea,
+.field-error input,
+.field-error textarea,
+.field-error [role="combobox"],
+.field-error button[role="combobox"] {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px #ef4444;
+}
+.field-error > * input:focus-visible,
+.field-error input:focus-visible,
+.field-error > * textarea:focus-visible,
+.field-error textarea:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 1px;
+}

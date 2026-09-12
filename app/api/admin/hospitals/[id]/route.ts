@@ -231,6 +231,13 @@ export async function DELETE(
     // الحذف الكامل (الجولة 22): الجهة تُحذف نهائياً أياً كان ما يرتبط بها —
     // ارتباطات كوادرها تُحذف تلقائياً (onDelete: Cascade)، والتكليفات السابقة
     // تُفكَّك ارتباطها بالجهة مع بقاء سجلها التاريخي النصي كاملاً (لا فقد بيانات).
+    // الجولة 45: إشعار كل كادر كان مرتبطاً بالجهة — «يتحول إلى كل الكوادر في
+    // المنصة» فيجب أن يعرف أن جهته أُزيلت من سجله المهني.
+    const linkedStaff = await db.nurseAffiliation.findMany({
+      where: { hospitalId: id },
+      select: { nurseId: true },
+    })
+
     const detachedPosts = await db.$transaction(async (tx) => {
       const detached = await tx.post.updateMany({
         where: { hospitalId: id },
@@ -239,6 +246,18 @@ export async function DELETE(
       await tx.hospital.delete({ where: { id } })
       return detached.count
     })
+
+    // إشعار الكوادر المتأثرين بعد الحذف الفعلي (خارج المعاملة — لا يُفشلها)
+    await Promise.all(
+      linkedStaff.map((a) =>
+        notify(a.nurseId, {
+          title: 'أُزيلت جهة صحية من سجلك المهني',
+          body: `حذفت إدارة المنصة جهة (${hospital.name}) وتم فك ارتباطك بها — لم تعد تظهر ضمن كوادر جهة، ويمكنك الآن التقديم على أي جهة في المنصة`,
+          type: 'AFFILIATION_UPDATED',
+          link: '/nurse/profile',
+        })
+      )
+    )
 
     return NextResponse.json({
       message: [

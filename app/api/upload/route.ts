@@ -34,6 +34,27 @@ export async function POST(req: NextRequest) {
       return jsonError(validationError, 422)
     }
 
+    // الجولة 45 — قفل إعادة الرفع من الخادم (حماية مطابقة للواجهة):
+    // «بعد الموافقة على المستندات من الإدارة لا يُسمح بإعادة الرفع إلا إذا رُفض
+    // المستند من حساب الإدارة» — وجود نسخة معتمدة أو قيد المراجعة من نفس النوع
+    // يمنع الرفع كلياً؛ المرفوض وحده يمكن استبداله.
+    const blocking = await db.document.findFirst({
+      where: {
+        userId: session.user.id,
+        type: type as 'ID_CARD' | 'PRACTICE_LICENSE' | 'EXPERIENCE_CERT' | 'OTHER',
+        status: { in: ['APPROVED', 'PENDING'] },
+      },
+      select: { status: true, title: true },
+    })
+    if (blocking) {
+      return jsonError(
+        blocking.status === 'APPROVED'
+          ? `المستند (${blocking.title}) معتمد من الإدارة — لا يمكن إعادة رفعه إلا إذا رفضته الإدارة`
+          : `المستند (${blocking.title}) قيد مراجعة الإدارة — لا يمكن إعادة رفعه حتى يصدر قرار الإدارة`,
+        409
+      )
+    }
+
     const stored = await saveImageToDb(file)
 
     const document = await db.document.create({

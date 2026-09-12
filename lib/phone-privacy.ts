@@ -1,5 +1,6 @@
 import type { AssignmentStatus, PaymentStatus } from '@prisma/client'
 import { db } from '@/lib/db'
+import { getSettings, calcApplicationFee } from '@/lib/settings'
 
 /**
  * خصوصية أرقام تواصل الكادر — الجولات 34-38
@@ -17,6 +18,10 @@ import { db } from '@/lib/db'
  *    والأطباء لصاحبه في أي وقت، ويُسحب فورياً (يُقرأ من قاعدة البيانات
  *    مباشرة في كل طلب — لا تخزين مؤقت على الخادم إطلاقاً).
  *  - الإدارة ترى كل الأرقام دائماً دون استثناء.
+ *  - الجولة 45 — الاستثناء الوحيد على القفل الاتجاهي: التكليف الساري الذي
+ *    لا يحتوي على أي رسوم (عرض بدون رسوم إدارة) يفتح بيانات الاتصال
+ *    للطرفين مباشرة أثناء سير التكليف، وتختفي فوراً عند إنهائه/إلغائه
+ *    (isAssignmentContactOpen).
  *
  * الإخفاء يتم على مستوى الخادم (API) حصراً — لا يُرسل الرقم الكامل إلى
  * المتصفح أبداً قبل تحقق الشرط، حتى لا يتسرب عبر أدوات المطور.
@@ -60,6 +65,31 @@ export function isAssignmentPhoneOpen(a: {
 }
 
 /**
+ * قاعدة بيانات الاتصال في التكليف — الجولة 45 (البلاغ الحرفي):
+ * «مع عرض بيانات الاتصال في التكليفات التي لا تحتوي على رسوم وتختفي فوراً
+ * عند انهاء التكليف من كلا من الكادر التمريضي والطبيب والمستلم الإداري أو
+ * مشرف الأطباء»:
+ *  - التكليف الساري (RECEIVED/ACTIVE) الذي لا يحتوي على أي رسوم (حصة إدارة
+ *    = 0 ولا رسوم تقديم) → بيانات الاتصال مفتوحة للطرفين مباشرة بلا سداد
+ *    — هذا هو الاستثناء الوحيد لقفل الجولة 38 الاتجاهي.
+ *  - أي تكليف فيه رسوم → يبقى مفتوحاً بالقاعدة السابقة حصراً (سداد + تأكيد).
+ *  - الإنهاء أو الإلغاء يُغلق بيانات الاتصال فوراً في كل الحالات.
+ */
+export function isAssignmentContactOpen(
+  a: {
+    paymentStatus: PaymentStatus | string
+    status: AssignmentStatus | string
+    adminFee?: number | null
+  },
+  applicationFee = 0
+): boolean {
+  const active = a.status === 'RECEIVED' || a.status === 'ACTIVE'
+  if (!active) return false // الإنهاء/الإلغاء يُخفي بيانات الاتصال فوراً
+  const feeless = (a.adminFee ?? 0) === 0 && applicationFee === 0
+  return a.paymentStatus === 'PAID' || feeless
+}
+
+/**
  * هل هذا المشاهد «موثوق جداً» لرؤية بيانات الاتصال؟ (الجولة 36)
  *  - الإدارة: دائماً (الجهة الموثوقة الأعلى)
  *  - مستلم إداري/مشرف أطباء مُنح إذن trustedContactViewer من حساب الإدارة: نعم
@@ -81,7 +111,11 @@ export async function isTrustedViewer(userId: string): Promise<boolean> {
 
 /**
  * معرّفات الكوادر/الأطباء الذين فُتحت أرقامهم لمشاهد معين:
- * استعلام واحد لكل قائمة — تكليفات غير ملغاة مسددة النسبة بين المشاهد وكل كادر.
+ * استعلام واحد لكل قائمة — تكليفات سارية بين المشاهد وكل كادر:
+ *  - مسددة النسبة (القاعدة التاريخية) أو
+ *  - بلا أي رسوم (الجولة 45 — عرض بدون رسوم: الاتصال مفتوح أثناء السير)
+ * الإعدادات تُجلب هنا مباشرة — في نمط «رسوم التقديم» (applicationFee > 0)
+ * لا يُفتح مسار «بلا رسوم» إطلاقاً وتبقى القاعدة السداد حصراً.
  */
 export async function revealedStaffIds(
   viewerId: string,
@@ -92,12 +126,22 @@ export async function revealedStaffIds(
   if (ids.length === 0) return new Set()
   // الموثوق جداً (الجولة 36) يرى كل الأرقام دون استعلام
   if (trusted) return new Set(ids)
+  const applicationFee = calcApplicationFee(await getSettings())
   const rows = await db.assignment.findMany({
     where: {
       receiverId: viewerId,
       nurseId: { in: ids },
-      paymentStatus: 'PAID',
       status: { in: ['RECEIVED', 'ACTIVE'] },
+      ...(applicationFee > 0
+        ? { paymentStatus: 'PAID' as const }
+        : {
+            OR: [
+              { paymentStatus: 'PAID' as const },
+              // الجولة 45: تكليفات بلا أي رسوم — adminFee المحفوظ 0 حصراً
+              // (null تعني تكليفاً تاريخياً قبل احتساب الحصة — تبقى مقفلة)
+              { adminFee: 0 },
+            ],
+          }),
     },
     select: { nurseId: true },
     distinct: ['nurseId'],
@@ -128,10 +172,12 @@ export function phoneView(
 
 /**
  * رقم المستلم الإداري/مشرف الأطباء كما يراه الكادر التمريضي/الطبيب — الجولة 38:
- * قفل مطلق باتجاه واحد — القناع فقط في كل الحالات، ولا يُرسل الرقم الكامل
- * إلى المتصفح إطلاقاً: لا بالسداد ولا بدونه، ولا أثناء سير التكليف ولا بعده،
- * وبغضّ النظر عن أي إذن موثوقية ممنوح للطرف المساند.
+ * قفل مطلق باتجاه واحد… باستثناء وحيد (الجولة 45): التكليف الساري بلا أي
+ * رسوم (عرض بدون رسوم إدارة) — يُرسل الرقم الكامل أثناء سير التكليف فقط،
+ * ويُغلق فوراً عند الإنهاء/الإلغاء (isAssignmentContactOpen).
  */
-export function receiverPhoneForStaff(phone: string | null | undefined) {
-  return { phone: null, phoneMasked: maskPhone(phone), phoneLocked: true }
+export function receiverPhoneForStaff(phone: string | null | undefined, open = false) {
+  return open
+    ? { phone: phone ?? null, phoneMasked: maskPhone(phone), phoneLocked: false }
+    : { phone: null, phoneMasked: maskPhone(phone), phoneLocked: true }
 }

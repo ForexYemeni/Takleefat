@@ -18,6 +18,15 @@ import { resolveReceiverOrgs } from '@/lib/network'
  * السجل المهني (الارتباطات المعتمدة) + ملخص التقييمات الاحترافية.
  * الجولة 34: رقم التواصل مخفي عن المستلم/المشرف ما لم يوجد تكليف مسدد النسبة
  * بين الطرفين — الإدارة ترى الرقم دائماً (lib/phone-privacy).
+ *
+ * الجولة 45 — خصوصية المستندات في السيرة الكاملة (البلاغ الحرفي):
+ * «عند حذف الجهة ينتقل الكادر إلى كل الكوادر في المنصة ولا يتمكن مشرف
+ * الأطباء أو المستلم الإداري من رؤية المستندات وإنما باقي السيرة الذاتية
+ * وتظهر أنه المستندات معتمدة أو مرفوضة أو قيد المراجعة»:
+ *  - الإدارة: ترى المستندات دائماً.
+ *  - المستلم/المشرف: المستندات تظهر محتواها فقط إذا كان الكادر مرتبطاً
+ *    بجهة من جهات المشاهد (ارتباط غير معلق) — وإلا فالمحتوى مخفي مع
+ *    documentStatuses (نوع + حالة) لعرض شارات: معتمدة/مرفوضة/قيد المراجعة.
  */
 export async function GET(
   _req: NextRequest,
@@ -36,8 +45,7 @@ export async function GET(
     }
 
     // ---------- بوابة الإذن (الجولة 32 — كما هي حرفياً) ----------
-    // الجولة 44: خصوصية المستندات تُطبّق في عرض التقديمات (applications) — أما
-    // السيرة الكاملة فتبقى بإذن الإدارة حصراً حفاظاً على قواعد الجولة 32 وفحوصها
+    // الجولة 45: حتى أصحاب الإذن لا يرون محتوى المستندات إلا لنفس الجهة (أدناه)
     if (session.user.role !== 'ADMIN') {
       const me = await db.user.findUnique({
         where: { id: session.user.id },
@@ -132,6 +140,7 @@ export async function GET(
 
     // الجولة 34: فتح رقم التواصل حسب قاعدة السداد — الإدارة ترى دائماً
     // الجولة 36: «الموثوق جداً» يرى الرقم دائماً حتى بعد إنهاء التكليفات
+    // الجولة 45: التكليف بلا أي رسوم (عرض بدون رسوم) يفتح الرقم أثناء السير
     const trusted = await isTrustedViewer(session.user.id)
     let revealed = true
     if (session.user.role !== 'ADMIN' && !trusted) {
@@ -139,9 +148,22 @@ export async function GET(
       revealed = paid.has(user.id)
     }
 
-    // الجولة 44: المشاهد هنا إما إدارة أو صاحب إذن «البيانات الكاملة» —
-    // والمستندات ظاهرة لهما (قاعدة الإخفاء مطبقة في عرض التقديمات والسيرة العامة)
-    const canSeeDocuments = true
+    // الجولة 45 — بوابة المستندات: محتوى المستندات لغير الإدارة يظهر فقط
+    // إذا كان الكادر مرتبطاً بجهة من جهات المشاهد (ارتباط غير معلق) —
+    // وإلا: مستندات مخفية + شارات الحالة (معتمدة/مرفوضة/قيد المراجعة)
+    let canSeeDocuments = session.user.role === 'ADMIN'
+    if (!canSeeDocuments) {
+      const [viewerOrgs, staffOrgIds] = await Promise.all([
+        resolveReceiverOrgs(session.user.id),
+        db.nurseAffiliation.findMany({
+          where: { nurseId: id, status: { not: 'PENDING' } },
+          select: { hospitalId: true },
+        }),
+      ])
+      const viewerOrgIds = new Set(viewerOrgs.map((o) => o.id))
+      canSeeDocuments = staffOrgIds.some((a) => viewerOrgIds.has(a.hospitalId))
+    }
+    const visibleDocs = canSeeDocuments ? documents : []
     const approvedDocsCount = documents.filter((d) => d.status === 'APPROVED').length
 
     return NextResponse.json({
@@ -169,13 +191,12 @@ export async function GET(
           })),
         },
       },
-      // الجولة 44: المستندات مخفية عن غير أهلها — تُرسل حالة التحقق فقط
-      documents: canSeeDocuments
-        ? documents
-        : [],
+      // الجولة 45: المستندات مخفية عن غير نفس الجهة — مع شارات الحالة لكل مستند
+      documents: visibleDocs,
       documentsHidden: !canSeeDocuments,
       documentsVerified: approvedDocsCount > 0,
       approvedDocuments: approvedDocsCount,
+      documentStatuses: documents.map((d) => ({ type: d.type, status: d.status })),
     })
   } catch (error) {
     return handleApiError(error)

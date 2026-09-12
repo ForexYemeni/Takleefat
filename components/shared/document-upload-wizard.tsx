@@ -28,10 +28,13 @@ import { cn } from '@/lib/utils'
  * «يرفع البطاقة الشخصية ثم ينتقل تلقائياً لرفع المزاولة ثم تلقائياً لرفع
  * شهادة الخبرة ويتم رفعهم مرة واحدة بدلاً من رفع كل مستند لوحده»:
  *  - خطوات مرقّمة: البطاقة ← المزاولة ← شهادة الخبرة (+ مستند آخر اختياري)
- *  - كل خطوة: مكتملة (علامة خضراء + حالة المراجعة + إمكانية إعادة الرفع) /
- *    الحالية (منطقة سحب وإفلات جاهزة) / قادمة (مقفلة حتى انتهاء الحالية)
+ *  - كل خطوة: مكتملة (علامة خضراء + حالة المراجعة) / الحالية (منطقة سحب
+ *    وإفلات جاهزة) / قادمة (مقفلة حتى انتهاء الحالية)
  *  - بعد نجاح كل رفع ينتقل تلقائياً للخطوة التالية فوراً — بلا أي نقر إضافي
- *  - إعادة الرفع تستبدل النسخة غير المعتمدة تلقائياً (المعتمدة تبقى كما هي)
+ *  - الجولة 45 — قفل إعادة الرفع (البلاغ الحرفي): «بعد رفع المستندات والموافقة
+ *    عليها من قبل الإدارة يجب ألا يتمكن الكادر من إعادة الرفع إلا إذا تم الرفض
+ *    من حساب الإدارة» — المعتمد وقيد المراجعة مقفلان تماماً، والإعادة متاحة
+ *    للمرفوض حصراً (وتستبدل النسخة المرفوضة تلقائياً)
  *  - عند اكتمال الثلاثة: حالة احتفالية «اكتمل رفع مستنداتك — بانتظار مراجعة الإدارة»
  * الضغط التلقائي للصور من جهة العميل كما هو (جودة عالية بحجم صغير).
  */
@@ -116,6 +119,10 @@ export function DocumentUploadWizard({
   const doneCount = MANDATORY_TYPES.filter((t) => docByType.has(t)).length
   const allDone = doneCount === MANDATORY_TYPES.length
 
+  // الجولة 45: إعادة الرفع متاحة للمستند المرفوض من الإدارة حصراً —
+  // المعتمد مقفل نهائياً وقيد المراجعة ينتظر قرار الإدارة
+  const canReupload = (status: string) => status === 'REJECTED'
+
   const upload = async (file: File, type: string) => {
     setBusyType(type)
     try {
@@ -143,9 +150,10 @@ export function DocumentUploadWizard({
       const result = await response.json()
       if (!response.ok) throw new Error(result.error ?? 'فشل رفع الصورة')
 
-      // الاستبدال التلقائي: النسخ السابقة غير المعتمدة من نفس النوع تُحذف — المعتمدة تبقى
+      // الاستبدال التلقائي (الجولة 45): النسخة المرفوضة من نفس النوع تُحذف عند الإعادة —
+      // المعتمدة وقيد المراجعة لا يمكن الوصول للرفع فوقها أصلاً بقفل الإعادة
       const stale = documents.filter(
-        (d) => d.type === type && d.status !== 'APPROVED'
+        (d) => d.type === type && d.status === 'REJECTED'
       )
       for (const s of stale) {
         try {
@@ -157,7 +165,7 @@ export function DocumentUploadWizard({
 
       toast.success(
         type === 'OTHER'
-          ? 'تم رفع المستند بنجاح'
+          ? 'تم رفع المستند بنجاح — بانتظار مراجعة الإدارة'
           : `تم رفع ${STEPS.find((s) => s.type === type)?.title} بنجاح${!allDone ? ' — انتقلنا للخطوة التالية' : ''}`
       )
       setReUploadType(null)
@@ -333,15 +341,21 @@ export function DocumentUploadWizard({
                       </span>
                     )}
                   </p>
-                  {doc ? (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      مرفوع{doc.status === 'APPROVED' ? ' ومعتمد من الإدارة ✓' : ' — بانتظار مراجعة الإدارة'}
-                    </p>
-                  ) : (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{step.desc}</p>
-                  )}
-                </div>
                 {doc && !isReUploading && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {doc.status === 'APPROVED'
+                      ? 'مرفوع ومعتمد من الإدارة ✓'
+                      : doc.status === 'REJECTED'
+                        ? 'مرفوع — مرفوض من الإدارة'
+                        : 'مرفوع — بانتظار مراجعة الإدارة'}
+                  </p>
+                )}
+                {!doc && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{step.desc}</p>
+                )}
+                </div>
+                {/* الجولة 45: زر إعادة الرفع للمرفوض من الإدارة حصراً — بقية الحالات مقفلة */}
+                {doc && !isReUploading && canReupload(doc.status) && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -355,8 +369,23 @@ export function DocumentUploadWizard({
                   </Button>
                 )}
                 {doc && !isReUploading && (
-                  <span className="shrink-0 text-[10px] font-bold text-muted-foreground tabular-nums">
-                    {doc.status === 'APPROVED' ? 'معتمد' : doc.status === 'REJECTED' ? 'مرفوض — أعد الرفع' : 'قيد المراجعة'}
+                  <span
+                    className={cn(
+                      'flex shrink-0 items-center gap-1 text-[10px] font-bold tabular-nums',
+                      doc.status === 'APPROVED'
+                        ? 'text-emerald-700'
+                        : doc.status === 'REJECTED'
+                          ? 'text-red-600'
+                          : 'text-amber-600'
+                    )}
+                  >
+                    {/* الجولة 45: المعتمد وقيد المراجعة مقفلان — لا إعادة رفع إلا بعد رفض الإدارة */}
+                    {doc.status !== 'REJECTED' && <Lock className="size-3" />}
+                    {doc.status === 'APPROVED'
+                      ? 'معتمد — مقفل'
+                      : doc.status === 'REJECTED'
+                        ? 'مرفوض — أعد الرفع'
+                        : 'قيد المراجعة — مقفل'}
                   </span>
                 )}
               </div>

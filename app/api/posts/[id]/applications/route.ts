@@ -208,10 +208,17 @@ export async function GET(
           nurse: {
             ...a.nurse,
             ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
-            // الجولة 44: إخفاء المستندات عن غير أهل الجهة — مع حالة التحقق
+            // الجولة 44 + 45: إخفاء المستندات عن غير أهل الجهة — مع شارات الحالة
+            // (معتمدة / مرفوضة / قيد المراجعة) بدل المحتوى
             ...(canSeeDocuments
               ? {}
-              : { documents: [] as typeof a.nurse.documents }),
+              : {
+                  documents: [] as typeof a.nurse.documents,
+                  documentStatuses: a.nurse.documents.map((d) => ({
+                    type: d.type,
+                    status: d.status,
+                  })),
+                }),
             documentsHidden: !canSeeDocuments,
             documentsVerified: (verifiedMap.get(a.nurse.id) ?? 0) > 0,
             approvedDocuments: verifiedMap.get(a.nurse.id) ?? 0,

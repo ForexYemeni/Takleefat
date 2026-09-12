@@ -57,6 +57,8 @@ interface SettingsPayload {
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient()
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  // الجولة 45: مدة العرض تُكتب في حقل نصي بدل الأزرار/الاختيار
+  const [promoDays, setPromoDays] = useState<string>('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['settings'],
@@ -113,12 +115,35 @@ export default function AdminSettingsPage() {
   /** النسبة التلقائية للمستلمين/المشرفين — نصف نسبة الإدارة (الجولة 32) */
   const autoSharePercent = Math.round((adminPercentage / 2) * 10) / 10
 
-  /** ضبط مدة العرض بأيام من الآن — أزرار سريعة (7/14/30 يوماً) */
-  const applyPromoDays = (days: number) => {
-    const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-    form.setValue('promoUntil', until.toISOString().slice(0, 10), { shouldDirty: true })
-    if (!promoActive) form.setValue('promoActive', true, { shouldDirty: true })
+  // الجولة 45: كتابة المدة بالأيام تحسب تاريخ الانتهاء حياً (بدل الأزرار السريعة)
+  const promoDaysNum = Math.max(0, Math.floor(Number(promoDays) || 0))
+  const promoUntilPreview =
+    promoDaysNum > 0
+      ? new Date(Date.now() + promoDaysNum * 24 * 60 * 60 * 1000)
+      : null
+  const handlePromoDaysChange = (value: string) => {
+    setPromoDays(value.replace(/[^0-9]/g, '').slice(0, 4))
+    const days = Math.max(0, Math.floor(Number(value) || 0))
+    if (days > 0) {
+      form.setValue(
+        'promoUntil',
+        new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        { shouldDirty: true }
+      )
+    } else {
+      form.setValue('promoUntil', '', { shouldDirty: true })
+    }
   }
+  // مزامنة الحقل مع القيمة المحفوظة عند التحميل
+  useEffect(() => {
+    if (promoUntilRaw && promoDays === '') {
+      const until = new Date(promoUntilRaw)
+      if (!Number.isNaN(until.getTime())) {
+        const days = Math.ceil((until.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+        if (days > 0) setPromoDays(String(days))
+      }
+    }
+  }, [promoUntilRaw])
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -339,43 +364,32 @@ export default function AdminSettingsPage() {
               </Badge>
             </div>
 
+            {/* الجولة 45: المدة حقل كتابة نصي — بدل الأزرار والاختيار (البلاغ الحرفي) */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>مدة العرض — أزرار سريعة</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[7, 14, 30].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => applyPromoDays(d)}
-                      className="rounded-xl border-2 px-3 py-1.5 text-xs font-extrabold tabular-nums transition-colors hover:border-emerald-400 hover:text-emerald-700"
-                    >
-                      {d} يوماً
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  الضغط يفعّل العرض ويضبط تاريخ الانتهاء تلقائياً — ويمكنك تعديل التاريخ يدوياً
+                <Label htmlFor="s-promo-days">مدة العرض بالأيام — اكتبها في الحقل</Label>
+                <Input
+                  id="s-promo-days"
+                  inputMode="numeric"
+                  placeholder="مثال: 15 — أي عدد من الأيام"
+                  value={promoDays}
+                  onChange={(e) => handlePromoDaysChange(e.target.value)}
+                  className="tabular-nums"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {promoUntilPreview
+                    ? `احتساب حي: يبدأ من لحظة التفعيل وينتهي تلقائياً في ${new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }).format(promoUntilPreview)} بتوقيت مكة المكرمة`
+                    : 'اتركه فارغاً لعرض مفتوح حتى توقفه يدوياً من المفتاح أعلاه'}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="s-promo-until">ينتهي في (اختياري — بتوقيت مكة المكرمة)</Label>
+                <Label htmlFor="s-promo-note">ملاحظة العرض (تظهر في البانر — اختياري)</Label>
                 <Input
-                  id="s-promo-until"
-                  type="date"
-                  value={promoUntilRaw ? promoUntilRaw.slice(0, 10) : ''}
-                  onChange={(e) => form.setValue('promoUntil', e.target.value, { shouldDirty: true })}
+                  id="s-promo-note"
+                  placeholder="مثال: بمناسبة افتتاح المنصة — عروض شهر كامل بدون رسوم"
+                  {...form.register('promoNote')}
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="s-promo-note">ملاحظة العرض (تظهر في البانر — اختياري)</Label>
-              <Input
-                id="s-promo-note"
-                placeholder="مثال: بمناسبة افتتاح المنصة — عروض شهر كامل بدون رسوم"
-                {...form.register('promoNote')}
-              />
             </div>
           </CardContent>
         </Card>

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
-import { getSettings } from '@/lib/settings'
+import { getSettings, calcApplicationFee } from '@/lib/settings'
 import { notifyAssignmentStarts } from '@/lib/shift-alerts'
 import { resolveReceiverOrgs } from '@/lib/network'
 import {
-  isAssignmentPhoneOpen,
+  isAssignmentContactOpen,
   isTrustedViewer,
   phoneView,
   receiverPhoneForStaff,
@@ -38,6 +38,11 @@ const ACTIVE_AFFILIATION_STATUSES: AffiliationStatus[] = ['WORKING', 'ENDORSED']
  *  - بيانات اتصال المستلم الإداري ومشرف الأطباء لا تُرسل للكادر/الطبيب أبداً
  *    تحت أي ظرف (receiverPhoneForStaff = قفل مطلق) — حتى في التكليف الساري
  *    المسدد، وبغضّ النظر عن أي أذونات موثوقية ممنوحة للطرف المساند.
+ * الجولة 45 — العرض بدون رسوم (البلاغ الحرفي):
+ *  - «عرض بيانات الاتصال في التكليفات التي لا تحتوي على رسوم وتختفي فوراً عند
+ *    انهاء التكليف من كلا الطرفين» — isAssignmentContactOpen: التكليف الساري
+ *    بلا أي رسوم يفتح الاتصال للطرفين مباشرة بلا سداد، والإنهاء/الإلغاء
+ *    يُغلقه فوراً في كل الحالات — وهذا هو الاستثناء الوحيد لقفل الجولة 38.
  */
 export async function GET() {
   try {
@@ -102,6 +107,8 @@ export async function GET() {
     ])
 
     // الجولة 34: تطبيق قاعدتي الخصوصية حسب جهة المشاهد
+    // الجولة 45: قاعدة الاتصال الموحدة — السداد+التأكيد، أو بلا أي رسوم أثناء السير
+    const applicationFee = calcApplicationFee(settings)
     const shaped = assignments.map((a) => ({
       ...a,
       nurse: {
@@ -109,17 +116,20 @@ export async function GET() {
         ...phoneView(
           session.user.role,
           a.nurse.phone,
-          isAssignmentPhoneOpen(a),
+          isAssignmentContactOpen(a, applicationFee),
           trusted
         ),
       },
       receiver: {
         ...a.receiver,
-        // الجولة 38: قفل مطلق باتجاه واحد — بيانات اتصال المستلم/المشرف لا
-        // تُرسل للكادر/الطبيب أبداً (القناع فقط)، وأما المستلم فيرى رقم نفسه
-        // عادي دائماً ورقم الكادر بقاعدة السداد
+        // الجولة 38: قفل باتجاه واحد — الجولة 45: الاستثناء الوحيد هو التكليف
+        // الساري بلا أي رسوم (عرض بدون رسوم) — يُفتح للكادر أثناء السير فقط
+        // ويُغلق فوراً عند الإنهاء/الإلغاء، وأما المستلم فيرى رقم نفسه دائماً
         ...(isWorker
-          ? receiverPhoneForStaff(a.receiver.phone)
+          ? receiverPhoneForStaff(
+              a.receiver.phone,
+              isAssignmentContactOpen(a, applicationFee)
+            )
           : { phone: a.receiver.phone, phoneMasked: a.receiver.phone, phoneLocked: false }),
       },
     }))
