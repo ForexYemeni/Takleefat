@@ -106,9 +106,9 @@ export function StaffPhone({
 }
 
 /**
- * شريحة واتساب مشروطة بحالة سداد نسبة الإدارة — لصفحات التكليفات:
- * - التكليف مسدد → زر واتساب أخضر للتواصل مع الكادر
- * - غير مسدد → شريحة قفل بالتلميح
+ * شريحة واتساب مشروطة بحالة سداد نسبة الإدارة وسريان التكليف — لصفحات التكليفات:
+ * - التكليف مسدد وسارٍ (لم يُنهَ ولا يُلغَ) → زر واتساب أخضر للتواصل مع الكادر
+ * - غير مسدد أو أُنهي التكليف → شريحة قفل بالتلميح (الجولة 36: الإنهاء يُغلق)
  */
 export function AssignmentContactChip({
   paymentStatus,
@@ -125,7 +125,10 @@ export function AssignmentContactChip({
   personName: string
   message?: string
 }) {
-  const open = paymentStatus === 'PAID' && assignmentStatus !== 'CANCELLED'
+  const open =
+    paymentStatus === 'PAID' &&
+    assignmentStatus !== 'CANCELLED' &&
+    assignmentStatus !== 'COMPLETED'
   if (open && phone) {
     return (
       <a

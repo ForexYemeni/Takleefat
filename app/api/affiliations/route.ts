@@ -4,7 +4,7 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { affiliationCreateSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
 import { AFFILIATION_STATUS_LABELS, resolveReceiverOrg } from '@/lib/network'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 import type { Prisma } from '@prisma/client'
 
 /**
@@ -71,13 +71,16 @@ export async function GET(req: NextRequest) {
         : Promise.resolve(null),
     ])
 
-    // الجولة 34: أرقام الكوادر تُقنّع للمستلم/المشرف — تُفتح بتكليف مسدد النسبة
+    // الجولة 34: أرقام الكوادر تُقنّع للمستلم/المشرف — تُفتح بتكليف سارٍ مسدد النسبة
     // (الكادر/الطبيب يرى رقمه هو في ارتباطاته — لا قناع عليه)
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام
+    const trusted = await isTrustedViewer(session.user.id)
     let revealed: Set<string> = new Set()
     if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
       revealed = await revealedStaffIds(
         session.user.id,
-        affiliations.map((a) => a.nurse.id)
+        affiliations.map((a) => a.nurse.id),
+        trusted
       )
     }
 
@@ -90,7 +93,7 @@ export async function GET(req: NextRequest) {
           ...a,
           nurse: {
             ...a.nurse,
-            ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+            ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
           },
         }
       }),

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/posts/[id]/applications — تقديمات التكليف المُعلن
@@ -144,11 +144,14 @@ export async function GET(
 
     // applicationId = معرّف التقديم (تتوقعه بطاقة السيرة الذاتية في الواجهة)
     // الجولة 34: قناع أرقام المتقدمين للمالك — الإدارة ترى الأرقام كاملة
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام
     let revealed: Set<string> = new Set()
+    const trusted = await isTrustedViewer(session.user.id)
     if (session.user.role !== 'ADMIN') {
       revealed = await revealedStaffIds(
         session.user.id,
-        applicationsWithRatings.map((a) => a.nurse.id)
+        applicationsWithRatings.map((a) => a.nurse.id),
+        trusted
       )
     }
     return NextResponse.json({
@@ -157,7 +160,7 @@ export async function GET(
         applicationId: a.id,
         nurse: {
           ...a.nurse,
-          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
         },
       })),
     })

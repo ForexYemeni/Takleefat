@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema } from '@/lib/validations/user'
+import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema, trustedContactViewerSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 import { getSettings, effectiveSharePercent } from '@/lib/settings'
 import { USER_STATUS_LABELS } from '@/lib/utils'
@@ -37,6 +37,7 @@ export async function GET(
         rejectNote: true,
         commissionPercent: true,
         fullProfileAccess: true,
+        trustedContactViewer: true,
         walletAddress: true,
         accountNumber: true,
         createdAt: true,
@@ -302,6 +303,45 @@ export async function PATCH(
         message: fullProfileAccess
           ? `فُتح إذن رؤية ${audienceLabel} مع السيرة الذاتية للحساب (${updated.name})`
           : `أُغلق إذن رؤية البيانات الكاملة على الحساب (${updated.name})`,
+        user: updated,
+      })
+    }
+
+    // ---------- إذن «موثوق جداً» لرؤية بيانات الاتصال — للإدارة حصراً (الجولة 36) ----------
+    if (body && typeof body === 'object' && 'trustedContactViewer' in body) {
+      if (target.role !== 'RECEIVER' && target.role !== 'DOCTOR_SUPERVISOR') {
+        return jsonError(
+          'إذن رؤية بيانات الاتصال متاح للمستلمين الإداريين ومشرفي الأطباء فقط',
+          422
+        )
+      }
+
+      const parsed = trustedContactViewerSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'قيمة الإذن غير صحيحة', 422)
+      }
+
+      const { trustedContactViewer } = parsed.data
+      const updated = await db.user.update({
+        where: { id },
+        data: { trustedContactViewer },
+        select: { id: true, name: true, trustedContactViewer: true },
+      })
+
+      await notify(id, {
+        title: trustedContactViewer
+          ? 'صُنف حسابك «موثوق جداً» لرؤية بيانات الاتصال'
+          : 'سُحب إذن رؤية بيانات الاتصال',
+        body: trustedContactViewer
+          ? 'منحتك إدارة المنصة إذن رؤية بيانات اتصال أي كادر تمريضي أو طبيب في أي وقت — حتى بعد إنهاء التكليفات.'
+          : 'سحبت إدارة المنصة إذن رؤية بيانات الاتصال من حسابك — عُدت أرقام التواصل مقفلة حسب قاعدة السداد والإنهاء.',
+        type: 'GENERIC',
+      })
+
+      return NextResponse.json({
+        message: trustedContactViewer
+          ? `صُنف الحساب (${updated.name}) «موثوق جداً» — يرى بيانات اتصال أي كادر/طبيب`
+          : `سُحب إذن «موثوق جداً» من الحساب (${updated.name}) — عادت الأرقام مقفلة حسب القاعدة`,
         user: updated,
       })
     }

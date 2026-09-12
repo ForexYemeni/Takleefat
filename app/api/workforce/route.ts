@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/workforce — دليل الكوادر/الأطباء في كامل المنصة — الجولة 33
@@ -95,8 +95,10 @@ export async function GET(req: NextRequest) {
     })
     const ratingMap = new Map(ratings.map((r) => [r.nurseId, r]))
 
-    // الجولة 34: من فُتح رقمه للمشاهد؟ — تكليفات مسددة النسبة وغير ملغاة بين الطرفين
-    const revealed = await revealedStaffIds(session.user.id, users.map((u) => u.id))
+    // الجولة 34: من فُتح رقمه للمشاهد؟ — تكليفات سارية مسددة النسبة بين الطرفين
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام دون استثناء
+    const trusted = await isTrustedViewer(session.user.id)
+    const revealed = await revealedStaffIds(session.user.id, users.map((u) => u.id), trusted)
 
     return NextResponse.json({
       audience: audienceRole,
@@ -108,7 +110,7 @@ export async function GET(req: NextRequest) {
           id: u.id,
           name: u.name,
           // الجولة 34: الرقم الكامل يُرسل فقط لمن تحقق شرط السداد — وإلا القناع حصراً
-          ...phoneView(session.user.role, u.phone, revealed.has(u.id)),
+          ...phoneView(session.user.role, u.phone, revealed.has(u.id), trusted),
           gender: u.gender,
           role: u.role,
           status: u.status,

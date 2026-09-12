@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Percent,
   PlayCircle,
+  PhoneCall,
   ShieldCheck,
   Trash2,
   UserX,
@@ -55,6 +56,8 @@ interface ActionUser {
   /** نِسَب الحصة والأذونات — للمستلم الإداري ومشرف الأطباء (الجولة 32) */
   commissionPercent?: number | null
   fullProfileAccess?: boolean
+  /** إذن «موثوق جداً» لرؤية بيانات الاتصال — الجولة 36 */
+  trustedContactViewer?: boolean
   /** النسبة التلقائية (نصف نسبة الإدارة) — للعرض في الحوار */
   autoSharePercent?: number
 }
@@ -79,6 +82,9 @@ export function UserActionsMenu({
   const [percentValue, setPercentValue] = useState<string>('')
   const [accessOpen, setAccessOpen] = useState(false)
   const [accessValue, setAccessValue] = useState(false)
+  // الجولة 36 — إذن «موثوق جداً» لرؤية بيانات الاتصال
+  const [trustedOpen, setTrustedOpen] = useState(false)
+  const [trustedValue, setTrustedValue] = useState(false)
   const [confirmAction, setConfirmAction] = useState<
     | { kind: 'APPROVED' }
     | { kind: 'SUSPENDED' }
@@ -160,6 +166,23 @@ export function UserActionsMenu({
       })
       toast.success(res.message)
       setAccessValue(next)
+      invalidate()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  /** فتح/إغلاق إذن «موثوق جداً» لرؤية بيانات الاتصال — الجولة 36 */
+  const trustedMutation = async (next: boolean) => {
+    setPending(true)
+    try {
+      const res = await apiPatch<{ message: string }>(`/api/admin/users/${user.id}`, {
+        trustedContactViewer: next,
+      })
+      toast.success(res.message)
+      setTrustedValue(next)
       invalidate()
     } catch (e) {
       toast.error((e as Error).message)
@@ -273,6 +296,27 @@ export function UserActionsMenu({
                 <span>أذونات رؤية البيانات الكاملة</span>
                 <span className="text-[10px] font-normal text-muted-foreground">
                   {user.fullProfileAccess ? 'مفتوح — مع السيرة الذاتية والمستندات' : 'مغلق — البيانات المختصرة فقط'}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          )}
+          {shareManaged && (
+            <DropdownMenuItem
+              className="gap-2"
+              onClick={() => {
+                setTrustedValue(user.trustedContactViewer ?? false)
+                setTrustedOpen(true)
+              }}
+            >
+              <PhoneCall
+                className={`size-4 ${user.trustedContactViewer ? 'text-emerald-600' : ''}`}
+              />
+              <span className="flex flex-col">
+                <span>الموثوق لبيانات الاتصال</span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {user.trustedContactViewer
+                    ? 'موثوق جداً — يرى أرقام أي كادر/طبيب في أي وقت'
+                    : 'غير موثوق — الأرقام حسب قاعدة السداد والإنهاء'}
                 </span>
               </span>
             </DropdownMenuItem>
@@ -494,6 +538,60 @@ export function UserActionsMenu({
             >
               <ShieldCheck className="size-4" />
               {accessValue ? 'فتح الإذن' : 'سحب الإذن'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* إذن «موثوق جداً» لرؤية بيانات الاتصال — الجولة 36 */}
+      <Dialog open={trustedOpen} onOpenChange={setTrustedOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PhoneCall className={`size-4 ${trustedValue ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+              تصنيف «موثوق جداً» لبيانات الاتصال
+            </DialogTitle>
+            <DialogDescription>
+              يفتح لـ {user.name} رؤية أرقام تواصل أي كادر تمريضي أو طبيب في أي وقت —
+              حتى بعد إنهاء التكليفات.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-xl border bg-secondary/40 p-3">
+              <div>
+                <p className="text-sm font-bold">
+                  {trustedValue ? 'موثوق جداً' : 'غير موثوق'}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {trustedValue
+                    ? 'يرى أرقام التواصل في الدليل والسير وتكليفاته دائماً'
+                    : 'الأرقام تُفتح له أثناء التكليفات السارية المسددة فقط'}
+                </p>
+              </div>
+              <Switch
+                checked={trustedValue}
+                onCheckedChange={(v) => setTrustedValue(v)}
+                disabled={pending}
+                aria-label="تبديل إذن موثوق لبيانات الاتصال"
+              />
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              بعد إنهاء أي تكليف تُخفى بيانات الاتصال من الطرفين تلقائياً — ولا تبقى ظاهرة
+              إلا للإدارة ولمن تصنفه الإدارة «موثوق جداً». الإذن يُفعّل أو يُسحب في أي وقت
+              ويصل صاحب الحساب إشعار بالتغيير فوراً.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTrustedOpen(false)}>
+              إغلاق
+            </Button>
+            <Button
+              onClick={() => trustedMutation(trustedValue)}
+              disabled={pending || trustedValue === (user.trustedContactViewer ?? false)}
+              className="gap-2"
+            >
+              <PhoneCall className="size-4" />
+              {trustedValue ? 'تصنيف موثوق جداً' : 'سحب التصنيف'}
             </Button>
           </DialogFooter>
         </DialogContent>

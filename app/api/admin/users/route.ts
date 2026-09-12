@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
           // نِسَب الحصة والأذونات — للمستلمين ومشرفي الأطباء (الجولة 32)
           commissionPercent: true,
           fullProfileAccess: true,
+          trustedContactViewer: true,
           createdAt: true,
           // جهة الكادر الأولى (إذا أضافه مستلم إداري لجهته) — تُعرض في قائمة الكادر
           affiliations: {

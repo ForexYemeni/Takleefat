@@ -43,7 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Eye, EyeOff, Hospital, Percent, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Hospital, Percent, PhoneCall, ShieldCheck } from 'lucide-react'
 
 interface ReceiverUser {
   id: string
@@ -54,6 +54,7 @@ interface ReceiverUser {
   hospitalName: string | null
   commissionPercent: number | null
   fullProfileAccess: boolean
+  trustedContactViewer: boolean
   createdAt: string
   _count: { documents: number; assignments: number }
 }
@@ -206,6 +207,15 @@ export default function AdminReceiversPage() {
                           >
                             <ShieldCheck className="size-3" />
                             أذونات كاملة
+                          </Badge>
+                        )}
+                        {user.trustedContactViewer && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-teal-500/40 bg-teal-50 text-teal-700 dark:border-teal-500/40 dark:bg-teal-950/40 dark:text-teal-300"
+                          >
+                            <PhoneCall className="size-3" />
+                            موثوق جداً
                           </Badge>
                         )}
                       </div>

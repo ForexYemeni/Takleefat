@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
 import {
+  isTrustedViewer,
   receiverPhoneForStaff,
   revealedReceiverIds,
 } from '@/lib/phone-privacy'
@@ -57,10 +58,13 @@ export async function GET() {
       }
     })
 
-    // الجولة 35: فتح تبادلي — المستلمون الذين لهم تكليف مسدّد مع الكادر الحالي
+    // الجولة 35: فتح تبادلي — المستلمون الذين لهم تكليف سارٍ مسدد مع الكادر الحالي
+    // الجولة 36: الإنهاء يُغلق — و«الموثوق جداً» يرى كل الأرقام
+    const trusted = await isTrustedViewer(session.user.id)
     const revealedReceivers = await revealedReceiverIds(
       session.user.id,
-      applications.map((app) => app.post.receiver.id)
+      applications.map((app) => app.post.receiver.id),
+      trusted
     )
 
     return NextResponse.json({
@@ -72,7 +76,8 @@ export async function GET() {
             ...app.post.receiver,
             ...receiverPhoneForStaff(
               app.post.receiver.phone,
-              revealedReceivers.has(app.post.receiver.id)
+              revealedReceivers.has(app.post.receiver.id),
+              trusted
             ),
           },
         },

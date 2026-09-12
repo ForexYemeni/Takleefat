@@ -4,7 +4,7 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { favoriteSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
 import { findMatchingNurses } from '@/lib/network'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * المفضلة الخاصة بصاحب التكليف — واعية بالجمهور (منظومة الأطباء):
@@ -71,17 +71,20 @@ export async function GET(req: NextRequest) {
     ])
     const meta = new Map(favorites.map((f) => [f.nurseId, f]))
 
-    // الجولة 34: قناع أرقام المفضلة — يُفتح بتكليف مسدد النسبة بين الطرفين
+    // الجولة 34: قناع أرقام المفضلة — يُفتح بتكليف سارٍ مسدد النسبة بين الطرفين
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام
+    const trusted = await isTrustedViewer(session.user.id)
     const revealed = await revealedStaffIds(
       session.user.id,
-      matched.map((n) => n.id)
+      matched.map((n) => n.id),
+      trusted
     )
 
     return NextResponse.json({
       fullProfileAccess: me?.fullProfileAccess ?? false,
       favorites: matched.map((n) => ({
         ...n,
-        ...phoneView(session.user.role, n.phone, revealed.has(n.id)),
+        ...phoneView(session.user.role, n.phone, revealed.has(n.id), trusted),
         category: meta.get(n.id)?.category ?? null,
         note: meta.get(n.id)?.note ?? null,
         favoritedAt: meta.get(n.id)?.createdAt ?? null,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * GET /api/workforce/[id] — السيرة الذاتية الكاملة لكادر تمريضي أو طبيب — الجولة 32
@@ -128,8 +128,10 @@ export async function GET(
     if (!user) return jsonError('الحساب غير موجود', 404)
 
     // الجولة 34: فتح رقم التواصل حسب قاعدة السداد — الإدارة ترى دائماً
+    // الجولة 36: «الموثوق جداً» يرى الرقم دائماً حتى بعد إنهاء التكليفات
+    const trusted = await isTrustedViewer(session.user.id)
     let revealed = true
-    if (session.user.role !== 'ADMIN') {
+    if (session.user.role !== 'ADMIN' && !trusted) {
       const paid = await revealedStaffIds(session.user.id, [user.id])
       revealed = paid.has(user.id)
     }
@@ -137,7 +139,7 @@ export async function GET(
     return NextResponse.json({
       profile: {
         ...user,
-        ...phoneView(session.user.role, user.phone, revealed),
+        ...phoneView(session.user.role, user.phone, revealed, trusted),
         workDepartments: user.workDepartments.map((w) => w.department.name),
         workSpecialties: user.workSpecialties.map((w) => w.specialty.name),
         assignmentsCount,

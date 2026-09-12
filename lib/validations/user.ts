@@ -183,6 +183,11 @@ export const fullProfileAccessSchema = z.object({
   fullProfileAccess: z.boolean({ error: 'قيمة الإذن غير صحيحة' }),
 })
 
+/** فتح/إغلاق إذن «موثوق جداً» لرؤية بيانات الاتصال — من حساب الإدارة (الجولة 36) */
+export const trustedContactViewerSchema = z.object({
+  trustedContactViewer: z.boolean({ error: 'قيمة الإذن غير صحيحة' }),
+})
+
 export type CommissionPercentInput = z.infer<typeof commissionPercentSchema>
 export type FullProfileAccessInput = z.infer<typeof fullProfileAccessSchema>
 

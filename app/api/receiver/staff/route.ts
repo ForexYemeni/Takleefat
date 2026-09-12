@@ -6,7 +6,7 @@ import { receiverCreateNurseSchema, createDoctorSchema } from '@/lib/validations
 import { notify } from '@/lib/notifications'
 import { resolveReceiverOrg, AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations } from '@/lib/network'
 import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * POST /api/receiver/staff — إضافة كادر/طبيب
@@ -209,10 +209,13 @@ export async function GET() {
     ])
     const favoriteSet = new Set(favorites.map((f) => f.nurseId))
 
-    // الجولة 34: أرقام الكوادر/الأطباء مخفية — تُفتح فقط بتكليف مسدد النسبة بين الطرفين
+    // الجولة 34: أرقام الكوادر/الأطباء مخفية — تُفتح فقط بتكليف سارٍ مسدد النسبة بين الطرفين
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام دون استثناء
+    const trusted = await isTrustedViewer(session.user.id)
     const revealed = await revealedStaffIds(
       session.user.id,
-      affiliations.map((a) => a.nurse.id)
+      affiliations.map((a) => a.nurse.id),
+      trusted
     )
 
     return NextResponse.json({
@@ -228,7 +231,7 @@ export async function GET() {
         isFavorite: favoriteSet.has(a.nurse.id),
         nurse: {
           ...a.nurse,
-          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
         },
       })),
     })

@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings } from '@/lib/settings'
-import { isAssignmentPhoneOpen, phoneView } from '@/lib/phone-privacy'
+import {
+  isAssignmentPhoneOpen,
+  isTrustedViewer,
+  phoneView,
+} from '@/lib/phone-privacy'
 
 /**
  * GET /api/me/assignments
@@ -15,6 +19,10 @@ import { isAssignmentPhoneOpen, phoneView } from '@/lib/phone-privacy'
  *  - الكادر/الطبيب: رقم المستلم الإداري مقفل بنفس القاعدة تماماً — يُفتح
  *    بعد تأكيد الإدارة للسداد قبل إنهاء التكليف ليتمكن من التواصل والذهاب
  *    لموقع التكليف.
+ * الجولة 36 — الإنهاء يُغلق + الموثوقون جداً:
+ *  - الفتح أثناء سير التكليف المسدد فقط (RECEIVED/ACTIVE) — الإنهاء (COMPLETED)
+ *    يُخفي بيانات الاتصال تلقائياً من الطرفين.
+ *  - الإدارة دائماً — ومن مُنح إذن «موثوق جداً» من حساب الإدارة يرى كل الأرقام.
  */
 export async function GET() {
   try {
@@ -22,6 +30,7 @@ export async function GET() {
     // الكادر والطبيب يرَون تكليفاتهم كطرف منفّذ — المستلم والمشرف كطرف مسانِد
     const isWorker =
       session.user.role === 'NURSE' || session.user.role === 'DOCTOR'
+    const trusted = await isTrustedViewer(session.user.id)
 
     const [assignments, settings] = await Promise.all([
       db.assignment.findMany({
@@ -50,15 +59,16 @@ export async function GET() {
         ...phoneView(
           session.user.role,
           a.nurse.phone,
-          isAssignmentPhoneOpen(a)
+          isAssignmentPhoneOpen(a),
+          trusted
         ),
       },
       receiver: {
         ...a.receiver,
-        // الجولة 35 — القفل التبادلي: الكادر يرى رقم المستلم فقط بعد
-        // تأكيد الإدارة سداد نسبة هذا التكليف — أما المستلم فيرى رقم نفسه عادي
+        // القفل التبادلي + الإنهاء يُغلق: الكادر يرى رقم المستلم أثناء سير
+        // التكليف المسدد فقط — أما المستلم فيرى رقم نفسه عادي دائماً
         ...(isWorker
-          ? phoneView(session.user.role, a.receiver.phone, isAssignmentPhoneOpen(a))
+          ? phoneView(session.user.role, a.receiver.phone, isAssignmentPhoneOpen(a), trusted)
           : { phone: a.receiver.phone, phoneMasked: a.receiver.phone, phoneLocked: false }),
       },
     }))

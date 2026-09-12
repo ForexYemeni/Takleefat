@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { findMatchingNurses, MATCH_PRIORITY_LABELS, resolveReceiverOrg } from '@/lib/network'
-import { phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
 /**
  * البحث المتقدم عن الكوادر والأطباء + المطابقة الذكية | Smart Matching
@@ -52,17 +52,20 @@ export async function GET(req: NextRequest) {
       priorityLabel: MATCH_PRIORITY_LABELS[n.priority] ?? MATCH_PRIORITY_LABELS[0],
     }))
 
-    // الجولة 34: قناع أرقام الكوادر — يُفتح بتكليف مسدد النسبة بين الطرفين
+    // الجولة 34: قناع أرقام الكوادر — يُفتح بتكليف سارٍ مسدد النسبة بين الطرفين
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام
+    const trusted = await isTrustedViewer(session.user.id)
     const revealed =
       session.user.role === 'ADMIN'
         ? new Set<string>()
         : await revealedStaffIds(
             session.user.id,
-            matched.map((n) => n.id)
+            matched.map((n) => n.id),
+            trusted
           )
     const masked = enriched.map((n) => ({
       ...n,
-      ...phoneView(session.user.role, n.phone, revealed.has(n.id)),
+      ...phoneView(session.user.role, n.phone, revealed.has(n.id), trusted),
     }))
 
     // ملخص توزيع الأولويات (لواجهة اختيار الكوادر)

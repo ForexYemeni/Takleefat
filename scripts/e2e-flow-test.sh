@@ -2379,7 +2379,7 @@ check "تمهيد: الإدارة تمنح المستلم إذن السيرة ا
 OPEN_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-rows=[a for a in d if a['paymentStatus']=='PAID' and a['status']!='CANCELLED']
+rows=[a for a in d if a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')]
 print(rows[0]['nurse']['id'] if rows else '')" 2>/dev/null)
 
 [ -n "$OPEN_ID" ] && check "يوجد كادر بتكليف مسدد مع المستلم (سياق الفحص)" "id" "id" || check "يوجد كادر بتكليف مسدد مع المستلم (سياق مطلوب)" "id" "null"
@@ -2442,24 +2442,24 @@ check "الإدارة ترى الرقم الكامل في السيرة حتى ب
 R34_MEASSIGN=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')) for a in d)
 print('ok' if d and ok else 'bad')" 2>/dev/null)
-check "تكليفات المستلم: الرقم مفتوح حصراً في التكليفات المسددة (مرتبط بكل تكليف على حدة)" "ok" "$R34_MEASSIGN"
+check "تكليفات المستلم: الرقم مفتوح حصراً في التكليفات السارية المسددة (الإنهاء يُغلق — الجولة 36)" "ok" "$R34_MEASSIGN"
 
 # (6) الجولة 35 — القفل التبادلي: رقم المستلم يُفتح للكادر حصراً بتكليف مسدد أكده الإدارة
 R35_NURSE_CONS=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-ok=all((a['receiver']['phone'] is not None and a['receiver']['phoneLocked'] is False)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+ok=all((a['receiver']['phone'] is not None and a['receiver']['phoneLocked'] is False)==(a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')) for a in d)
 print('ok' if d and ok else 'bad')" 2>/dev/null)
-check "الكادر: رقم المستلم مفتوح حصراً في التكليفات المسددة (القفل التبادلي — الجولة 35)" "ok" "$R35_NURSE_CONS"
+check "الكادر: رقم المستلم مفتوح حصراً أثناء سير التكليفات المسددة (القفل التبادلي + الإنهاء يُغلق)" "ok" "$R35_NURSE_CONS"
 
 curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_assign.json" 2>/dev/null
 curl -s -b "$DIR/nurse.jar" $BASE/api/me/applications -o "$DIR/r35_apps.json" 2>/dev/null
 R35_NURSE_APPS=$(python3 -c "
 import json
 asg=json.load(open('$DIR/r35_assign.json'))['assignments']
-paid_receivers={a['receiver']['id'] for a in asg if a['paymentStatus']=='PAID' and a['status']!='CANCELLED'}
+paid_receivers={a['receiver']['id'] for a in asg if a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')}
 apps=json.load(open('$DIR/r35_apps.json'))['applications']
 ok=all((a['post']['receiver']['phone'] is not None)==(a['post']['receiver']['id'] in paid_receivers) for a in apps)
 print('ok' if apps and ok else 'bad')" 2>/dev/null)
@@ -2545,15 +2545,28 @@ print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/de
 check "رقم الطبيب مقفل للمشرف (جمهوره الأطباء — لا تكليف مسدد بينهما)" "ok" "$R34_DOC_DOCNUM"
 
 echo ""
-echo "=========== 44) الجولة 35 — القفل التبادلي: بيانات الاتصال للطرفين بعد تأكيد السداد ==========="
+echo "=========== 44) الجولة 35/36 — القفل التبادلي أثناء سير التكليف: بيانات الاتصال بعد تأكيد السداد ==========="
 # بعد دفع الكادر للإدارة وتأكيد الدفع من حساب الإدارة، تظهر بيانات الاتصال
-# للمستلم الإداري والكادر التمريضي/الطبيب (ومشرف الأطباء) قبل إنهاء التكليف
+# للمستلم الإداري والكادر التمريضي/الطبيب (ومشرف الأطباء) أثناء سير التكليف —
+# وتُغلق تلقائياً بعد إنهائه (يُختبر في القسم 45)
 
-# مصدر الحقيقة: أول تكليف مسدد غير ملغى للكادر الحالي
+# إعداد تكليف سارٍ جديد خاص بهذا القسم (تقديم → اعتماد → سداد)
+P36=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"قفل تبادلي 44\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":30000}")
+P36_ID=$(echo "$P36" | jget "['post']['id']")
+APPLY44=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P36_ID/apply -H "Content-Type: application/json" -d '{}')
+check "تقديم الكادر على تكليف القسم 44 → 201" "201" "$APPLY44"
+APP44_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P36_ID/applications | jget "['applications'][0]['applicationId']")
+N36_ASSIGN=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP44_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' | jget "['assignment']['id']")
+PAY44=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N36_ASSIGN -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "الإدارة تؤكد سداد تكليف القسم 44 → 200" "200" "$PAY44"
+
+# مصدر الحقيقة: أول تكليف سارٍ مسدد غير منتهٍ للكادر الحالي
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_assign.json" 2>/dev/null
 N35_PAID_ROW=$(python3 -c "
 import json
 d=json.load(open('$DIR/r35_assign.json'))['assignments']
-rows=[a for a in d if a['paymentStatus']=='PAID' and a['status']!='CANCELLED']
+rows=[a for a in d if a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')]
 print(rows[0]['id']+'|'+rows[0]['receiver']['id'] if rows else '')" 2>/dev/null)
 N35_AID=$(echo "$N35_PAID_ROW" | cut -d'|' -f1)
 N35_RCVID=$(echo "$N35_PAID_ROW" | cut -d'|' -f2)
@@ -2565,7 +2578,7 @@ import json
 d=json.load(open('$DIR/r35_assign.json'))['assignments']
 rows=[a for a in d if a['id']=='$N35_AID']
 print('ok' if rows and rows[0]['receiver']['phone'] and rows[0]['receiver']['phoneLocked'] is False else 'bad')" 2>/dev/null)
-check "الكادر: رقم المستلم ظهر كاملاً في التكليف المسدد (فتح تبادلي قبل إنهاء التكليف)" "ok" "$N35_OPEN"
+check "الكادر: رقم المستلم ظهر كاملاً في التكليف الساري المسدد (فتح تبادلي أثناء سير التكليف)" "ok" "$N35_OPEN"
 
 # (ب) الرقم الذي يراه الكادر يطابق سجل الإدارة حرفياً
 curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users/$N35_RCVID" -o "$DIR/r35_rcv_admin.json" 2>/dev/null
@@ -2604,7 +2617,7 @@ check "بعد إعادة التأكيد: رقم المستلم انفتح مجد
 N35_RCV_CONS=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')) for a in d)
 print('ok' if d and ok else 'bad')" 2>/dev/null)
 check "المستلم: قاعدة فتح رقم الكادر سليمة بعد اختبار التبديل (التبادلية مكتملة)" "ok" "$N35_RCV_CONS"
 
@@ -2612,15 +2625,127 @@ check "المستلم: قاعدة فتح رقم الكادر سليمة بعد �
 N35_SUP_CONS=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status']!='CANCELLED') for a in d)
+ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['status'] not in ('CANCELLED','COMPLETED')) for a in d)
 print('ok' if not d or ok else 'bad')" 2>/dev/null)
-check "مشرف الأطباء: فتح رقم الطبيب حصراً بالتكليف المسدد (نفس القاعدة التبادلية)" "ok" "$N35_SUP_CONS"
+check "مشرف الأطباء: فتح رقم الطبيب حصراً أثناء سير التكليف المسدد (نفس القاعدة التبادلية)" "ok" "$N35_SUP_CONS"
 
 # (و) الواجهة: صفحتا الكادر (تمريضي/طبيب) تعرضان شريحة تواصل المستلم — قناع+قفل قبل السداد، اتصال وواتساب بعده
 N35_UI_N=$(grep -c 'StaffPhone data=' app/nurse/assignments/page.tsx)
 check "صفحة تكليفات التمريضي تعرض تواصل المستلم في التكليف والتقديم (StaffPhone)" "2" "$N35_UI_N"
 N35_UI_D=$(grep -c 'StaffPhone data=' app/doctor/assignments/page.tsx)
 check "صفحة تكليفات الطبيب تعرض تواصل المستلم في التكليف والتقديم (StaffPhone)" "2" "$N35_UI_D"
+
+echo ""
+echo "=========== 45) الجولة 36 — الإنهاء يُغلق بيانات الاتصال تلقائياً + الموثوقون جداً ==========="
+# بعد إنهاء التكليف من حساب المستلم/الكادر تُخفى بيانات الاتصال تلقائياً
+# من تقديماتي وتكليفاتي المؤكدة لدى الطرفين — ولا تبقى ظاهرة إلا للإدارة
+# ولمن تصنفه الإدارة «موثوقاً جداً» (trustedContactViewer)
+
+# (أ) إنهاء تكليف القسم 44 الساري المسدد من حساب المستلم (مع الدفع والتقييم)
+R36_DONE=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$N35_AID/receiver-complete -H "Content-Type: application/json" \
+  -d '{"nursePaid":true,"rating":{"overall":5}}')
+check "المستلم ينهي التكليف الساري المسدد (مع الدفع والتقييم) → 200" "200" "$R36_DONE"
+
+# (ب) الكادر: رقم المستلم اختفى تلقائياً من تكليفاته المؤكدة بعد الإنهاء
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r36_n_after.json" 2>/dev/null
+R36_N_LOCK=$(python3 -c "
+import json
+d=json.load(open('$DIR/r36_n_after.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['status']=='COMPLETED' and rows[0]['receiver']['phone'] is None and rows[0]['receiver']['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "بعد الإنهاء: رقم المستلم اختفى تلقائياً من تكليفات الكادر المؤكدة (قناع+قفل)" "ok" "$R36_N_LOCK"
+
+# (ج) الكادر: رقم المستلم مقفل في تقديماته أيضاً (لا تكليف سارٍ بينهما الآن)
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/applications -o "$DIR/r36_n_apps.json" 2>/dev/null
+R36_N_APPS=$(python3 -c "
+import json
+d=json.load(open('$DIR/r36_n_apps.json'))['applications']
+rows=[a for a in d if a['post']['receiver']['id']=='$N35_RCVID']
+print('ok' if rows and all(a['post']['receiver']['phone'] is None and a['post']['receiver']['phoneLocked'] is True for a in rows) else 'bad')" 2>/dev/null)
+check "بعد الإنهاء: رقم المستلم مقفل في تقديمات الكادر أيضاً (لا تكليف سارٍ)" "ok" "$R36_N_APPS"
+
+# (د) المستلم: رقم الكادر اختفى تلقائياً من تكليفاته المؤكدة بعد الإنهاء
+curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments -o "$DIR/r36_r_after.json" 2>/dev/null
+R36_R_LOCK=$(python3 -c "
+import json
+d=json.load(open('$DIR/r36_r_after.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['nurse']['phone'] is None and rows[0]['nurse']['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "بعد الإنهاء: رقم الكادر اختفى تلقائياً من تكليفات المستلم المؤكدة" "ok" "$R36_R_LOCK"
+
+# (هـ) المستلم: سيرة الكادر في الدليل أصبحت مقفلة بعد الإنهاء
+R36_NURSE_ID=$(python3 -c "
+import json
+d=json.load(open('$DIR/r36_r_after.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print(rows[0]['nurse']['id'] if rows else '')" 2>/dev/null)
+R36_CV=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$R36_NURSE_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "بعد الإنهاء: سيرة الكادر في الدليل مقفلة للمستلم (غير الموثوق)" "ok" "$R36_CV"
+
+# (و) الإدارة تصنف المستلم «موثوقاً جداً» → يرى بيانات اتصال أي كادر
+R36_GRANT=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N35_RCVID -H "Content-Type: application/json" -d '{"trustedContactViewer":true}')
+check "الإدارة تمنح المستلم إذن «موثوق جداً» لبيانات الاتصال → 200" "200" "$R36_GRANT"
+
+R36_T_CV=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$R36_NURSE_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] and not p['phoneLocked'] else 'bad')" 2>/dev/null)
+check "الموثوق جداً: سيرة الكادر مفتوحة الرقم للمستلم رغم إنهاء التكليف" "ok" "$R36_T_CV"
+
+curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments -o "$DIR/r36_r_trusted.json" 2>/dev/null
+R36_T_ASG=$(python3 -c "
+import json
+d=json.load(open('$DIR/r36_r_trusted.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['nurse']['phone'] and not rows[0]['nurse']['phoneLocked'] else 'bad')" 2>/dev/null)
+check "الموثوق جداً: يرى رقم الكادر حتى في التكليف المُنهى من تكليفاته المؤكدة" "ok" "$R36_T_ASG"
+
+# (ز) حماية: لا يمكن منح إذن «موثوق جداً» لكادر تمريضي — للمستلمين والمشرفين فقط
+R36_GUARD=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$R36_NURSE_ID -H "Content-Type: application/json" -d '{"trustedContactViewer":true}')
+check "رفض منح إذن «موثوق جداً» لكادر تمريضي → 422" "422" "$R36_GUARD"
+
+# (ح) سحب الإذن → عاد القفل فوراً (بلا إعادة تسجيل دخول)
+R36_REVOKE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N35_RCVID -H "Content-Type: application/json" -d '{"trustedContactViewer":false}')
+check "الإدارة تسحب إذن «موثوق جداً» من المستلم → 200" "200" "$R36_REVOKE"
+R36_REV_CV=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/workforce/$R36_NURSE_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "بعد السحب: عادت سيرة الكادر مقفلة للمستلم فوراً (السحب فوري)" "ok" "$R36_REV_CV"
+
+# (ط) مشرف الأطباء: التصنيف يفتح له أرقام الأطباء في أي وقت
+R36_SUP_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=DOCTOR_SUPERVISOR&search=791110901" | python3 -c "
+import json,sys
+us=json.load(sys.stdin)['users']
+n=[u for u in us if u['phone']=='791110901']
+print(n[0]['id'] if n else '')" 2>/dev/null)
+R36_SUP_GRANT=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$R36_SUP_ID -H "Content-Type: application/json" -d '{"trustedContactViewer":true}')
+check "الإدارة تمنح مشرف الأطباء إذن «موثوق جداً» → 200" "200" "$R36_SUP_GRANT"
+R36_SUP_CV=$(curl -s -b "$DIR/supervisor.jar" "$BASE/api/workforce/$R34_DOC_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] and not p['phoneLocked'] else 'bad')" 2>/dev/null)
+check "الموثوق جداً: رقم الطبيب مفتوح للمشرف رغم لا تكليف بينهما (نطاق أطبائه)" "ok" "$R36_SUP_CV"
+R36_SUP_REVOKE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$R36_SUP_ID -H "Content-Type: application/json" -d '{"trustedContactViewer":false}')
+check "الإدارة تسحب إذن المشرف → 200" "200" "$R36_SUP_REVOKE"
+R36_SUP_LOCK2=$(curl -s -b "$DIR/supervisor.jar" "$BASE/api/workforce/$R34_DOC_ID" | python3 -c "
+import json,sys
+p=json.load(sys.stdin)['profile']
+print('ok' if p['phone'] is None and p['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "بعد سحب إذن المشرف: رقم الطبيب عاد مقفلاً فوراً" "ok" "$R36_SUP_LOCK2"
+
+# (ي) الواجهة والخادم: شرط الإنهاء في شريحة التواصل + إذن الموثوق في مسار الإدارة
+R36_UI_CHIP=$(grep -c "assignmentStatus !== 'COMPLETED'" components/shared/staff-phone.tsx)
+check "شريحة التواصل في الواجهات تُغلق بعد إنهاء التكليف (شرط COMPLETED)" "1" "$R36_UI_CHIP"
+R36_UI_BADGE=$(grep -c 'موثوق جداً' app/admin/receivers/page.tsx)
+check "صفحة المستلمين في الإدارة تعرض شارة «موثوق جداً»" "1" "$R36_UI_BADGE"
+R36_API=$(grep -c "trustedContactViewer" "app/api/admin/users/[id]/route.ts")
+check "مسار الإدارة يتعامل مع إذن trustedContactViewer (منح/سحب/حماية)" "10" "$R36_API"
+R36_SCHEMA=$(grep -c "trustedContactViewer" prisma/schema.prisma)
+check "مخطط قاعدة البيانات يحوي حق trustedContactViewer" "1" "$R36_SCHEMA"
 
 echo ""
 echo "==========================================="

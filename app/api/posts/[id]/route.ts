@@ -4,7 +4,7 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { updatePostSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
 import { canNurseSeePost, escalateDueProgressivePosts, progressiveAudienceIds, DISTRIBUTION_LABELS } from '@/lib/network'
-import { isAssignmentPhoneOpen, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { isAssignmentPhoneOpen, isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 import type { Gender } from '@prisma/client'
 
 /**
@@ -85,24 +85,27 @@ export async function GET(
     }
 
     // الجولة 34: قناع الأرقام لوجهة المالك — المتقدمون بلا تكليف فأرقامهم مقفلة،
-    // والكادر المُسند يُفتح رقم صاحبه في التكليف المسدد فقط
+    // والكادر المُسند يُفتح رقم صاحبه في التكليف الساري المسدد فقط
+    // الجولة 36: «الموثوق جداً» يرى كل الأرقام — والإنهاء يُغلق
     if (session.user.role !== 'ADMIN') {
+      const trusted = await isTrustedViewer(session.user.id)
       const revealed = await revealedStaffIds(
         session.user.id,
-        post.applications.map((a) => a.nurse.id)
+        post.applications.map((a) => a.nurse.id),
+        trusted
       )
       const maskedApplications = post.applications.map((a) => ({
         ...a,
         nurse: {
           ...a.nurse,
-          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id)),
+          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
         },
       }))
       const maskedAssignments = post.assignments.map((a) => ({
         ...a,
         nurse: {
           ...a.nurse,
-          ...phoneView(session.user.role, a.nurse.phone, isAssignmentPhoneOpen(a)),
+          ...phoneView(session.user.role, a.nurse.phone, isAssignmentPhoneOpen(a), trusted),
         },
       }))
       return NextResponse.json({

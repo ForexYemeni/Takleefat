@@ -22,13 +22,13 @@ import { db } from '@/lib/db'
 
 /** التلميح المعروض في الواجهات عند القفل */
 export const PHONE_LOCKED_HINT =
-  'يُفتح رقم التواصل تلقائياً بعد سداد نسبة الإدارة من التكليف'
+  'يُفتح رقم التواصل بعد سداد نسبة الإدارة أثناء سير التكليف، ويُغلق تلقائياً بعد إنهائه'
 
 /** خطوات الفتح المختصرة — تظهر في السيرة الذاتية والدليل */
 export const PHONE_UNLOCK_STEPS = [
   'اعتمد تكليفاً فعلياً مع الكادر',
-  'سدد نسبة الإدارة من قيمة التكليف',
-  'يُفتح الرقم تلقائياً ويبقى متاحاً لهذا التكليف',
+  'سدد نسبة الإدارة وتؤكدها الإدارة',
+  'يُفتح الرقم أثناء سير التكليف ويُغلق تلقائياً بعد إنهائه',
 ]
 
 /**
@@ -41,12 +41,32 @@ export function maskPhone(phone: string | null | undefined): string {
   return `${digits.slice(0, 3)} ••• •• ${digits.slice(-2)}`
 }
 
-/** هل فُتح رقم الكادر في تكليف معين؟ (سُددت نسبة الإدارة ولم يُلغَ التكليف) */
+/** هل فُتح رقم التواصل في تكليف معين؟ (الجولة 36: مسدد + ساري التقدم — الإنهاء أو الإلغاء يُغلقه) */
 export function isAssignmentPhoneOpen(a: {
   paymentStatus: PaymentStatus | string
   status: AssignmentStatus | string
 }): boolean {
-  return a.paymentStatus === 'PAID' && a.status !== 'CANCELLED'
+  return a.paymentStatus === 'PAID' && a.status !== 'CANCELLED' && a.status !== 'COMPLETED'
+}
+
+/**
+ * هل هذا المشاهد «موثوق جداً» لرؤية بيانات الاتصال؟ (الجولة 36)
+ *  - الإدارة: دائماً (الجهة الموثوقة الأعلى)
+ *  - مستلم إداري/مشرف أطباء مُنح إذن trustedContactViewer من حساب الإدارة: نعم
+ *  - غير ذلك: لا — يُقرأ من قاعدة البيانات مباشرة ليكون المنح/السحب فورياً
+ */
+export async function isTrustedViewer(userId: string): Promise<boolean> {
+  if (!userId) return false
+  const u = await db.user.findUnique({
+    where: { id: userId },
+    select: { role: true, trustedContactViewer: true },
+  })
+  if (!u) return false
+  if (u.role === 'ADMIN') return true
+  return (
+    u.trustedContactViewer === true &&
+    (u.role === 'RECEIVER' || u.role === 'DOCTOR_SUPERVISOR')
+  )
 }
 
 /**
@@ -55,16 +75,19 @@ export function isAssignmentPhoneOpen(a: {
  */
 export async function revealedStaffIds(
   viewerId: string,
-  staffIds: string[]
+  staffIds: string[],
+  trusted = false
 ): Promise<Set<string>> {
   const ids = staffIds.filter(Boolean)
   if (ids.length === 0) return new Set()
+  // الموثوق جداً (الجولة 36) يرى كل الأرقام دون استعلام
+  if (trusted) return new Set(ids)
   const rows = await db.assignment.findMany({
     where: {
       receiverId: viewerId,
       nurseId: { in: ids },
       paymentStatus: 'PAID',
-      status: { not: 'CANCELLED' },
+      status: { in: ['RECEIVED', 'ACTIVE'] },
     },
     select: { nurseId: true },
     distinct: ['nurseId'],
@@ -81,10 +104,11 @@ export async function revealedStaffIds(
 export function phoneView(
   viewerRole: string,
   phone: string | null | undefined,
-  revealed: boolean
+  revealed: boolean,
+  trusted = false
 ): { phone: string | null; phoneMasked: string; phoneLocked: boolean } {
   const masked = maskPhone(phone)
-  if (viewerRole === 'ADMIN') {
+  if (viewerRole === 'ADMIN' || trusted) {
     return { phone: phone ?? null, phoneMasked: masked, phoneLocked: false }
   }
   return revealed
@@ -99,16 +123,19 @@ export function phoneView(
  */
 export async function revealedReceiverIds(
   workerId: string,
-  receiverIds: string[]
+  receiverIds: string[],
+  trusted = false
 ): Promise<Set<string>> {
   const ids = receiverIds.filter(Boolean)
   if (ids.length === 0) return new Set()
+  // الموثوق جداً (الجولة 36) يرى كل الأرقام دون استعلام
+  if (trusted) return new Set(ids)
   const rows = await db.assignment.findMany({
     where: {
       nurseId: workerId,
       receiverId: { in: ids },
       paymentStatus: 'PAID',
-      status: { not: 'CANCELLED' },
+      status: { in: ['RECEIVED', 'ACTIVE'] },
     },
     select: { receiverId: true },
     distinct: ['receiverId'],
@@ -121,6 +148,10 @@ export async function revealedReceiverIds(
  *  - مفتوح (تكليف مشترك مسدد النسبة أكده الإدارة): الرقم الكامل
  *  - مقفل (لا تكليف مسدد بينهما بعد): القناع فقط — لا يُرسل الرقم الكامل إطلاقاً
  */
-export function receiverPhoneForStaff(phone: string | null | undefined, revealed: boolean) {
-  return phoneView('NURSE', phone, revealed)
+export function receiverPhoneForStaff(
+  phone: string | null | undefined,
+  revealed: boolean,
+  trusted = false
+) {
+  return phoneView('NURSE', phone, revealed, trusted)
 }
