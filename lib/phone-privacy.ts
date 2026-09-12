@@ -90,6 +90,23 @@ export function isAssignmentContactOpen(
 }
 
 /**
+ * هل هذا التكليف «بلا أي رسوم وسارٍ»؟ — الجولة 45:
+ * الشرط الوحيد لفتح بيانات اتصال الطرف المساند (المستلم/المشرف) للكادر —
+ * بينما رقم الكادر نفسه يفتح للمساند بسداد النسبة أو بالكلفة الصفرية —
+ * قاعدة اتجاهين مختلفتين تُحفظ كل على حدة (الجولات 34/38/45).
+ */
+export function isAssignmentFeelessActive(
+  a: {
+    status: AssignmentStatus | string
+    adminFee?: number | null
+  },
+  applicationFee = 0
+): boolean {
+  const active = a.status === 'RECEIVED' || a.status === 'ACTIVE'
+  return active && (a.adminFee ?? 0) === 0 && applicationFee === 0
+}
+
+/**
  * هل هذا المشاهد «موثوق جداً» لرؤية بيانات الاتصال؟ (الجولة 36)
  *  - الإدارة: دائماً (الجهة الموثوقة الأعلى)
  *  - مستلم إداري/مشرف أطباء مُنح إذن trustedContactViewer من حساب الإدارة: نعم

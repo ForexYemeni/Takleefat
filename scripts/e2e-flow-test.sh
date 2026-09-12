@@ -3851,7 +3851,7 @@ DOC45A_ID=$(curl -s -b "$DIR/n45a.jar" $BASE/api/me/documents | jget "['document
 curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC45A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
 UP45A3=$(code -b "$DIR/n45a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
 check "R45: إعادة رفع مستند معتمد من الإدارة ممنوعة → 409" "409" "$UP45A3"
-curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC45A_ID -H "Content-Type: application/json" -d '{"status":"REJECTED"}' > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC45A_ID -H "Content-Type: application/json" -d '{"status":"REJECTED","reviewNote":"صورة غير واضحة — أعد الرفع"}' > /dev/null
 UP45A4=$(code -b "$DIR/n45a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
 check "R45: بعد رفض الإدارة يُسمح بإعادة الرفع حصراً → 201" "201" "$UP45A4"
 LOCK45=$(grep -c "معتمد — مقفل\|canReupload" components/shared/document-upload-wizard.tsx | awk '{print ($1>=2)?1:0}')
@@ -3949,7 +3949,7 @@ NAME45_ONE=$(code -X POST $BASE/api/auth/register -H "Content-Type: application/
   -d '{"role":"NURSE","name":"أحمد","phone":"744450203","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}')
 check "R45: الخادم يرفض اسماً بلا لقب (كلمة واحدة) → 422" "422" "$NAME45_ONE"
 NAME45_OK=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
-  -d '{"role":"NURSE","name":"قفل الرفع الثاني","phone":"744450204","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}' | jget "['user']['id']")
+  -d '{"role":"NURSE","name":"رفع مقفل","phone":"744450204","password":"R45@Nurse","specialty":"طوارئ","qualification":"أورديلي سنة","yearsOfExperience":2,"gender":"MALE"}' | jget "['user']['id']")
 [ -n "$NAME45_OK" ] && check "R45: الاسم ثنائي الكلمة مسموح → تسجيل ناجح" "ok" "ok" || check "R45: فشل تسجيل الاسم ثنائي الكلمة" "id" "null"
 NAMETWO=$(grep -c "nameWords.length !== 2" "app/(auth)/register/page.tsx" | awk '{print ($1>=1)?1:0}')
 check "R45: عميل التسجيل يقبض اسمين حصراً (لا أكثر ولا أقل)" "1" "$NAMETWO"

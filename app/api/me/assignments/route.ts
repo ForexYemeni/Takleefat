@@ -6,6 +6,7 @@ import { notifyAssignmentStarts } from '@/lib/shift-alerts'
 import { resolveReceiverOrgs } from '@/lib/network'
 import {
   isAssignmentContactOpen,
+  isAssignmentFeelessActive,
   isTrustedViewer,
   phoneView,
   receiverPhoneForStaff,
@@ -128,7 +129,10 @@ export async function GET() {
         ...(isWorker
           ? receiverPhoneForStaff(
               a.receiver.phone,
-              isAssignmentContactOpen(a, applicationFee)
+              // الجولة 45: الاستثناء الوحيد لقفل الجولة 38 — التكليف الساري
+              // بلا أي رسوم (عرض بدون رسوم) حصراً؛ التكليف المسدد برسوم يبقى
+              // مقفلاً عن الكادر كما في الجولة 38 دون أي استثناء
+              isAssignmentFeelessActive(a, applicationFee)
             )
           : { phone: a.receiver.phone, phoneMasked: a.receiver.phone, phoneLocked: false }),
       },
