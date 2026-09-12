@@ -39,7 +39,15 @@ interface MyAssignment {
   department: string | null
   startDate: string
   status: string
+  value: number | null
+  adminFee: number | null
+  paymentStatus: string | null
   receiver: { name: string }
+}
+
+interface PlatformSettingsLite {
+  feeMode: 'APPLICATION' | 'ADMIN'
+  applicationFee: number
 }
 
 interface OpenPost {
@@ -62,7 +70,8 @@ export default function NurseOverviewPage() {
 
   const assignments = useQuery({
     queryKey: ['my-assignments'],
-    queryFn: () => apiFetcher<{ assignments: MyAssignment[] }>('/api/me/assignments'),
+    queryFn: () =>
+      apiFetcher<{ assignments: MyAssignment[]; settings?: PlatformSettingsLite }>('/api/me/assignments'),
   })
 
   // تكليفات مفتوحة قد تناسب الكادر — لبطاقة التكليف أعلى الصفحة
@@ -91,6 +100,16 @@ export default function NurseOverviewPage() {
   const recentAssignments = (assignments.data?.assignments ?? []).slice(0, 5)
   const activeAssignment = (assignments.data?.assignments ?? []).find((a) => a.status === 'ACTIVE')
   const suggestedPost = (openPosts.data?.posts ?? []).find((p) => p.status === 'OPEN')
+
+  // الجولة 37: تكليفات معلّقة لم تُسدّد رسوم الإدارة — تنبيه بارز أعلى نظرة عامة
+  const feeSettings = assignments.data?.settings
+  const feeApplicationFee =
+    feeSettings?.feeMode === 'APPLICATION' ? Math.max(0, feeSettings.applicationFee) : 0
+  const unpaidAssignments = (assignments.data?.assignments ?? []).filter(
+    (a) => a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
+  )
+  const firstUnpaid = unpaidAssignments[0]
+  const firstUnpaidDue = (firstUnpaid?.adminFee ?? 0) + feeApplicationFee
 
   const cards = [
     {
@@ -128,6 +147,31 @@ export default function NurseOverviewPage() {
           مرحباً {session?.user?.name} — هذه ملخص حسابك في منصة تكليفات
         </p>
       </div>
+
+      {/* تنبيه سداد الرسوم — أعلى أولوية في نظرة عامة (الجولة 37):
+          الضغط عليه يفتح بطاقة السداد مباشرة في تقديماتي (?tab=applications&pay=<id>) */}
+      {firstUnpaid && (
+        <AssignmentAlertCard
+          tone="unpaid"
+          eyebrow="لديك تكليف معلق لم تقم بدفع رسوم الإدارة"
+          title={firstUnpaid.title}
+          subtitle={`${firstUnpaid.facility}${firstUnpaid.department ? ` — ${firstUnpaid.department}` : ''} • الجهة: ${firstUnpaid.receiver.name}`}
+          chips={
+            <>
+              <Badge className="bg-amber-600 text-[11px] text-white hover:bg-amber-600">
+                الواجب سداده: {formatCurrency(firstUnpaidDue)}
+              </Badge>
+              {unpaidAssignments.length > 1 && (
+                <Badge variant="outline" className="text-[11px]">
+                  + {unpaidAssignments.length - 1} تكليف آخر بانتظار السداد
+                </Badge>
+              )}
+            </>
+          }
+          href={`/nurse/assignments?tab=applications&pay=${firstUnpaid.id}`}
+          ctaLabel="سداد الرسوم الآن"
+        />
+      )}
 
       {/* بطاقة وجود تكليف — أعلى النظرة العامة */}
       {activeAssignment ? (

@@ -2749,6 +2749,85 @@ check "مسار الإدارة يتعامل مع إذن trustedContactViewer (م
 R36_SCHEMA=$(grep -c "trustedContactViewer" prisma/schema.prisma)
 check "مخطط قاعدة البيانات يحوي حق trustedContactViewer" "1" "$R36_SCHEMA"
 
+# ============================================================
+# القسم 46 — الجولة 37: بطاقة سداد رسوم الإدارة الاحترافية
+#   بطاقة FeePaymentCard في «تقديماتي» و«تكليفاتي المؤكدة» + تنبيه
+#   «نظرة عامة» أعلى الصفحة + رابط عميق ?tab=applications&pay=<id>
+#   + رفع إثبات الدفع بحالاته الثلاث (بانتظار السداد/التأكيد/المؤكد)
+# ============================================================
+echo "=========== 46) الجولة 37 — بطاقة سداد رسوم الإدارة الاحترافية ==========="
+
+# تأمين السياق: سداد أي تكاليف سابقة غير مسددة للكادر حتى يُسمح بالتقديم في فحوص هذا القسم
+# (الأقسام السابقة انتهت كلها — لا تأثير على فحوصها، وهو نفس نمط تهيئة القسم 43)
+for AID in $(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+rows=[a['id'] for a in d if a['paymentStatus']!='PAID' and a['status']!='CANCELLED']
+print(' '.join(rows))" 2>/dev/null); do
+  code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$AID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}' > /dev/null 2>&1
+done
+
+# تكليف جديد غير مسدد لفحوص البطاقة (تقديم → اعتماد → بلا سداد)
+P37=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"فحوص السداد 37\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":25000}")
+P37_ID=$(echo "$P37" | jget "['post']['id']")
+APPLY37=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P37_ID/apply -H "Content-Type: application/json" -d '{}')
+check "تقديم الكادر على تكليف فحوص بطاقة السداد → 201" "201" "$APPLY37"
+APP37_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P37_ID/applications | jget "['applications'][0]['applicationId']")
+R37_ASSIGN=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP37_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' | jget "['assignment']['id']")
+
+# (1) فحوص حية: بيانات بطاقة السداد من مسار الكادر
+R37_UNPAID=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+rows=[a for a in d if a['id']=='$R37_ASSIGN']
+print('ok' if rows and rows[0]['paymentStatus']=='UNPAID' and rows[0]['status'] not in ('CANCELLED','COMPLETED') and rows[0]['value']==25000 and rows[0]['adminFee']==2500 else 'bad')" 2>/dev/null)
+check "تكليف فحوص السداد غير مسدد وبيانات بطاقة السداد كاملة (قيمة 25000 وحصة 2500 = 10٪)" "ok" "$R37_UNPAID"
+
+# (2) رفع إثبات الدفع من حساب الكادر — الحالة: بانتظار تأكيد الإدارة
+R37_SHOT=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/me/assignments/$R37_ASSIGN/payment-screenshot -F "file=@$DIR/test.png;type=image/png")
+check "رفع لقطة إثبات الدفع من بطاقة السداد → 200" "200" "$R37_SHOT"
+R37_PEND=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+rows=[a for a in d if a['id']=='$R37_ASSIGN']
+print('ok' if rows and rows[0]['paymentScreenshotUrl'] and rows[0]['paymentStatus']=='UNPAID' else 'bad')" 2>/dev/null)
+check "بعد رفع الإثبات: الإثبات ظاهر والدفع ما زال بانتظار تأكيد الإدارة" "ok" "$R37_PEND"
+
+# (3) الإدارة تؤكد الدفع → بطاقة السداد تتحول للحالة المؤكدة ويُفتح التقديم من جديد
+R37_PAY=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$R37_ASSIGN -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "الإدارة تؤكد سداد تكليف بطاقة السداد → 200" "200" "$R37_PAY"
+R37_DONE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['assignments']
+rows=[a for a in d if a['id']=='$R37_ASSIGN']
+print('ok' if rows and rows[0]['paymentStatus']=='PAID' and rows[0]['paymentScreenshotUrl'] else 'bad')" 2>/dev/null)
+check "بعد التأكيد: الحالة مؤكدة والإثبات محفوظ في سجل بطاقة السداد" "ok" "$R37_DONE"
+
+# (4) فحوص ساكنة: بطاقة السداد ومكوّناتها في الواجهات
+R37_COMP=$([ -f components/shared/fee-payment-card.tsx ] && grep -c "PaymentCard\|payment-screenshot\|compressImage\|DocumentViewer" components/shared/fee-payment-card.tsx | awk '{print ($1>=4)?1:0}')
+check "ui: بطاقة السداد FeePaymentCard تجمع (المبلغ الفعلي + طرق الدفع + رفع الإثبات + العارض)" "1" "$R37_COMP"
+R37_NUSE=$(grep -c "FeePaymentCard" app/nurse/assignments/page.tsx | awk '{print ($1>=3)?1:0}')
+check "ui: بطاقة السداد معروضة في صفحة الكادر (قسم تقديماتي + تكليفاتي المؤكدة)" "1" "$R37_NUSE"
+R37_DUSE=$(grep -c "FeePaymentCard" app/doctor/assignments/page.tsx | awk '{print ($1>=3)?1:0}')
+check "ui: بطاقة السداد معروضة في صفحة الطبيب (قسم تقديماتي + تكليفاتي المؤكدة)" "1" "$R37_DUSE"
+R37_SECTION=$(grep -c "تكليفات تنتظر سداد رسوم الإدارة" app/nurse/assignments/page.tsx)
+check "ui: قسم «تكليفات تنتظر سداد رسوم الإدارة» أعلى تقديماتي" "1" "$R37_SECTION"
+
+# (5) تنبيه نظرة عامة أعلى الصفحة الرسمية + الرابط العميق إلى بطاقة السداد
+R37_OV=$(grep -c "tone=\"unpaid\"\|لديك تكليف معلق لم تقم بدفع رسوم الإدارة\|سداد الرسوم الآن\|tab=applications&pay=" app/nurse/page.tsx | awk '{print ($1>=4)?1:0}')
+check "ui: نظرة عامة للكادر تعرض تنبيه التكليف المعلق (نبرة unpaid + المبلغ + سداد الرسوم الآن)" "1" "$R37_OV"
+R37_OVD=$(grep -c "tone=\"unpaid\"\|لديك تكليف معلق لم تقم بدفع رسوم الإدارة\|سداد الرسوم الآن\|tab=applications&pay=" app/doctor/page.tsx | awk '{print ($1>=4)?1:0}')
+check "ui: نظرة عامة للطبيب تعرض تنبيه التكليف المعلق (نبرة unpaid + المبلغ + سداد الرسوم الآن)" "1" "$R37_OVD"
+R37_TONE=$(grep -c "unpaid:" components/shared/assignment-alert-card.tsx)
+check "ui: نبرة unpaid معرّفة في بطاقة التنبيه (أعلى أولوية قبل التكليف الجارٍ)" "1" "$R37_TONE"
+R37_LINK=$(grep -l "useSearchParams" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | wc -l | tr -d ' ')
+check "ui: الرابط العميق (?tab=&pay=) يُقرأ في صفحتي الكادر والطبيب" "2" "$R37_LINK"
+R37_SCROLL=$(grep -l "fee-card-" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | wc -l | tr -d ' ')
+check "ui: الضغط على التنبيه يمرّر سلساً ويُميّز بطاقة السداد المستهدفة في الصفحتين" "2" "$R37_SCROLL"
+R37_CTA=$(grep -l "الانتقال إلى بطاقة السداد" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | wc -l | tr -d ' ')
+check "ui: لافتة التوقف في التكليفات المتاحة فيها زر الانتقال إلى بطاقة السداد" "2" "$R37_CTA"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

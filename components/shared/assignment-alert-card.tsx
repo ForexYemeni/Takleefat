@@ -1,17 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import { BellRing, ClipboardList, Sparkles } from 'lucide-react'
+import { BellRing, ClipboardList, Sparkles, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
  * بطاقة «وجود تكليف» في نظرة عامة (الجولة العاشرة) — تظهر أعلى صفحة
  * نظرة العام لكل من الإدارة والمستلم الإداري والكادر التمريضي بحسب سياقه.
+ * الجولة 37: نبرة unpaid — تكليف معلق لم تُسدَّد رسوم الإدارة (الأعلى أولوية).
  */
 
 export interface AssignmentAlertCardProps {
-  /** active: تكليف جارٍ/بانتظار إجراء — open: تكليف مفتوح متاح — empty: لا يوجد تكليف */
-  tone: 'active' | 'open' | 'empty'
+  /** unpaid: رسوم إدارة غير مسددة — active: تكليف جارٍ — open: تكليف مفتوح — empty: لا يوجد تكليف */
+  tone: 'unpaid' | 'active' | 'open' | 'empty'
   eyebrow: string
   title: string
   subtitle?: string
@@ -22,6 +23,11 @@ export interface AssignmentAlertCardProps {
 }
 
 const TONE_STYLES = {
+  unpaid: {
+    wrap: 'border-s-4 border-s-red-500 bg-gradient-to-bl from-red-50 to-transparent dark:from-red-950/20',
+    icon: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
+    Icon: Wallet,
+  },
   active: {
     wrap: 'border-s-4 border-s-amber-400 bg-gradient-to-bl from-amber-50 to-transparent dark:from-amber-950/20',
     icon: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',

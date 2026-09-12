@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -23,9 +23,9 @@ import {
   Wallet,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { apiFetcher, apiPost } from '@/lib/api-client'
-import { compressImage } from '@/lib/compress-image'
 import {
   formatDate,
   formatDateTime,
@@ -41,6 +41,7 @@ import { PaymentCard } from '@/components/shared/payment-card'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StaffPhone } from '@/components/shared/staff-phone'
+import { FeePaymentCard } from '@/components/shared/fee-payment-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -181,7 +182,28 @@ function feeLabel(settings: PlatformSettings): string {
 const adminFeeLabel = feeLabel
 
 export default function NurseAssignmentsPage() {
-  const [tab, setTab] = useState('available')
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <NurseAssignmentsContent />
+    </Suspense>
+  )
+}
+
+function NurseAssignmentsContent() {
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  // الجولة 37: رابط عميق من تنبيه نظرة عامة — pay=<معرف التكليف> يفتح بطاقة السداد مباشرة
+  const payId = searchParams.get('pay')
+  const [tab, setTab] = useState(() =>
+    tabParam === 'applications' || tabParam === 'confirmed' ? tabParam : 'available'
+  )
+
+  // مزامنة التبويب مع الرابط العميق عند تغيّر المعامل (ضبط الحالة أثناء التصيير — النمط المعتمد)
+  const [seenParam, setSeenParam] = useState(tabParam)
+  if (tabParam !== seenParam) {
+    setSeenParam(tabParam)
+    if (tabParam === 'applications' || tabParam === 'confirmed') setTab(tabParam)
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['open-posts'],
@@ -205,6 +227,17 @@ export default function NurseAssignmentsPage() {
       apiFetcher<{ assignments: MyAssignment[]; settings: PlatformSettings }>('/api/me/assignments'),
   })
 
+  // الجولة 37: تمرير سلس إلى بطاقة السداد عند الوصول برابط عميق (?pay=<id>)
+  useEffect(() => {
+    if (!payId || isLoading || appsLoading || assignmentsLoading) return
+    const t = setTimeout(() => {
+      document
+        .getElementById(`fee-card-${payId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 200)
+    return () => clearTimeout(t)
+  }, [payId, isLoading, appsLoading, assignmentsLoading])
+
   if (isLoading || appsLoading || assignmentsLoading) return <DashboardSkeleton />
 
   const posts = data?.posts ?? []
@@ -213,9 +246,10 @@ export default function NurseAssignmentsPage() {
   const assignments = assignmentsData?.assignments ?? []
 
   // لا تقديم على تكليفات جديدة قبل تأكيد الإدارة دفع رسوم/نسبة الإدارة
-  const hasUnpaidFees = assignments.some(
-    (a) => a.paymentStatus === 'UNPAID' && a.status !== 'CANCELLED'
+  const unpaidAssignments = assignments.filter(
+    (a) => a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
   )
+  const hasUnpaidFees = unpaidAssignments.length > 0
 
   // لا تقديم قبل رفع المستندات — شرط أساسي لتقديم أي طلب تكليف
   const needsDocuments = (data?.documentsCount ?? 0) === 0
@@ -252,15 +286,21 @@ export default function NurseAssignmentsPage() {
           settings={settings}
           blocked={hasUnpaidFees}
           needsDocuments={needsDocuments}
+          firstUnpaidId={unpaidAssignments[0]?.id}
         />
       )}
 
       {tab === 'applications' && (
-        <MyApplications applications={applications} settings={settings} />
+        <MyApplications
+          applications={applications}
+          settings={settings}
+          assignments={assignments}
+          payId={payId}
+        />
       )}
 
       {tab === 'confirmed' && (
-        <ConfirmedAssignments assignments={assignments} settings={settings} />
+        <ConfirmedAssignments assignments={assignments} settings={settings} payId={payId} />
       )}
     </div>
   )
@@ -273,11 +313,13 @@ function AvailablePosts({
   settings,
   blocked,
   needsDocuments,
+  firstUnpaidId,
 }: {
   posts: OpenPost[]
   settings?: PlatformSettings
   blocked: boolean
   needsDocuments: boolean
+  firstUnpaidId?: string
 }) {
   const [search, setSearch] = useState('')
   const [applyPost, setApplyPost] = useState<OpenPost | null>(null)
@@ -329,20 +371,27 @@ function AvailablePosts({
       )}
 
       {blocked && (
-        <div className="flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+        <div className="flex flex-col gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 sm:flex-row sm:items-center dark:border-amber-800 dark:bg-amber-950/30">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900">
             <AlertTriangle className="size-5 text-amber-600 dark:text-amber-300" />
           </span>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
-              التقديم على التكليفات الجديدة موقوف مؤقتاً
+              لديك تكليف معلق لم تقم بدفع رسوم الإدارة
             </p>
             <p className="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-              لديك تكليف سابق لم يتم تأكيد دفع رسوم أو نسبة الإدارة له من إدارة المنصة — ارفع لقطة
-              شاشة إثبات الدفع من تبويب «تكليفاتي المؤكدة» وتابع مع الإدارة حتى التأكيد، ثم ستُتاح
-              لك التقديمات من جديد.
+              سدّد رسوم أو نسبة الإدارة وارفع إثبات الدفع من بطاقة السداد أدناه — وبعد تأكيد
+              الإدارة ستُتاح لك التقديمات من جديد.
             </p>
           </div>
+          {firstUnpaidId && (
+            <Button asChild className="shrink-0 gap-2 bg-amber-600 hover:bg-amber-700">
+              <Link href={`/nurse/assignments?tab=applications&pay=${firstUnpaidId}`}>
+                <Wallet className="size-4" />
+                الانتقال إلى بطاقة السداد
+              </Link>
+            </Button>
+          )}
         </div>
       )}
 
@@ -648,11 +697,21 @@ function ApplyDialog({
 function MyApplications({
   applications,
   settings,
+  assignments,
+  payId,
 }: {
   applications: MyApplication[]
   settings?: PlatformSettings
+  assignments: MyAssignment[]
+  payId?: string | null
 }) {
-  if (applications.length === 0) {
+  // الجولة 37: بطاقات السداد — تكليفات مؤكدة لم تُسدّد رسومها للإدارة
+  // تظهر في أعلى تقديماتي مباشرة: المبلغ الفعلي + طرق الدفع + رفع إثبات الدفع
+  const unpaidFees = assignments.filter(
+    (a) => a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
+  )
+
+  if (applications.length === 0 && unpaidFees.length === 0) {
     return (
       <EmptyState
         icon={Briefcase}
@@ -663,10 +722,41 @@ function MyApplications({
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {applications.map((app) => (
-        <ApplicationCard key={app.id} app={app} settings={settings} />
-      ))}
+    <div className="space-y-4">
+      {unpaidFees.length > 0 && settings && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-black">
+              <Wallet className="size-4 text-amber-600" />
+              تكليفات تنتظر سداد رسوم الإدارة
+            </p>
+            <Badge className="bg-amber-600 text-[10px] text-white hover:bg-amber-600">
+              {unpaidFees.length}
+            </Badge>
+            <span className="text-[11px] text-muted-foreground">
+              سدّد الرسوم وارفع إثبات الدفع — حتى يؤكد الإدارة الدفع لن يُتاح لك التقديم على تكليفات جديدة
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {unpaidFees.map((a) => (
+              <FeePaymentCard
+                key={a.id}
+                assignment={a}
+                settings={settings}
+                highlight={payId === a.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {applications.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {applications.map((app) => (
+            <ApplicationCard key={app.id} app={app} settings={settings} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -782,9 +872,11 @@ function ApplicationCard({
 function ConfirmedAssignments({
   assignments,
   settings,
+  payId,
 }: {
   assignments: MyAssignment[]
   settings?: PlatformSettings
+  payId?: string | null
 }) {
   if (assignments.length === 0) {
     return (
@@ -799,7 +891,7 @@ function ConfirmedAssignments({
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {assignments.map((a) => (
-        <NurseAssignmentCard key={a.id} a={a} settings={settings} />
+        <NurseAssignmentCard key={a.id} a={a} settings={settings} payId={payId} />
       ))}
     </div>
   )
@@ -808,12 +900,13 @@ function ConfirmedAssignments({
 function NurseAssignmentCard({
   a,
   settings,
+  payId,
 }: {
   a: MyAssignment
   settings?: PlatformSettings
+  payId?: string | null
 }) {
   const queryClient = useQueryClient()
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirmDone, setConfirmDone] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const [viewScreenshot, setViewScreenshot] = useState<ViewableDocument | null>(null)
@@ -833,36 +926,13 @@ function NurseAssignmentCard({
     onError: (e: Error) => toast.error(e.message),
   })
 
-  // رفع لقطة شاشة إثبات الدفع — ضغط من جهة العميل ثم رفع مباشر
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const { file: compressed } = await compressImage(file)
-      const formData = new FormData()
-      formData.append('file', compressed)
-      const response = await fetch(`/api/me/assignments/${a.id}/payment-screenshot`, {
-        method: 'POST',
-        body: formData,
-      })
-      const contentType = response.headers.get('content-type') ?? ''
-      if (!contentType.includes('application/json')) {
-        throw new Error(`تعذر رفع الصورة (رمز ${response.status}) — أعد المحاولة`)
-      }
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'فشل رفع الصورة')
-      return result as { message: string }
-    },
-    onSuccess: (res) => {
-      toast.success(res.message)
-      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
   const applicationFee =
     settings?.feeMode === 'APPLICATION' ? Math.max(0, settings.applicationFee) : 0
   const dueToAdmin = (a.adminFee ?? 0) + applicationFee
   const canConfirmDone = !a.nurseDoneAt && a.status !== 'CANCELLED' && a.status !== 'COMPLETED'
-  const hasFinanceSection = settings && a.status !== 'CANCELLED'
+  // الجولة 37: التكليف غير المسدد يعرض بطاقة السداد مباشرة — والتفاصيل المطوية للسجل بعد التأكيد
+  const unpaidFee = a.paymentStatus !== 'PAID' && a.status !== 'CANCELLED'
+  const hasFinanceSection = settings && a.status !== 'CANCELLED' && !unpaidFee
   const hasDetails = !!hasFinanceSection || !!a.description
 
   return (
@@ -901,25 +971,30 @@ function NurseAssignmentCard({
           )}
         </div>
 
-        {/* ملخص الدفع المصغّر + حالة تأكيد الإدارة */}
-        {a.status !== 'CANCELLED' && (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
-            <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
-              <Wallet className="size-3.5 shrink-0" />
-              <span className="shrink-0">الواجب للإدارة:</span>
-              <span dir="ltr">{formatCurrency(dueToAdmin)}</span>
-            </p>
-            {a.paymentStatus === 'PAID' ? (
-              <Badge className="gap-1 bg-emerald-600 text-[10px]">
-                <BadgeCheck className="size-3" />
-                أكدت الإدارة الدفع
-              </Badge>
-            ) : a.paymentScreenshotUrl ? (
-              <Badge variant="secondary" className="text-[10px]">
-                بانتظار تأكيد الإدارة
-              </Badge>
-            ) : null}
-          </div>
+        {/* الجولة 37: بطاقة السداد الاحترافية — تظهر مباشرة للتكليف غير المسدد،
+            وبعد التأكيد يبقى ملخص الدفع المصغّر فقط */}
+        {unpaidFee && settings ? (
+          <FeePaymentCard
+            assignment={a}
+            settings={settings}
+            highlight={payId === a.id}
+          />
+        ) : (
+          a.status !== 'CANCELLED' && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
+                <Wallet className="size-3.5 shrink-0" />
+                <span className="shrink-0">الواجب للإدارة:</span>
+                <span dir="ltr">{formatCurrency(dueToAdmin)}</span>
+              </p>
+              {a.paymentStatus === 'PAID' ? (
+                <Badge className="gap-1 bg-emerald-600 text-[10px]">
+                  <BadgeCheck className="size-3" />
+                  أكدت الإدارة الدفع
+                </Badge>
+              ) : null}
+            </div>
+          )
         )}
 
         {/* تأكيد الكادر للإنهاء */}
@@ -938,21 +1013,21 @@ function NurseAssignmentCard({
           </Button>
         )}
 
-        {/* فتح/إغلاق التفاصيل: طرق الدفع + إثبات الدفع + الوصف */}
+        {/* فتح/إغلاق التفاصيل: سجل طرق الدفع + الوصف */}
         {hasDetails && (
           <button
             type="button"
             onClick={() => setShowDetails((v) => !v)}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-1.5 text-[11px] font-bold text-muted-foreground transition-colors hover:bg-accent"
           >
-            {showDetails ? 'إخفاء التفاصيل والدفع' : 'التفاصيل وطرق الدفع وإثبات الدفع'}
+            {showDetails ? 'إخفاء التفاصيل' : 'التفاصيل وسجل الدفع'}
             <ChevronDown className={cn('size-3.5 transition-transform', showDetails && 'rotate-180')} />
           </button>
         )}
 
         {showDetails && (
           <div className="space-y-3">
-            {/* بطاقة طرق الدفع للإدارة — للكادر فقط */}
+            {/* سجل بطاقة طرق الدفع — بعد تأكيد السداد (الرفع يتم من بطاقة السداد أثناء الانتظار) */}
             {hasFinanceSection && (
               <PaymentCard
                 settings={settings!}
@@ -975,8 +1050,8 @@ function NurseAssignmentCard({
               />
             )}
 
-            {/* إثبات دفع الرسوم — رفع لقطة الشاشة في نفس الصفحة */}
-            {a.status !== 'CANCELLED' && (
+            {/* سجل إثبات الدفع المرفوع — للتكليف المسدد */}
+            {a.status !== 'CANCELLED' && !unpaidFee && (a.paymentScreenshotUrl || a.paymentStatus === 'PAID') && (
               <div className="rounded-2xl border-2 border-dashed p-3">
                 <p className="flex items-center gap-1.5 text-xs font-extrabold">
                   <ImagePlus className="size-3.5 text-primary" />
@@ -1010,38 +1085,10 @@ function NurseAssignmentCard({
                       </span>
                     </span>
                   </button>
-                ) : a.paymentStatus === 'PAID' ? (
-                  <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                    تم تأكيد دفع الرسوم من الإدارة — يمكنك التقديم على تكليفات جديدة
-                  </p>
                 ) : (
-                  <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) uploadMutation.mutate(file)
-                        e.target.value = ''
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2.5 w-full gap-2 border-dashed"
-                      disabled={uploadMutation.isPending}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <ImagePlus className="size-4" />
-                      {uploadMutation.isPending ? 'جارٍ الرفع...' : 'رفع لقطة شاشة إثبات الدفع'}
-                    </Button>
-                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                      بعد دفع المبلغ للإدارة عبر {settings?.paymentMethod ?? 'طريقة الدفع'} ارفع لقطة
-                      شاشة هنا — تظهر للإدارة بشكل احترافي للتأكيد
-                    </p>
-                  </>
+                  <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    تم تأكيد دفع الرسوم من الإدارة مباشرة — يمكنك التقديم على تكليفات جديدة
+                  </p>
                 )}
               </div>
             )}
