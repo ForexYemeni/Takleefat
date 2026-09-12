@@ -27,6 +27,10 @@ import { apiDelete, apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
 import { formatDate, USER_STATUS_LABELS, GENDER_LABELS } from '@/lib/utils'
 import { AFFILIATION_STATUS_LABELS, ORG_STATUS_LABELS, ORG_TYPE_LABELS } from '@/lib/network'
 import { StatusBadge } from '@/components/shared/status-badge'
+import {
+  EntityCadreCommunity,
+  type OrgCadreRow,
+} from '@/components/shared/entity-cadre-community'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { MapPicker } from '@/components/shared/map-picker'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -81,10 +85,14 @@ interface Org {
   isActive: boolean
   createdAt: string
   _count?: { affiliations: number; posts: number }
+  /** الجولة 38: مجتمع كوادر الجهة — المعتمدون/المتاحون الآن */
+  community?: { accreditedNurses: number; accreditedDoctors: number; availableNow: number }
 }
 
 interface OrgDashboard {
   hospital: Org
+  /** الجولة 38: مجتمع كوادر الجهة الصحية */
+  community: { accreditedNurses: number; accreditedDoctors: number; availableNow: number }
   stats: {
     total: number
     working: number
@@ -106,8 +114,11 @@ interface OrgDashboard {
     note: string | null
     workYears?: number | null
     createdAt: string
+    /** الجولة 38: متاح الآن = بلا تكليف سارٍ */
+    available?: boolean
     nurse: {
       id: string; name: string; phone: string; gender: string | null
+      role?: string
       specialty: string | null; qualification: string | null
       yearsOfExperience: number | null; status: string
     }
@@ -402,7 +413,14 @@ export function OrganizationsManager() {
                       <StatusBadge status={org.status} labels={ORG_STATUS_LABELS} />
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <Badge variant="secondary">{org._count?.affiliations ?? 0} كادر</Badge>
+                      {/* الجولة 38: عدادات مجتمع الكوادر في جدول الجهات */}
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant="secondary">{org._count?.affiliations ?? 0} ارتباط</Badge>
+                        <Badge variant="outline" className="bg-emerald-500/5 text-emerald-700 dark:text-emerald-400">
+                          {(org.community?.accreditedNurses ?? 0) + (org.community?.accreditedDoctors ?? 0)} معتمد ·{' '}
+                          {org.community?.availableNow ?? 0} متاح الآن
+                        </Badge>
+                      </div>
                     </TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">
                       {formatDate(org.createdAt)}
@@ -566,6 +584,40 @@ export function OrganizationsManager() {
 
           {dashboard && (
             <div className="space-y-4">
+              {/* الجولة 38: مجتمع كوادر الجهة الصحية — بطاقات المعتمدين والمتاحين + الاستعراض */}
+              <EntityCadreCommunity
+                org={{
+                  name: dashboard.hospital.name,
+                  type: dashboard.hospital.type,
+                  city: dashboard.hospital.city,
+                  status: dashboard.hospital.status,
+                }}
+                stats={dashboard.community}
+                cadres={dashboard.nurses
+                  .filter((n) => ['WORKING', 'ENDORSED'].includes(n.status) && n.nurse.status === 'APPROVED')
+                  .map(
+                    (n): OrgCadreRow => ({
+                      id: n.nurse.id,
+                      name: n.nurse.name,
+                      role: n.nurse.role ?? 'NURSE',
+                      gender: n.nurse.gender,
+                      specialty: n.nurse.specialty,
+                      qualification: n.nurse.qualification,
+                      yearsOfExperience: n.nurse.yearsOfExperience,
+                      affiliationStatus: n.status,
+                      affiliationStatusLabel: n.statusLabel,
+                      workYears: n.workYears ?? null,
+                      available: n.available ?? false,
+                      ratingAverage: null,
+                      ratingCount: null,
+                      // الإدارة ترى الأرقام كاملة دائماً
+                      phone: n.nurse.phone,
+                      phoneMasked: n.nurse.phone,
+                      phoneLocked: false,
+                    })
+                  )}
+              />
+
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <StatBox label="إجمالي الكوادر" value={dashboard.stats.total} tone="primary" />
                 <StatBox label="يعمل حالياً" value={dashboard.stats.working} tone="success" />

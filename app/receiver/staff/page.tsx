@@ -33,6 +33,10 @@ import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { FullProfileDialog } from '@/components/shared/full-profile-dialog'
 import { StaffPhone, type StaffPhoneData } from '@/components/shared/staff-phone'
+import {
+  EntityCadreCommunity,
+  type OrgCadreStatsView,
+} from '@/components/shared/entity-cadre-community'
 import { WorkforceDirectory } from '@/components/shared/workforce-directory'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -69,6 +73,8 @@ interface StaffNurse {
   workYears: number | null
   createdAt: string
   isFavorite: boolean
+  /** الجولة 38: متاح الآن = بلا تكليف سارٍ */
+  available?: boolean
   nurse: {
     id: string
     name: string
@@ -111,7 +117,14 @@ export default function ReceiverStaffPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['receiver-staff'],
-    queryFn: () => apiFetcher<{ org: { id: string; name: string; city: string | null; status: string } | null; nurses: StaffNurse[]; fullProfileAccess?: boolean }>('/api/receiver/staff'),
+    queryFn: () =>
+      apiFetcher<{
+        org: { id: string; name: string; city: string | null; status: string } | null
+        nurses: StaffNurse[]
+        fullProfileAccess?: boolean
+        /** الجولة 38: مجتمع كوادر الجهة الصحية */
+        community?: OrgCadreStatsView
+      }>('/api/receiver/staff'),
   })
 
   /** إذن رؤية البيانات الكاملة — يفتحه حساب الإدارة حصراً (الجولة 32) */
@@ -177,6 +190,14 @@ export default function ReceiverStaffPage() {
           </Button>
         )}
       </div>
+
+      {/* ---------- الجولة 38: مجتمع كوادر الجهة الصحية ---------- */}
+      {org && (
+        <EntityCadreCommunity
+          org={{ name: org.name, city: org.city, status: org.status }}
+          stats={data.community ?? { accreditedNurses: 0, accreditedDoctors: 0, availableNow: 0 }}
+        />
+      )}
 
       {/* تنبيه حالة الجهة: بانتظار الاعتماد */}
       {orgPending && (
@@ -272,6 +293,14 @@ export default function ReceiverStaffPage() {
               </div>
               <div className="flex items-center gap-2">
                 <FavoriteStar nurseId={n.nurse.id} isFavorite={n.isFavorite} onChanged={() => queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })} />
+                {n.available != null &&
+                  (n.available ? (
+                    <Badge className="gap-1 bg-emerald-500 text-white">متاح الآن</Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">
+                      في تكليف
+                    </Badge>
+                  ))}
                 <span className="text-[10px] text-muted-foreground">الارتباط:</span>
                 <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
                 {fullProfileAccess && (

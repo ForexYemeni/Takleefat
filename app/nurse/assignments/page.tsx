@@ -41,6 +41,7 @@ import { PaymentCard } from '@/components/shared/payment-card'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StaffPhone } from '@/components/shared/staff-phone'
+import { RECEIVER_CONTACT_LOCKED_HINT } from '@/lib/phone-privacy'
 import { FeePaymentCard } from '@/components/shared/fee-payment-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -792,8 +793,8 @@ function ApplicationCard({
         {/* شرائح مصغّرة: الجهة + القيمة + التاريخ */}
         <div className="flex flex-wrap items-center gap-1.5">
           <MiniChip icon={UserRound}>{app.post.receiver.name}</MiniChip>
-          {/* الجولة 35: تواصل المستلم — مقفل حتى يُسدّد تكليف مشترك ويؤكده الإدارة */}
-          <StaffPhone data={app.post.receiver} personName={app.post.receiver.name} />
+          {/* الجولة 38: اتصال المستلم/المشرف خاص — لا يُفتح للكادر في أي حال */}
+          <StaffPhone data={app.post.receiver} personName={app.post.receiver.name} lockedHint={RECEIVER_CONTACT_LOCKED_HINT} />
           <MiniChip icon={Banknote} ltr>
             {formatCurrency(app.fees.value)}
           </MiniChip>
@@ -962,8 +963,8 @@ function NurseAssignmentCard({
             </MiniChip>
           )}
           <MiniChip icon={UserRound}>{a.receiver.name}</MiniChip>
-          {/* الجولة 35: تواصل المستلم — يُفتح تلقائياً بعد تأكيد الإدارة للسداد */}
-          <StaffPhone data={a.receiver} personName={a.receiver.name} />
+          {/* الجولة 38: اتصال المستلم/المشرف خاص — قفل مطلق باتجاه واحد */}
+          <StaffPhone data={a.receiver} personName={a.receiver.name} lockedHint={RECEIVER_CONTACT_LOCKED_HINT} />
           {a.receivedAt && (
             <MiniChip icon={BadgeCheck} tone="emerald">
               تم الاستلام ✓

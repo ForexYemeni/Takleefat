@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { hospitalUpdateSchema } from '@/lib/validations/post'
-import { AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations, computeOrgCadreStats, busyStaffIds } from '@/lib/network'
 import { notify } from '@/lib/notifications'
 
 /**
@@ -39,6 +39,8 @@ export async function GET(
             select: {
               id: true, name: true, phone: true, gender: true, specialty: true,
               qualification: true, yearsOfExperience: true, status: true,
+              // الجولة 38: الدور لعرض «كادر تمريضي / طبيب» في مجتمع الجهة
+              role: true,
             },
           },
         },
@@ -60,8 +62,13 @@ export async function GET(
     const stats: Record<string, number> = {}
     for (const g of statusGroups) stats[g.status] = g._count
 
+    // الجولة 38: إحصاءات مجتمع كوادر الجهة الصحية في لوحة الجهة
+    const community = await computeOrgCadreStats(id)
+    const busy = await busyStaffIds(affiliations.map((a) => a.nurse.id))
+
     return NextResponse.json({
       hospital,
+      community,
       stats: {
         total: affiliations.length,
         working: stats.WORKING ?? 0,
@@ -83,6 +90,8 @@ export async function GET(
         workYears: a.workYears,
         requestedStatus: a.requestedStatus,
         createdAt: a.createdAt,
+        // الجولة 38: متاح الآن = بلا تكليف سارٍ
+        available: !busy.has(a.nurse.id),
         nurse: a.nurse,
       })),
       activePosts,

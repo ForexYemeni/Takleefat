@@ -113,7 +113,8 @@ export async function resolveReceiverOrg(receiverId: string, hospitalName?: stri
   if (!name) return null
   return db.hospital.findFirst({
     where: { name, status: { not: 'INACTIVE' } },
-    select: { id: true, name: true, city: true, status: true },
+    // الجولة 38: type مطلوب لعرض نوع الجهة في مجتمع الكوادر
+    select: { id: true, name: true, type: true, city: true, status: true },
   })
 }
 
@@ -860,4 +861,94 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
     })
 
   return result
+}
+
+// ---------- مجتمع كوادر الجهة الصحية (الجولة 38) ----------
+/**
+ * «كوادر جهتي الصحية» — كل جهة صحية لها مجتمع كوادر خاص بها:
+ *  - المعتمد: ارتباط مهني بحالة (يعمل حالياً WORKING / معتمد ENDORSED)
+ *    وحسابه معتمد من الإدارة (APPROVED) وهو كادر تمريضي أو طبيب.
+ *  - المتاح الآن: من المعتمدين ولا يوجد عليه تكليف سارٍ (ACTIVE/RECEIVED).
+ * الإحصاءات تُقرأ من قاعدة البيانات مباشرة في كل طلب — فوري دائماً.
+ */
+
+/** حالات الارتباط التي تُعدّ صاحبها «معتمداً» في مجتمع الجهة */
+export const ACCREDITED_AFFILIATION_STATUSES = ['WORKING', 'ENDORSED'] as const
+
+/** إحصاءات مجتمع كوادر جهة صحية — الممرضون المعتمدون / الأطباء المعتمدون / المتاحون الآن */
+export interface OrgCadreStats {
+  accreditedNurses: number
+  accreditedDoctors: number
+  availableNow: number
+}
+
+export const EMPTY_ORG_CADRE_STATS: OrgCadreStats = {
+  accreditedNurses: 0,
+  accreditedDoctors: 0,
+  availableNow: 0,
+}
+
+/** معرّفات الكوادر المشغولين حالياً بتكليف سارٍ (ACTIVE/RECEIVED) */
+export async function busyStaffIds(staffIds: string[]): Promise<Set<string>> {
+  const ids = staffIds.filter(Boolean)
+  if (ids.length === 0) return new Set()
+  const rows = await db.assignment.findMany({
+    where: { nurseId: { in: ids }, status: { in: ['ACTIVE', 'RECEIVED'] } },
+    select: { nurseId: true },
+    distinct: ['nurseId'],
+  })
+  return new Set(rows.map((r) => r.nurseId))
+}
+
+/** أعضاء مجتمع جهة (المعتمدون) — يُستخدم من الإحصاءات ومن قائمة المجتمع */
+export async function orgAccreditedMembers(hospitalId: string) {
+  return db.nurseAffiliation.findMany({
+    where: {
+      hospitalId,
+      status: { in: [...ACCREDITED_AFFILIATION_STATUSES] },
+      nurse: { status: 'APPROVED', role: { in: ['NURSE', 'DOCTOR'] } },
+    },
+    select: { nurseId: true, nurse: { select: { role: true } } },
+  })
+}
+
+function tallyMembers(
+  members: { nurseId: string; nurse: { role: string } }[],
+  busy: Set<string>
+): OrgCadreStats {
+  const stats: OrgCadreStats = { ...EMPTY_ORG_CADRE_STATS }
+  for (const m of members) {
+    if (m.nurse.role === 'DOCTOR') stats.accreditedDoctors++
+    else stats.accreditedNurses++
+    if (!busy.has(m.nurseId)) stats.availableNow++
+  }
+  return stats
+}
+
+/** إحصاءات مجتمع كوادر جهة صحية واحدة */
+export async function computeOrgCadreStats(hospitalId: string): Promise<OrgCadreStats> {
+  const members = await orgAccreditedMembers(hospitalId)
+  const busy = await busyStaffIds(members.map((m) => m.nurseId))
+  return tallyMembers(members, busy)
+}
+
+/** إحصاءات مجتمعات كل الجهات الصحية دفعة واحدة (لإدارة الجهات — بلا استعلامات متسلسلة) */
+export async function computeAllOrgCadreStats(): Promise<Map<string, OrgCadreStats>> {
+  const members = await db.nurseAffiliation.findMany({
+    where: {
+      status: { in: [...ACCREDITED_AFFILIATION_STATUSES] },
+      nurse: { status: 'APPROVED', role: { in: ['NURSE', 'DOCTOR'] } },
+    },
+    select: { hospitalId: true, nurseId: true, nurse: { select: { role: true } } },
+  })
+  const busy = await busyStaffIds(members.map((m) => m.nurseId))
+  const map = new Map<string, OrgCadreStats>()
+  for (const m of members) {
+    const s = map.get(m.hospitalId) ?? { ...EMPTY_ORG_CADRE_STATS }
+    if (m.nurse.role === 'DOCTOR') s.accreditedDoctors++
+    else s.accreditedNurses++
+    if (!busy.has(m.nurseId)) s.availableNow++
+    map.set(m.hospitalId, s)
+  }
+  return map
 }

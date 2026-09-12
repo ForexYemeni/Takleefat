@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { hospitalSchema, hospitalUpdateSchema } from '@/lib/validations/post'
+import { computeAllOrgCadreStats, EMPTY_ORG_CADRE_STATS } from '@/lib/network'
 
 /**
  * GET /api/admin/hospitals — جميع الجهات الصحية مع إحصاءات الارتباط (الإدارة)
+ * الجولة 38: لكل جهة إحصاءات «مجتمع كوادر الجهة الصحية» (الممرضون المعتمدون /
+ * الأطباء المعتمدون / المتاحون الآن) في حقل community.
  * POST /api/admin/hospitals — إضافة جهة صحية ببياناتها الكاملة
  * PATCH /api/admin/hospitals?id=... — تعديل جهة (بيانات كاملة + حالة)
  * DELETE /api/admin/hospitals?id=... — حذف جهة (يُمنع إذا مرتبطة بتكليفات)
@@ -12,11 +15,19 @@ import { hospitalSchema, hospitalUpdateSchema } from '@/lib/validations/post'
 export async function GET() {
   try {
     await requireRole('ADMIN')
-    const hospitals = await db.hospital.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { affiliations: true, posts: true } } },
+    const [hospitals, statsMap] = await Promise.all([
+      db.hospital.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { affiliations: true, posts: true } } },
+      }),
+      computeAllOrgCadreStats(),
+    ])
+    return NextResponse.json({
+      hospitals: hospitals.map((h) => ({
+        ...h,
+        community: statsMap.get(h.id) ?? { ...EMPTY_ORG_CADRE_STATS },
+      })),
     })
-    return NextResponse.json({ hospitals })
   } catch (error) {
     return handleApiError(error)
   }

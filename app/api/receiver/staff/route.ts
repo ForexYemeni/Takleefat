@@ -4,7 +4,13 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { receiverCreateNurseSchema, createDoctorSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
-import { resolveReceiverOrg, AFFILIATION_STATUS_LABELS, healReceiverPendingAffiliations } from '@/lib/network'
+import {
+  resolveReceiverOrg,
+  AFFILIATION_STATUS_LABELS,
+  healReceiverPendingAffiliations,
+  computeOrgCadreStats,
+  busyStaffIds,
+} from '@/lib/network'
 import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
@@ -164,6 +170,8 @@ export async function POST(req: NextRequest) {
  * GET /api/receiver/staff — كوادر/أطباء جهة صاحب التكليف
  * قائمة الارتباطات المرتبطة بجهته (كل الحالات) لعرضها في صفحة كوادر الجهة
  * مع حالة المفضلة الشخصية لكل صف (نجمة المفضلة تُدار مباشرة من صفحة الجهة).
+ * الجولة 38: إحصاءات «مجتمع كوادر الجهة الصحية» (المعتمدون/المتاحون الآن)
+ * + شارة التوفر لكل صف (available).
  */
 export async function GET() {
   try {
@@ -176,7 +184,7 @@ export async function GET() {
     // شفاء كسول: ارتباطات أُضيفت من المستلم ثم اعتُمدت الجهة وتوقفت على PENDING
     await healReceiverPendingAffiliations(org.id)
 
-    const [affiliations, favorites, me] = await Promise.all([
+    const [affiliations, favorites, me, community] = await Promise.all([
       db.nurseAffiliation.findMany({
         where: { hospitalId: org.id },
         orderBy: { createdAt: 'desc' },
@@ -206,8 +214,12 @@ export async function GET() {
         where: { id: session.user.id },
         select: { fullProfileAccess: true },
       }),
+      // الجولة 38: إحصاءات مجتمع كوادر الجهة الصحية
+      computeOrgCadreStats(org.id),
     ])
     const favoriteSet = new Set(favorites.map((f) => f.nurseId))
+    // الجولة 38: من المشغول الآن بتكليف سارٍ — لشارة «متاح الآن / في تكليف»
+    const busy = await busyStaffIds(affiliations.map((a) => a.nurse.id))
 
     // الجولة 34: أرقام الكوادر/الأطباء مخفية — تُفتح فقط بتكليف سارٍ مسدد النسبة بين الطرفين
     // الجولة 36: «الموثوق جداً» يرى كل الأرقام دون استثناء
@@ -221,6 +233,8 @@ export async function GET() {
     return NextResponse.json({
       org,
       fullProfileAccess: me?.fullProfileAccess ?? false,
+      // الجولة 38: مجتمع كوادر الجهة الصحية — ثلاثة عدادات فورية
+      community,
       nurses: affiliations.map((a) => ({
         affiliationId: a.id,
         affiliationStatus: a.status,
@@ -229,6 +243,8 @@ export async function GET() {
         workYears: a.workYears,
         createdAt: a.createdAt,
         isFavorite: favoriteSet.has(a.nurse.id),
+        // الجولة 38: متاح الآن = بلا تكليف سارٍ (ACTIVE/RECEIVED)
+        available: !busy.has(a.nurse.id),
         nurse: {
           ...a.nurse,
           ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),

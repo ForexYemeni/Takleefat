@@ -29,6 +29,8 @@ export function StaffPhone({
   personName,
   className = '',
   withActions = true,
+  /** تلميح بديل عند القفل — يُخفي خطوات الفتح (اتصال المستلم/المشرف للكادر — الجولة 38) */
+  lockedHint,
 }: {
   data: StaffPhoneData | null | undefined
   /** اسم صاحب الرقم — يُستخدم في نص زر الواتساب */
@@ -36,6 +38,7 @@ export function StaffPhone({
   className?: string
   /** إظهار أزرار الاتصال/الواتساب عند الفتح (الافتراضي: نعم) */
   withActions?: boolean
+  lockedHint?: string
 }) {
   if (!data) {
     return (
@@ -63,15 +66,24 @@ export function StaffPhone({
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-64 p-3 text-start">
-            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-bold">
-              <ShieldQuestion className="size-3.5" />
-              {PHONE_LOCKED_HINT}
-            </p>
-            <ol className="list-inside list-decimal space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
-              {PHONE_UNLOCK_STEPS.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ol>
+            {lockedHint ? (
+              <p className="flex items-start gap-1.5 text-xs font-bold leading-relaxed">
+                <ShieldQuestion className="mt-0.5 size-3.5 shrink-0" />
+                {lockedHint}
+              </p>
+            ) : (
+              <>
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-bold">
+                  <ShieldQuestion className="size-3.5" />
+                  {PHONE_LOCKED_HINT}
+                </p>
+                <ol className="list-inside list-decimal space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {PHONE_UNLOCK_STEPS.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ol>
+              </>
+            )}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

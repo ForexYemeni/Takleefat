@@ -3,16 +3,14 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings, calcAdminFee, calcApplicationFee } from '@/lib/settings'
 import {
-  isTrustedViewer,
   receiverPhoneForStaff,
-  revealedReceiverIds,
 } from '@/lib/phone-privacy'
 
 /**
  * GET /api/me/applications — تقديمات الكادر التمريضي/الطبيب الحالي
  * تشمل بيانات التكليف المُعلن + تفاصيل الدفع بعد الاعتماد.
- * الجولة 35 (القفل التبادلي): رقم المستلم مقفل عن الكادر حتى يوجد تكليف
- * مشترك مسدّد النسبة أكده الإدارة — عندها يُفتح بنفس قاعدة التكليفات.
+ * الجولة 38 (القفل باتجاه واحد): بيانات اتصال المستلم الإداري/مشرف الأطباء
+ * لا تُرسل للكادر/الطبيب أبداً — القناع فقط في كل الحالات بلا استثناء.
  */
 export async function GET() {
   try {
@@ -58,15 +56,7 @@ export async function GET() {
       }
     })
 
-    // الجولة 35: فتح تبادلي — المستلمون الذين لهم تكليف سارٍ مسدد مع الكادر الحالي
-    // الجولة 36: الإنهاء يُغلق — و«الموثوق جداً» يرى كل الأرقام
-    const trusted = await isTrustedViewer(session.user.id)
-    const revealedReceivers = await revealedReceiverIds(
-      session.user.id,
-      applications.map((app) => app.post.receiver.id),
-      trusted
-    )
-
+    // الجولة 38: قفل مطلق باتجاه واحد — رقم المستلم/المشرف قناع فقط للكادر
     return NextResponse.json({
       applications: enriched.map((app) => ({
         ...app,
@@ -74,11 +64,7 @@ export async function GET() {
           ...app.post,
           receiver: {
             ...app.post.receiver,
-            ...receiverPhoneForStaff(
-              app.post.receiver.phone,
-              revealedReceivers.has(app.post.receiver.id),
-              trusted
-            ),
+            ...receiverPhoneForStaff(app.post.receiver.phone),
           },
         },
       })),
