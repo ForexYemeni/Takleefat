@@ -2939,8 +2939,9 @@ print('ok' if d.get('org') is None and d.get('cadres')==[] and c.get('accredited
 check "مسؤول بلا جهة مصرّح بها: استجابة فارغة أنيقة (صفر لكل العدادات) دون أخطاء" "ok" "$R38_EMPTY"
 
 # (8) فحوص ساكنة للوحة مجتمع الكوادر في الواجهات الثلاث
-R38_COMP=$([ -f components/shared/entity-cadre-community.tsx ] && grep -c "الممرضون المعتمدون\|الأطباء المعتمدون\|المتاحون الآن" components/shared/entity-cadre-community.tsx | awk '{print ($1>=3)?1:0}')
-check "ui: لوحة مجتمع الكوادر ببطاقاتها الثلاث (الممرضون المعتمدون/الأطباء المعتمدون/المتاحون الآن)" "1" "$R38_COMP"
+# الجولة 41: البطالة صارت مصغّرة — شريط إحصاء أفقي بثلاث خلايا بدل البطاقات المكدسة
+R38_COMP=$([ -f components/shared/entity-cadre-community.tsx ] && grep -c "ممرضون معتمدون\|أطباء معتمدون\|متاحون الآن" components/shared/entity-cadre-community.tsx | awk '{print ($1>=3)?1:0}')
+check "ui: بطاقة مجتمع الكوادر بإحصاءاتها الثلاث (ممرضون معتمدون/أطباء معتمدون/متاحون الآن — مصغّرة منذ الجولة 41)" "1" "$R38_COMP"
 R38_USE3=$(grep -l "EntityCadreCommunity" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx components/admin/organizations-manager.tsx | wc -l | tr -d ' ')
 check "ui: لوحة المجتمع مدمجة في (كوادر جهتي + أطباء جهتي + لوحة الجهات الإدارية)" "3" "$R38_USE3"
 R38_API_NEW=$([ -f app/api/org/community/route.ts ] && grep -c "computeOrgCadreStats" app/api/org/community/route.ts)
