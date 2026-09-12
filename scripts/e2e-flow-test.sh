@@ -2963,6 +2963,13 @@ check "تجهيز: الإدارة تنشئ كادر تمريضياً لفحوص 
 N39_ID=$(jget "['user']['id']" < "$DIR/r39_n39.json")
 login "$DIR/nurse39.jar" "791110941" "Nurse39@123"
 
+# مستلم لجهة الأساس ($HOSP = مستشفى E2E الأساس — جهة المشرف) لفحوص اعتماده
+R39_RCV=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_rcv.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"RECEIVER","name":"مستلم اعتماد 39","phone":"791110942","password":"Rcv39@1234","hospitalName":"مستشفى E2E الأساس"}')
+check "تجهيز: الإدارة تنشئ مستلم جهة الأساس → 201" "201" "$R39_RCV"
+RCV39_ID=$(jget "['user']['id']" < "$DIR/r39_rcv.json")
+login "$DIR/rcv39.jar" "791110942" "Rcv39@1234"
+
 R39_H39=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_h39.json" -w "%{http_code}" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
   -d '{"name":"مستشفى اختبار 39","type":"HOSPITAL","city":"عدن","status":"ACTIVE"}')
 check "تجهيز: الإدارة تنشئ جهة ثانية لفحوص العزل → 201" "201" "$R39_H39"
@@ -2981,10 +2988,10 @@ print(rows[0]['id'] if rows else '')" 2>/dev/null)
 # DOC_ID — الطبيب المنشأ من الإدارة في القسم 29 (بلا ارتباط بعد)
 DOC_ID=$(jget "['user']['id']" < "$DIR/r29_doc.json")
 
-# (أ) المستلم لا يعتمد الأطباء — اعتماد الأطباء من اختصاص مشرف الأطباء
-R39_R_DOC=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+# (أ) المستلم لا يعتمد الأطباء — اعتماد الأطباء من اختصاص مشرف الأطباء (الجهة صحيحة — الفحص للمطابقة)
+R39_R_DOC=$(code -b "$DIR/rcv39.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
   -d "{\"nurseId\":\"$DOC_ID\",\"hospitalId\":\"$HOSP\",\"status\":\"ENDORSED\"}")
-check "المستلم الإداري لا يعتمد طبيباً (مطابقة الدور) → 403" "403" "$R39_R_DOC"
+check "المستلم الإداري لا يعتمد طبيباً من جهته (مطابقة الدور) → 403" "403" "$R39_R_DOC"
 
 # (ب) مشرف الأطباء يعتمد الطبيب لجهته — بلا بوابة مستندات (اعتماد جهة فقط)
 R39_S_DOC=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
@@ -2997,12 +3004,12 @@ R39_S_N39=$(code -b "$DIR/supervisor.jar" -X POST $BASE/api/affiliations -H "Con
 check "مشرف الأطباء لا يعتمد كادراً تمريضياً (مطابقة الدور) → 403" "403" "$R39_S_N39"
 
 # (د) المستلم الإداري يعتمد الكادر التمريضي لجهته — بلا بوابة مستندات
-R39_R_N39=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+R39_R_N39=$(code -b "$DIR/rcv39.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
   -d "{\"nurseId\":\"$N39_ID\",\"hospitalId\":\"$HOSP\",\"status\":\"ENDORSED\"}")
 check "المستلم الإداري يعتمد الكادر التمريضي لجهته (بلا شرط مستندات) → 201" "201" "$R39_R_N39"
 
 # (هـ) عزل الجهات: المستلم لا يعدّل ارتباطات جهة أخرى
-R39_CROSS=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/affiliations/$AFF_N39_H39 -H "Content-Type: application/json" \
+R39_CROSS=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF_N39_H39 -H "Content-Type: application/json" \
   -d '{"status":"ENDORSED"}')
 check "عزل الجهات: المستلم لا يعتمد ارتباطات جهة أخرى → 403" "403" "$R39_CROSS"
 
@@ -3027,8 +3034,8 @@ ok=ok and all('approvedDocuments' in r for r in rows)
 print('ok' if ok else 'bad')" 2>/dev/null)
 check "مجتمع الكوادر: اعتماد المشرف ظهر في الأطباء المعتمدين + approvedDocuments لكل صف" "ok" "$R39_COMM"
 
-# (ح) شارة الاعتماد المهني في مسار كوادر الجهة (المستلم) — الحقل موجود والحالة صحيحة
-R39_RS_BADGE=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/staff | python3 -c "
+# (ح) شارة الاعتماد المهني في مسار كوادر الجهة (مستلم جهة الأساس) — الحقل موجود والحالة صحيحة
+R39_RS_BADGE=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 rows=d.get('nurses',[])
@@ -3052,7 +3059,7 @@ import json,sys
 d=json.load(sys.stdin)
 rows=[a for a in d['assignments'] if a['id']=='$SUP39_AID']
 print(rows[0]['status'] if rows else '?')" 2>/dev/null)
-check "تجهيز: تكليف الطبيب لدى المشرف بانتظار الاستلام (ACTIVE)" "ACTIVE" "$SUP39_STATE"
+check "تجهيز: تكليف الطبيب لدى المشرف سارٍ غير منتهٍ (RECEIVED)" "RECEIVED" "$SUP39_STATE"
 
 R39_SUPDONE=$(curl -s -b "$DIR/supervisor.jar" -o "$DIR/r39_supdone.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$SUP39_AID/receiver-complete -H "Content-Type: application/json" \
   -d '{"nursePaid":true,"rating":{"overall":5,"quality":5,"comment":"إنجاز متميز من الطبيب"}}')
@@ -3067,67 +3074,42 @@ print('ok' if a.get('status')=='COMPLETED' and a.get('receiverDoneAt') and a.get
 check "تكليف الطبيب مكتمل لدى المشرف مع التقييم المحفوظ" "ok" "$R39_SUPRATED"
 
 # (ب) الكادر يغلق التكليف من حسابه أولاً — ثم المستلم ينهي مباشرة من ACTIVE
-R39_POSTA=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"title\":\"تكليف إغلاق الكادر 39\",\"description\":\"فحص الإنهاء بعد إغلاق الكادر\",\"hospitalId\":\"$HOSP\",\"department\":\"طوارئ E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"ANY\",\"value\":40000,\"distribution\":\"ALL_MATCHING\"}")
-check "تجهيز: المستلم ينشئ تكليفاً مُعلناً → 201" "201" "$R39_POSTA"
-P39_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-rows=[p for p in d['posts'] if p['title']=='تكليف إغلاق الكادر 39']
-print(rows[0]['id'] if rows else '')" 2>/dev/null)
-R39_APPLYA=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P39_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"تقديم لفحص الإنهاء"}')
-check "تجهيز: الكادر يتقدم على التكليف → 201" "201" "$R39_APPLYA"
-R39_APPA=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P39_ID/applications | jget "['applications'][0]['id']") -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
-check "تجهيز: المستلم يعتمد التقديم → 200" "200" "$R39_APPA"
-A39_ID=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-rows=[a for a in d['assignments'] if a['post'] and a['post'].get('id')=='$P39_ID']
-print(rows[0]['id'] if rows else '')" 2>/dev/null)
+# الإسناد المباشر من الإدارة ينشئ التكليف بحالة ACTIVE (بانتظار استلام المستلم)
+R39_DIRECT=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_direct.json" -w "%{http_code}" -X POST $BASE/api/admin/assignments -H "Content-Type: application/json" \
+  -d "{\"title\":\"إسناد مباشر 39\",\"facility\":\"مستشفى E2E الأساس\",\"startDate\":\"$TODAY\",\"nurseId\":\"$NURSE_ID\",\"receiverId\":\"$RCV39_ID\"}")
+check "تجهيز: الإدارة تسند تكليفاً مباشرة للكادر لدى مستلم الجهة → 201" "201" "$R39_DIRECT"
+A39_ID=$(jget "['assignment']['id']" < "$DIR/r39_direct.json")
 A39_STATE=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 rows=[a for a in d['assignments'] if a['id']=='$A39_ID']
 print(rows[0]['status'] if rows else '?')" 2>/dev/null)
-check "تجهيز: التكليف المؤكد ACTIVE بانتظار استلام المستلم" "ACTIVE" "$A39_STATE"
+check "تجهيز: التكليف المُسند ACTIVE بانتظار استلام المستلم" "ACTIVE" "$A39_STATE"
 
 R39_NDONE=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/me/assignments/$A39_ID/nurse-complete -H "Content-Type: application/json" -d '{"receivedAmount":true}')
 check "الكادر يغلق التكليف من حسابه أولاً (تأكيد إنهاء واستلام) → 200" "200" "$R39_NDONE"
 
-R39_RDONE=$(curl -s -b "$DIR/receiver.jar" -o "$DIR/r39_rdone.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$A39_ID/receiver-complete -H "Content-Type: application/json" \
+R39_RDONE=$(curl -s -b "$DIR/rcv39.jar" -o "$DIR/r39_rdone.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$A39_ID/receiver-complete -H "Content-Type: application/json" \
   -d '{"nursePaid":true,"rating":{"overall":4,"punctuality":4,"comment":"أُغلق من الكادر وأنهاه المستلم مباشرة"}}')
 check "المستلم ينهي ويقيّم مباشرة من ACTIVE رغم إغلاق الكادر له → 200" "200" "$R39_RDONE"
-R39_RDONE2=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A39_ID/receiver-complete -H "Content-Type: application/json" \
+R39_RDONE2=$(code -b "$DIR/rcv39.jar" -X POST $BASE/api/me/assignments/$A39_ID/receiver-complete -H "Content-Type: application/json" \
   -d '{"nursePaid":true,"rating":{"overall":4}}')
 check "منع تكرار إنهاء التكليف المنتهي من المستلم → 409" "409" "$R39_RDONE2"
 
 # (ج) الإدارة تُغلق التكليف — والمستلم يسجّل الإنهاء والتقييم بعدها
-R39_POSTB=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"title\":\"تكليف إغلاق الإدارة 39\",\"description\":\"فحص الإنهاء بعد إغلاق الإدارة\",\"hospitalId\":\"$HOSP\",\"department\":\"طوارئ E2E\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":8,\"gender\":\"ANY\",\"value\":30000,\"distribution\":\"ALL_MATCHING\"}")
-check "تجهيز: تكليف ثانٍ → 201" "201" "$R39_POSTB"
-P39B_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-rows=[p for p in d['posts'] if p['title']=='تكليف إغلاق الإدارة 39']
-print(rows[0]['id'] if rows else '')" 2>/dev/null)
-R39_APPLYB=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P39B_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"فحص إغلاق الإدارة"}')
-check "تجهيز: تقديم الكادر على التكليف الثاني → 201" "201" "$R39_APPLYB"
-R39_APPB=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P39B_ID/applications | jget "['applications'][0]['id']") -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
-check "تجهيز: اعتماد التقديم الثاني → 200" "200" "$R39_APPB"
-A39B_ID=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-rows=[a for a in d['assignments'] if a['post'] and a['post'].get('id')=='$P39B_ID']
-print(rows[0]['id'] if rows else '')" 2>/dev/null)
-R39_RECVB=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/me/assignments/$A39B_ID/receive -H "Content-Type: application/json" -d '{}')
+R39_DIRECT2=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r39_direct2.json" -w "%{http_code}" -X POST $BASE/api/admin/assignments -H "Content-Type: application/json" \
+  -d "{\"title\":\"إسناد مباشر ثانٍ 39\",\"facility\":\"مستشفى E2E الأساس\",\"startDate\":\"$TODAY\",\"nurseId\":\"$NURSE_ID\",\"receiverId\":\"$RCV39_ID\"}")
+check "تجهيز: إسناد مباشر ثانٍ → 201" "201" "$R39_DIRECT2"
+A39B_ID=$(jget "['assignment']['id']" < "$DIR/r39_direct2.json")
+R39_RECVB=$(code -b "$DIR/rcv39.jar" -X POST $BASE/api/me/assignments/$A39B_ID/receive -H "Content-Type: application/json" -d '{}')
 check "تجهيز: المستلم يستلم التكليف الثاني → 200" "200" "$R39_RECVB"
 R39_ADMCLOSE=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A39B_ID -H "Content-Type: application/json" -d '{"status":"COMPLETED"}')
 check "الإدارة تغلق التكليف من حسابها (دون تقييم المستلم) → 200" "200" "$R39_ADMCLOSE"
 
-R39_RDONEB=$(curl -s -b "$DIR/receiver.jar" -o "$DIR/r39_rdoneb.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$A39B_ID/receiver-complete -H "Content-Type: application/json" \
+R39_RDONEB=$(curl -s -b "$DIR/rcv39.jar" -o "$DIR/r39_rdoneb.json" -w "%{http_code}" -X POST $BASE/api/me/assignments/$A39B_ID/receiver-complete -H "Content-Type: application/json" \
   -d '{"nursePaid":false,"rating":{"overall":3,"discipline":3,"comment":"أُغلق من الإدارة وسجّل المستلم تقييمه بعدها"}}')
 check "المستلم ينهي ويقيّم تكليفاً أغلقتِه الإدارة مسبقاً → 200" "200" "$R39_RDONEB"
-R39_B_RATED=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+R39_B_RATED=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 rows=[a for a in d['assignments'] if a['id']=='$A39B_ID']
