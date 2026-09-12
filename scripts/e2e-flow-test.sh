@@ -2819,7 +2819,7 @@ R37_OV=$(grep -c "tone=\"unpaid\"\|لديك تكليف معلق لم تقم بد
 check "ui: نظرة عامة للكادر تعرض تنبيه التكليف المعلق (نبرة unpaid + المبلغ + سداد الرسوم الآن)" "1" "$R37_OV"
 R37_OVD=$(grep -c "tone=\"unpaid\"\|لديك تكليف معلق لم تقم بدفع رسوم الإدارة\|سداد الرسوم الآن\|tab=applications&pay=" app/doctor/page.tsx | awk '{print ($1>=4)?1:0}')
 check "ui: نظرة عامة للطبيب تعرض تنبيه التكليف المعلق (نبرة unpaid + المبلغ + سداد الرسوم الآن)" "1" "$R37_OVD"
-R37_TONE=$(grep -c "unpaid:" components/shared/assignment-alert-card.tsx)
+R37_TONE=$(grep -c "^  unpaid: {" components/shared/assignment-alert-card.tsx)
 check "ui: نبرة unpaid معرّفة في بطاقة التنبيه (أعلى أولوية قبل التكليف الجارٍ)" "1" "$R37_TONE"
 R37_LINK=$(grep -l "useSearchParams" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | wc -l | tr -d ' ')
 check "ui: الرابط العميق (?tab=&pay=) يُقرأ في صفحتي الكادر والطبيب" "2" "$R37_LINK"
