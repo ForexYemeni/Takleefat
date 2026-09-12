@@ -3136,6 +3136,161 @@ R39_UI_BTN=$(grep -l "إنهاء التكليف وتقييم" app/receiver/assig
 check "ui: زر «إنهاء التكليف وتقييم» في المنتهية دون إنهاء المستلم (صفحتا المستلم والمشرف)" "2" "$R39_UI_BTN"
 
 echo ""
+echo "=========== 50) الجولة 40 — طلبات الانضمام قرار قبول/رفض + إشعار فوري لمسؤول الجهة ==========="
+# طلب انضمام الكادر لجهة يصل للمستلم الإداري (وللطبيب مشرف الأطباء) إشعاراً فورياً،
+# ويظهر مميّزاً في «طلبات الانضمام» بقرار صريح: القبول يضيفه لكوادر الجهة (ENDORSED)
+# والرفض يحذف الطلب مع إشعار — ولا حالات أخرى لطلبات الانضمام (لا تعليق ولا تحويل).
+
+# تجهيز: كادران + طبيب جديدون من الإدارة
+R50_A=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_a.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر طلب انضمام","phone":"791110951","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":2,"gender":"FEMALE"}')
+check "تجهيز: الإدارة تنشئ كادراً لفحوص طلب الانضمام → 201" "201" "$R50_A"
+N50A_ID=$(jget "['user']['id']" < "$DIR/r50_a.json")
+login "$DIR/n50a.jar" "791110951" "R40@12345"
+
+R50_B=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_b.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر رفض انضمام","phone":"791110952","password":"R40@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":1,"gender":"MALE"}')
+check "تجهيز: الإدارة تنشئ كادراً ثانياً لفحوص الرفض → 201" "201" "$R50_B"
+N50B_ID=$(jget "['user']['id']" < "$DIR/r50_b.json")
+login "$DIR/n50b.jar" "791110952" "R40@12345"
+
+R50_D=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r50_d.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"طبيب طلب انضمام","phone":"791110953","password":"R40@12345","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":4,"gender":"MALE"}')
+check "تجهيز: الإدارة تنشئ طبيباً لفحوص طلب انضمام الأطباء → 201" "201" "$R50_D"
+N50D_ID=$(jget "['user']['id']" < "$DIR/r50_d.json")
+login "$DIR/dr50.jar" "791110953" "R40@12345"
+
+# (أ) الكادر يطلب الانضمام لجهة الأساس → إشعار فوري للمستلم الإداري لجهته
+R50_JOIN_A=$(code -b "$DIR/n50a.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"note\":\"أطلب الانضمام لجهتكم\",\"requestedStatus\":\"WORKING\"}")
+check "الكادر يطلب الانضمام لجهة الأساس → 201" "201" "$R50_JOIN_A"
+
+R50_NOTIF_R=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=d.get('notifications',[])
+m=[n for n in ns if n['title']=='طلب انضمام جديد لجهتك الصحية' and 'كادر طلب انضمام' in n['body'] and 'مستشفى E2E الأساس' in n['body'] and n.get('link')=='/receiver/staff']
+print('ok' if m and d.get('unreadCount',0)>0 else 'bad')" 2>/dev/null)
+check "إشعار فوري للمستلم الإداري: طلب انضمام جديد لجهتك (برابط كوادر جهتي)" "ok" "$R50_NOTIF_R"
+
+R50_NOTIF_PRIV=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+bad=any('791110951' in (n.get('body') or '') for n in d.get('notifications',[]))
+print('bad' if bad else 'ok')" 2>/dev/null)
+check "خصوصية: إشعار طلب الانضمام بلا رقم هاتف الكادر (القفل باتجاه واحد)" "ok" "$R50_NOTIF_PRIV"
+
+# (ب) الطلب مميّز في كوادر جهتي (isJoinRequest + نوع العمل + الملاحظة)
+R50_MARK=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50A_ID']
+ok=len(rows)==1 and rows[0].get('isJoinRequest') is True and rows[0].get('requestedStatusLabel')=='يعمل حالياً' and rows[0].get('joinNote')=='أطلب الانضمام لجهتكم'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "الطلب مميّز في كوادر جهتي (isJoinRequest + نوع العمل المطلوب + ملاحظة الكادر)" "ok" "$R50_MARK"
+
+AFF50A=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50A_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+
+# (ج) حماية: طلب الانضمام يُقبل بالإضافة للجهة أو يُرفض — لا حالات أخرى
+R50_SUS=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF50A -H "Content-Type: application/json" -d '{"status":"SUSPENDED"}')
+check "حماية: طلب الانضمام لا يقبل حالات إدارية (SUSPENDED) → 403" "403" "$R50_SUS"
+
+# (د) القبول: إضافة للجهة (ENDORSED) + إشعار صريح للكادر
+R50_ACC=$(curl -s -b "$DIR/rcv39.jar" -o "$DIR/r50_acc.json" -w "%{http_code}" -X PATCH $BASE/api/affiliations/$AFF50A -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "قبول طلب الانضمام (إضافة للجهة) → 200" "200" "$R50_ACC"
+R50_ACC_MSG=$(grep -c "تم قبول" "$DIR/r50_acc.json" | awk '{print ($1>=1)?1:0}')
+check "رسالة القبول صريحة (تم قبول الكادر وإضافته لكوادر الجهة)" "1" "$R50_ACC_MSG"
+
+R50_ACC_NOTIF=$(curl -s -b "$DIR/n50a.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='تم قبول طلب انضمامك' and 'الاعتماد المهني' in n['body']]
+print('ok' if m else 'bad')" 2>/dev/null)
+check "إشعار الكادر: تم قبول طلب انضمامك (مع تذكير بأن الاعتماد المهني من الإدارة)" "ok" "$R50_ACC_NOTIF"
+
+R50_MARK2=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50A_ID']
+ok=len(rows)==1 and rows[0].get('isJoinRequest') is False and rows[0]['affiliationStatus']=='ENDORSED'
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "بعد القبول: الطلب يخرج من طلبات الانضمام ويصبح معتمداً للجهة (ENDORSED)" "ok" "$R50_MARK2"
+
+# (هـ) الرفض: حذف الطلب + إشعار صريح للكادر
+R50_JOIN_B=$(code -b "$DIR/n50b.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"requestedStatus\":\"WORKING\"}")
+check "تجهيز: كادر ثانٍ يطلب الانضمام → 201" "201" "$R50_JOIN_B"
+AFF50B=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50B_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+R50_REJ=$(curl -s -b "$DIR/rcv39.jar" -o "$DIR/r50_rej.json" -w "%{http_code}" -X DELETE $BASE/api/affiliations/$AFF50B)
+check "رفض طلب الانضمام (حذف الطلب) → 200" "200" "$R50_REJ"
+R50_REJ_MSG=$(grep -c "تم رفض" "$DIR/r50_rej.json" | awk '{print ($1>=1)?1:0}')
+check "رسالة الرفض صريحة" "1" "$R50_REJ_MSG"
+R50_REJ_NOTIF=$(curl -s -b "$DIR/n50b.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='تم رفض طلب انضمامك']
+print('ok' if m else 'bad')" 2>/dev/null)
+check "إشعار الكادر: تم رفض طلب انضمامك" "ok" "$R50_REJ_NOTIF"
+R50_GONE=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50B_ID']
+print('ok' if len(rows)==0 else 'bad')" 2>/dev/null)
+check "بعد الرفض: الطلب يزول نهائياً من كوادر الجهة" "ok" "$R50_GONE"
+
+# (و) مطابقة الدور في الطلبات: طلب الطبيب → إشعار المشرف وقبوله، والمستلم ممنوع
+R50_JOIN_D=$(code -b "$DIR/dr50.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"requestedStatus\":\"WORKING\"}")
+check "تجهيز: طبيب يطلب الانضمام لجهة الأساس → 201" "201" "$R50_JOIN_D"
+AFF50D=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50D_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+
+R50_D_MARK=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N50D_ID']
+ok=len(rows)==1 and rows[0].get('isJoinRequest') is True
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "طلب الطبيب مميّز (isJoinRequest) في أطباء جهتي لدى المشرف" "ok" "$R50_D_MARK"
+
+R50_D_NOTIF_S=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='طلب انضمام جديد لجهتك الصحية' and 'طبيب طلب انضمام' in n['body'] and n.get('link')=='/supervisor/staff']
+print('ok' if m else 'bad')" 2>/dev/null)
+check "إشعار فوري لمشرف الأطباء بطلب الطبيب (مطابقة الدور — برابط أطباء جهتي)" "ok" "$R50_D_NOTIF_S"
+
+R50_D_RCV=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF50D -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "حماية مطابقة الدور: المستلم لا يقبل طلب طبيب (من اختصاص المشرف) → 403" "403" "$R50_D_RCV"
+R50_D_ACC=$(code -b "$DIR/supervisor.jar" -X PATCH $BASE/api/affiliations/$AFF50D -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "مشرف الأطباء يقبل طلب الطبيب (إضافة للجهة) → 200" "200" "$R50_D_ACC"
+
+# (ز) فحوص ساكنة: قسم الطلبات والحماية في الواجهات والخادم
+R50_UI_SECTION=$(grep -l "طلبات انضمام" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: قسم طلبات الانضمام في صفحتي كوادر المستلم وأطباء المشرف" "2" "$R50_UI_SECTION"
+R50_UI_ACCEPT=$(grep -l "قبول وإضافة للجهة" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: زر «قبول وإضافة للجهة» في الصفحتين" "2" "$R50_UI_ACCEPT"
+R50_UI_REJECT=$(grep -l "رفض الطلب" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: زر «رفض الطلب» في الصفحتين" "2" "$R50_UI_REJECT"
+R50_API_NOTIF=$(grep -c "طلب انضمام جديد لجهتك الصحية" app/api/affiliations/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: إشعار فوري لمسؤول الجهة عند طلب الانضمام (مطابقة الدور)" "1" "$R50_API_NOTIF"
+R50_API_LOCK=$(grep -c "isPendingJoinRequest" "app/api/affiliations/[id]/route.ts" | awk '{print ($1>=2)?1:0}')
+check "api: طلبات الانضمام مقفلة بالقبول/الرفض في PATCH وDELETE" "1" "$R50_API_LOCK"
+R50_API_MARK=$(grep -c "isJoinRequest" app/api/receiver/staff/route.ts | awk '{print ($1>=1)?1:0}')
+check "api: تمييز طلبات الانضمام في استجابة كوادر الجهة" "1" "$R50_API_MARK"
+
+echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
 if [ $FAIL -gt 0 ]; then printf 'فاشل: %s\n' "${FAILED_TESTS[@]}"; fi
