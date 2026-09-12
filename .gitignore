@@ -63,3 +63,7 @@ download/
 tool-results/
 scripts/e2e-tmp/
 db/
+
+# ملفات تشخيص جلسات إعادة الإنتاج — محلية فقط
+scripts/repro-tmp/
+scripts/e2e-tmp/
