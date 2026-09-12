@@ -3291,6 +3291,121 @@ R50_API_MARK=$(grep -c "isJoinRequest" app/api/receiver/staff/route.ts | awk '{p
 check "api: تمييز طلبات الانضمام في استجابة كوادر الجهة" "1" "$R50_API_MARK"
 
 echo ""
+echo "=========== 51) الجولة 41 — القبول لا يكسر التطبيق + بطاقة كوادر جهتي مصغرة ==========="
+# بلاغ: «عند قبول المستلم الإداري أو مشرف الأطباء أي شخص للجهة الصحية مباشرة يتم حصول
+# خلل في التطبيق فيصبح غير مناسب تماماً كتطبيق — يجب أن تجعل بطاقة كوادر جهتي مصغرة».
+# الجذر (بفحص متصفح حقيقي 390px): صفوف الكوادر كانت تفيض أفقياً عن الشاشة (550px في 390px)
+# فتُقصّ الأزرار — تظهر مباشرة بعد القبول حين تكتمل شارات الصف. والإصلاح: صفوف كتلية
+# تلتف دائماً + بطاقة مجتمع مصغّرة (شريط أفقي بدل ثلاث بطاقات مكدسة).
+# هذا القسم: دورة قبول كاملة (مستلم ثم مشرف) + مسح صحة كل واجهات الحسابين بعد القبول
+# + حواجز ساكنة تمنع رجوع نمط الفيض الأفقي.
+
+# (أ) تجهيز: كادر معتمد بمستندات يطلب الانضمام لجهة الأساس
+R51_A=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r51_a.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر قبول 41","phone":"791110961","password":"R41@12345","specialty":"تمريض عام","qualification":"بكالوريوس أربع سنوات","yearsOfExperience":3,"gender":"MALE"}')
+check "تجهيز: الإدارة تنشئ كادراً لدورة قبول 41 → 201" "201" "$R51_A"
+N51A_ID=$(jget "['user']['id']" < "$DIR/r51_a.json")
+login "$DIR/n51a.jar" "791110961" "R41@12345"
+UP51=$(code -b "$DIR/n51a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "تجهيز: الكادر يرفع مستنده (شرط الاعتماد) → 201" "201" "$UP51"
+AP51=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N51A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}')
+check "تجهيز: الإدارة تعتمد الكادر → 200" "200" "$AP51"
+R51_JOIN=$(code -b "$DIR/n51a.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"note\":\"الرجاء القبول\",\"requestedStatus\":\"WORKING\"}")
+check "تجهيز: الكادر يطلب الانضمام لجهة الأساس → 201" "201" "$R51_JOIN"
+AFF51=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N51A_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+
+# (ب) القبول من المستلم — ثم مسح صحة كامل حساب المستلم (جوهر البلاغ: خلل بالتطبيق كاملا)
+R51_ACC=$(code -b "$DIR/rcv39.jar" -X PATCH $BASE/api/affiliations/$AFF51 -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "المستلم يقبل طلب الانضمام → 200" "200" "$R51_ACC"
+
+R51_SWEEP_OK=0; R51_SWEEP_BAD=""
+for EP in "/api/receiver/staff" "/api/org/community" "/api/affiliations" "/api/stats" "/api/me/assignments" "/api/posts" "/api/me/profile" "/api/receiver/earnings" "/api/notifications" "/api/receiver/favorites"; do
+  C=$(code -b "$DIR/rcv39.jar" "$BASE$EP")
+  if [ "$C" = "200" ]; then R51_SWEEP_OK=$((R51_SWEEP_OK+1)); else R51_SWEEP_BAD="$R51_SWEEP_BAD $EP=$C"; fi
+done
+check "بعد القبول: كل واجهات حساب المستلم سليمة (10/10) — لا خلل بالتطبيق" "10" "$R51_SWEEP_OK"
+[ -n "$R51_SWEEP_BAD" ] && echo "  تفاصيل أي أعطال:$R51_SWEEP_BAD"
+
+R51_ROW=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N51A_ID']
+ok=len(rows)==1 and rows[0].get('isJoinRequest') is False and rows[0].get('affiliationStatus')=='ENDORSED' and rows[0].get('available') is True
+print('ok' if ok else 'bad')" 2>/dev/null)
+check "بعد القبول: العضو في كوادر الجهة (ليس طلباً) + شارة متاح الآن" "ok" "$R51_ROW"
+
+R51_STATS=$(curl -s -b "$DIR/rcv39.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+c=d.get('community') or {}
+print('ok' if c.get('accreditedNurses',0)>=1 else 'bad')" 2>/dev/null)
+check "بعد القبول: إحصاءات بطاقة كوادر جهتي تعكس العضو الجديد" "ok" "$R51_STATS"
+
+R51_PROF=$(code -b "$DIR/n51a.jar" $BASE/api/me/professional-profile)
+check "بعد القبول: السجل المهني للكادر المقبول سليم → 200" "200" "$R51_PROF"
+
+# (ج) نفس الدورة للمشرف: طبيب معتمد يطلب ثم المشرف يقبل ومسح صحة حساب المشرف
+R51_D=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r51_d.json" -w "%{http_code}" -X POST $BASE/api/admin/users -H "Content-Type: application/json" \
+  -d '{"role":"DOCTOR","name":"طبيب قبول 41","phone":"791110962","password":"R41@12345","specialty":"قلبية E2E","qualification":"بكالوريوس طب وجراحة","yearsOfExperience":5,"gender":"MALE"}')
+check "تجهيز: الإدارة تنشئ طبيباً لدورة قبول 41 → 201" "201" "$R51_D"
+N51D_ID=$(jget "['user']['id']" < "$DIR/r51_d.json")
+login "$DIR/dr51.jar" "791110962" "R41@12345"
+UP51D=$(code -b "$DIR/dr51.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png;type=image/png" -F "type=ID_CARD")
+check "تجهيز: الطبيب يرفع مستنده → 201" "201" "$UP51D"
+AP51D=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N51D_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}')
+check "تجهيز: الإدارة تعتمد الطبيب → 200" "200" "$AP51D"
+R51_JOIN_D=$(code -b "$DIR/dr51.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"requestedStatus\":\"WORKING\"}")
+check "تجهيز: الطبيب يطلب الانضمام لجهة الأساس → 201" "201" "$R51_JOIN_D"
+AFF51D=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[n for n in d['nurses'] if n['nurse']['id']=='$N51D_ID']
+print(rows[0]['affiliationId'] if rows else '')")
+R51_ACC_D=$(code -b "$DIR/supervisor.jar" -X PATCH $BASE/api/affiliations/$AFF51D -H "Content-Type: application/json" -d '{"status":"ENDORSED"}')
+check "مشرف الأطباء يقبل طلب الطبيب → 200" "200" "$R51_ACC_D"
+
+R51_SWEEP_S=0; R51_SWEEP_SBAD=""
+for EP in "/api/receiver/staff" "/api/org/community" "/api/affiliations" "/api/stats" "/api/me/assignments" "/api/posts" "/api/me/profile" "/api/notifications"; do
+  C=$(code -b "$DIR/supervisor.jar" "$BASE$EP")
+  if [ "$C" = "200" ]; then R51_SWEEP_S=$((R51_SWEEP_S+1)); else R51_SWEEP_SBAD="$R51_SWEEP_SBAD $EP=$C"; fi
+done
+check "بعد قبول المشرف: كل واجهات حساب المشرف سليمة (8/8)" "8" "$R51_SWEEP_S"
+[ -n "$R51_SWEEP_SBAD" ] && echo "  تفاصيل أي أعطال:$R51_SWEEP_SBAD"
+
+R51_STATS_S=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/receiver/staff | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+c=d.get('community') or {}
+print('ok' if c.get('accreditedDoctors',0)>=1 else 'bad')" 2>/dev/null)
+check "بعد قبول المشرف: إحصاءات أطباء الجهة تعكس الطبيب" "ok" "$R51_STATS_S"
+
+# (د) حواجز ساكنة: صفوف لا تفيض أفقياً + بطاقة مجتمع مصغّرة (الجولة 41)
+R51_BLOCK=$(grep -l 'className="rounded-2xl border p-3.5"' app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: صفوف كوادر كتلية (rounded-2xl border p-3.5) في الصفحتين" "2" "$R51_BLOCK"
+R51_WRAP=$(grep -l "mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: منطقة الإجراءات سطر ملتف بفاصل (لا تتراكب ولا تفيض) في الصفحتين" "2" "$R51_WRAP"
+R51_BADGES=$(grep -l "mt-2 flex flex-wrap items-center gap-1.5" app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: شارات الحالة سطر ملتف مستقل في الصفحتين" "2" "$R51_BADGES"
+R51_NO_OLD=$(grep -c 'flex flex-wrap items-center gap-3 rounded-2xl border p-4' app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | awk -F: '{s+=$2} END {print (s==0)?0:s}')
+check "ui: النمط القديم المفيض (صف flex-wrap متراكب) أزيل كلياً" "0" "$R51_NO_OLD"
+R51_TRUNC=$(grep -l 'max-w-full truncate' app/receiver/staff/page.tsx app/supervisor/staff/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "ui: أسماء الكوادر مقصوصة بحدود البطاقة (truncate) في الصفحتين" "2" "$R51_TRUNC"
+R51_MINI=$(grep -c "function MiniStat" components/shared/entity-cadre-community.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: بطاقة كوادر جهتي مصغّرة (MiniStat) بدل البطاقات المكدسة" "1" "$R51_MINI"
+R51_STRIP=$(grep -c 'grid grid-cols-3 border-t' components/shared/entity-cadre-community.tsx | awk '{print ($1>=1)?1:0}')
+check "ui: شريط الإحصاء الأفقي بثلاث خلايا مدمجة" "1" "$R51_STRIP"
+R51_NO_STACK=$(grep -c 'sm:grid-cols-3' components/shared/entity-cadre-community.tsx | awk '{print ($1>=1)?0:1}')
+check "ui: لا بطاقات إحصاء مكدسة عمودياً في بطاقة المجتمع" "1" "$R51_NO_STACK"
+R51_SUPER_BTN=$(grep -c "إضافة طبيب للجهة" app/supervisor/staff/page.tsx | awk '{print ($1>=2)?1:0}')
+check "ui: زر صفحة المشرف «إضافة طبيب للجهة» (وليس ممرض)" "1" "$R51_SUPER_BTN"
+
+echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
 if [ $FAIL -gt 0 ]; then printf 'فاشل: %s\n' "${FAILED_TESTS[@]}"; fi

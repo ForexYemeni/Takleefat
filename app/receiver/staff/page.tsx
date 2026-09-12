@@ -287,39 +287,44 @@ export default function ReceiverStaffPage() {
           </div>
           <div className="grid gap-2 p-3">
             {joinRequests.map((n) => (
+              /* الجولة 41: بطاقة كتلية — الإجراءات في سطر مستقل يلتف ولا يفيض أفقياً */
               <div
                 key={n.affiliationId}
-                className="flex flex-wrap items-center gap-3 rounded-2xl border bg-background p-3.5"
+                className="rounded-2xl border bg-background p-3.5"
               >
-                <span className="rounded-xl bg-sky-100 p-2.5 dark:bg-sky-900/40">
-                  <UserPlus className="size-5 text-sky-700 dark:text-sky-300" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold">
-                    {n.nurse.name}
-                    <span className="text-[10px] font-normal text-muted-foreground">الحساب:</span>
-                    <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
-                    {n.requestedStatusLabel && (
-                      <Badge variant="outline" className="text-[10px]">
-                        يطلب: {n.requestedStatusLabel}
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                    <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
-                    {n.nurse.specialty && <span>{n.nurse.specialty}</span>}
-                    {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
-                      <span>{n.nurse.yearsOfExperience} سنة خبرة</span>
-                    )}
-                    <span>قدّم الطلب {formatDate(n.createdAt)}</span>
-                  </p>
-                  {n.joinNote && (
-                    <p className="mt-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
-                      «{n.joinNote}»
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 rounded-xl bg-sky-100 p-2.5 dark:bg-sky-900/40">
+                    <UserPlus className="size-5 text-sky-700 dark:text-sky-300" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-extrabold">
+                      <span className="max-w-full truncate">{n.nurse.name}</span>
+                      <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
+                      {n.requestedStatusLabel && (
+                        <Badge variant="outline" className="text-[10px]">
+                          يطلب: {n.requestedStatusLabel}
+                        </Badge>
+                      )}
                     </p>
-                  )}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
+                      {n.nurse.specialty && (
+                        <span className="max-w-[10rem] truncate">{n.nurse.specialty}</span>
+                      )}
+                      {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
+                        <span>{n.nurse.yearsOfExperience} سنة خبرة</span>
+                      )}
+                      <span>قدّم الطلب {formatDate(n.createdAt)}</span>
+                    </p>
+                    {n.joinNote && (
+                      <p className="mt-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+                        «{n.joinNote}»
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                {/* الإجراءات — سطر مستقل يلتف دائماً (الجولة 41) */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5">
                   <Button
                     size="sm"
                     className="gap-1.5 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
@@ -423,55 +428,73 @@ export default function ReceiverStaffPage() {
       ) : (
         <div className="grid gap-2">
           {staffRows.map((n) => (
-            <div key={n.affiliationId} className="flex flex-wrap items-center gap-3 rounded-2xl border p-4">
-              <span className="rounded-xl bg-secondary p-2.5">
-                <Users className="size-5 text-primary" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold">
-                  {n.nurse.name}
-                  <span className="text-[10px] font-normal text-muted-foreground">الحساب:</span>
-                  <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
-                </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                  <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
-                  {n.nurse.gender && <span>{GENDER_LABELS[n.nurse.gender] ?? n.nurse.gender}</span>}
-                  {n.nurse.specialty && <span>{n.nurse.specialty}</span>}
-                  {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
-                    <span>{n.nurse.yearsOfExperience} سنة خبرة</span>
-                  )}
-                  <span className="flex items-center gap-1">
-                    <FileText className="size-3" />
-                    {n.nurse._count.documents} مستند
-                  </span>
-                  <span>أُضيف {formatDate(n.createdAt)}</span>
-                </p>
+            /* الجولة 41: صف كتلي لا يفيض أفقياً أبداً — الهوية أعلى والإجراءات
+                أسفل في سطر مستقل يلتف (كانت الإجراءات متراكبة تفيض عن الشاشة
+                على الهاتف فتبدو المنصة مكسورة بعد القبول) */
+            <div key={n.affiliationId} className="rounded-2xl border p-3.5">
+              <div className="flex items-start gap-3">
+                <span className="shrink-0 rounded-xl bg-secondary p-2.5">
+                  <Users className="size-5 text-primary" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-extrabold">
+                    <span className="max-w-full truncate">{n.nurse.name}</span>
+                    <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
+                    {n.nurse.gender && <span>{GENDER_LABELS[n.nurse.gender] ?? n.nurse.gender}</span>}
+                    {n.nurse.specialty && (
+                      <span className="max-w-[10rem] truncate">{n.nurse.specialty}</span>
+                    )}
+                    {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
+                      <span>{n.nurse.yearsOfExperience} سنة خبرة</span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <FileText className="size-3" />
+                      {n.nurse._count.documents} مستند
+                    </span>
+                    <span>أُضيف {formatDate(n.createdAt)}</span>
+                  </p>
+                  {/* شارات الحالة — سطر مستقل يلتف ولا يفيض */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {n.available != null &&
+                      (n.available ? (
+                        <Badge className="gap-1 bg-emerald-500 text-white">متاح الآن</Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-300 text-amber-700 dark:text-amber-400"
+                        >
+                          في تكليف
+                        </Badge>
+                      ))}
+                    {/* الجولة 39: الاعتماد المهني من الإدارة حصراً — لا يمنحه اعتماد الجهة */}
+                    <ProfessionalAccreditationBadge
+                      approvedDocuments={n.approvedDocuments ?? 0}
+                      documentsCount={n.nurse._count.documents}
+                      size="sm"
+                    />
+                    <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <FavoriteStar nurseId={n.nurse.id} isFavorite={n.isFavorite} onChanged={() => queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })} />
-                {n.available != null &&
-                  (n.available ? (
-                    <Badge className="gap-1 bg-emerald-500 text-white">متاح الآن</Badge>
-                  ) : (
-                    <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">
-                      في تكليف
-                    </Badge>
-                  ))}
-                {/* الجولة 39: الاعتماد المهني من الإدارة حصراً — لا يمنحه اعتماد الجهة */}
-                <ProfessionalAccreditationBadge
-                  approvedDocuments={n.approvedDocuments ?? 0}
-                  documentsCount={n.nurse._count.documents}
-                  size="sm"
+              {/* الإجراءات — سطر مستقل يلتف دائماً (الجولة 41) */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5">
+                <FavoriteStar
+                  nurseId={n.nurse.id}
+                  isFavorite={n.isFavorite}
+                  onChanged={() => queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })}
                 />
-                <span className="text-[10px] text-muted-foreground">الارتباط:</span>
-                <Badge variant="outline">{n.affiliationStatusLabel}</Badge>
                 {/* الجولة 39: اعتماد الكادر للجهة — المستلم يعتمد الكادر التمريضي لجهته حصراً
                     (إضافتهم لمجتمع كوادر الجهة فقط — الاعتماد المهني يبقى للإدارة) */}
                 {n.nurse.role === 'NURSE' && (
                   <Button
                     variant={n.affiliationStatus === 'ENDORSED' ? 'outline' : 'default'}
                     size="sm"
-                    className={n.affiliationStatus === 'ENDORSED' ? 'gap-1.5 text-xs' : 'gap-1.5 bg-primary text-xs'}
+                    className={
+                      n.affiliationStatus === 'ENDORSED' ? 'gap-1.5 text-xs' : 'gap-1.5 bg-primary text-xs'
+                    }
                     onClick={() =>
                       setEndorsing({
                         row: n,
