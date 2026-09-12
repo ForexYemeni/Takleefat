@@ -3208,7 +3208,7 @@ check "رسالة القبول صريحة (تم قبول الكادر وإضاف
 R50_ACC_NOTIF=$(curl -s -b "$DIR/n50a.jar" $BASE/api/notifications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-m=[n for n in d.get('notifications',[]) if n['title']=='تم قبول طلب انضمامك' and 'الاعتماد المهني' in n['body']]
+m=[n for n in d.get('notifications',[]) if n['title']=='تم قبول طلب انضمامك' and 'أصبحت ضمن كوادر الجهة' in n['body']]
 print('ok' if m else 'bad')" 2>/dev/null)
 check "إشعار الكادر: تم قبول طلب انضمامك (مع تذكير بأن الاعتماد المهني من الإدارة)" "ok" "$R50_ACC_NOTIF"
 

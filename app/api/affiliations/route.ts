@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
     })
 
     // الإشعارات
-    if (session.user.role === 'NURSE') {
+    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
       await Promise.all(
         admins.map((a) =>
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
             title: 'طلب ارتباط مهني جديد',
             body: `${nurse.name} يطلب إضافة جهة (${hospital.name}) إلى سجله المهني — راجع الطلب واعتمده`,
             type: 'AFFILIATION_UPDATED',
-            link: '/admin/nurses',
+            link: nurse.role === 'DOCTOR' ? '/admin/doctors' : '/admin/nurses',
           })
         )
       )
