@@ -77,6 +77,20 @@ export async function PATCH(
       if (!(SUPPORTER_ALLOWED_STATUSES as readonly string[]).includes(status)) {
         throw new ApiError('حالة الارتباط غير متاحة لحسابك — راجع الإدارة', 403)
       }
+      // الجولة 40 — طلب الانضمام قرار صريح: الطلب المعلق الذي قدّمه الكادر بنفسه
+      // لا يُعامل كارتباط عادي (لا تعليق ولا تحويل لحالات إدارية) — قبوله فقط
+      // بإضافته لكوادر الجهة (ENDORSED/WORKING) ورفضه من صفحة كوادر جهتي (DELETE)
+      const isPendingJoinRequest =
+        affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
+      if (
+        isPendingJoinRequest &&
+        !['ENDORSED', 'WORKING'].includes(status)
+      ) {
+        throw new ApiError(
+          'طلب الانضمام يُقبل بإضافته لكوادر الجهة أو يُرفض من صفحة كوادر جهتي — لا حالات أخرى لطلبات الانضمام',
+          403
+        )
+      }
     }
 
     // بوابة المستندات للاعتماد — من الإدارة حصراً (الجولة 39: اعتماد الجهة من
@@ -98,15 +112,30 @@ export async function PATCH(
       },
     })
 
-    await notify(affiliation.nurseId, {
-      title: 'تحديث حالة الارتباط المهني',
-      body: `حالة ارتباطك بجهة (${affiliation.hospital.name}) أصبحت: ${AFFILIATION_STATUS_LABELS[status]}`,
-      type: 'AFFILIATION_UPDATED',
-      link: '/nurse/profile',
-    })
+    // الجولة 40: إشعار الكادر بنتيجة قرار طلب الانضمام بلغة واضحة
+    const wasPendingJoinRequest =
+      affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
+    await notify(
+      affiliation.nurseId,
+      wasPendingJoinRequest
+        ? {
+            title: 'تم قبول طلب انضمامك',
+            body: `قُبل طلب انضمامك إلى كوادر جهة (${affiliation.hospital.name}) — أصبحت ضمن كوادر الجهة، واعتمادك المهني (كطبيب/ككادر طبي) يبقى من حساب الإدارة بعد رفع مستنداتك`,
+            type: 'AFFILIATION_UPDATED',
+            link: '/nurse/profile',
+          }
+        : {
+            title: 'تحديث حالة الارتباط المهني',
+            body: `حالة ارتباطك بجهة (${affiliation.hospital.name}) أصبحت: ${AFFILIATION_STATUS_LABELS[status]}`,
+            type: 'AFFILIATION_UPDATED',
+            link: '/nurse/profile',
+          }
+    )
 
     return NextResponse.json({
-      message: `تم تحديث حالة (${affiliation.nurse.name}) إلى: ${AFFILIATION_STATUS_LABELS[status]}`,
+      message: wasPendingJoinRequest
+        ? `تم قبول (${affiliation.nurse.name}) وإضافته لكوادر جهة (${affiliation.hospital.name})`
+        : `تم تحديث حالة (${affiliation.nurse.name}) إلى: ${AFFILIATION_STATUS_LABELS[status]}`,
       affiliation: updated,
     })
   } catch (error) {
@@ -127,14 +156,31 @@ export async function DELETE(
 
     await db.nurseAffiliation.delete({ where: { id } })
 
-    await notify(affiliation.nurseId, {
-      title: 'إزالة ارتباط مهني',
-      body: `تم إزالة ارتباطك بجهة (${affiliation.hospital.name}) من السجل المهني`,
-      type: 'AFFILIATION_UPDATED',
-      link: '/nurse/profile',
-    })
+    // الجولة 40: رفض طلب انضمام يُبلَّغ للكادر بلغة صريحة — ليس مجرد إزالة ارتباط
+    const wasPendingJoinRequest =
+      affiliation.status === 'PENDING' && affiliation.requestedById === affiliation.nurseId
+    await notify(
+      affiliation.nurseId,
+      wasPendingJoinRequest
+        ? {
+            title: 'تم رفض طلب انضمامك',
+            body: `رُفض طلب انضمامك إلى كوادر جهة (${affiliation.hospital.name}) — يمكنك التواصل مع مسؤول الجهة أو التقديم لجهة أخرى من سجلك المهني`,
+            type: 'AFFILIATION_UPDATED',
+            link: '/nurse/profile',
+          }
+        : {
+            title: 'إزالة ارتباط مهني',
+            body: `تم إزالة ارتباطك بجهة (${affiliation.hospital.name}) من السجل المهني`,
+            type: 'AFFILIATION_UPDATED',
+            link: '/nurse/profile',
+          }
+    )
 
-    return NextResponse.json({ message: `تم إزالة الارتباط مع (${affiliation.hospital.name})` })
+    return NextResponse.json({
+      message: wasPendingJoinRequest
+        ? `تم رفض طلب انضمام (${affiliation.nurse.name}) وإزالته من طلبات الجهة`
+        : `تم إزالة الارتباط مع (${affiliation.hospital.name})`,
+    })
   } catch (error) {
     return handleApiError(error)
   }

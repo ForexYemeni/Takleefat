@@ -5,10 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeCheck,
   Building2,
+  Check,
   Eye,
   EyeOff,
   FileText,
   Globe2,
+  Hourglass,
   IdCard,
   Lock,
   PhoneIcon,
@@ -16,10 +18,11 @@ import {
   ShieldQuestion,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
-import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
+import { apiFetcher, apiPatch, apiPost, apiDelete } from '@/lib/api-client'
 import { formatDate, GENDER_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import {
@@ -92,6 +95,12 @@ interface StaffNurse {
   available?: boolean
   /** الجولة 39: عدد المستندات المعتمدة من الإدارة — الاعتماد المهني */
   approvedDocuments?: number
+  /** الجولة 40: طلب انضمام ذاتي من طبيب (PENDING وقد طلبه بنفسه) */
+  isJoinRequest?: boolean
+  /** الجولة 40: نوع العمل الذي طلبه الطبيب (يعمل حالياً/عمل سابقاً) */
+  requestedStatusLabel?: string | null
+  /** الجولة 40: ملاحظة الطبيب مع طلبه */
+  joinNote?: string | null
   nurse: {
     id: string
     name: string
@@ -200,13 +209,48 @@ export default function ReceiverStaffPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // ---------- الجولة 40: قبول طلب انضمام طبيب لجهتك ----------
+  const acceptJoinMutation = useMutation({
+    mutationFn: ({ row }: { row: StaffNurse }) =>
+      apiPatch<{ message: string }>(`/api/affiliations/${row.affiliationId}`, { status: 'ENDORSED' }),
+    onSuccess: (res, { row }) => {
+      toast.success(
+        row.nurse.status === 'APPROVED'
+          ? res.message
+          : `${res.message} — سيُحتسب ضمن المعتمدين بعد اعتماد حسابه ورفع مستنداته من الإدارة`,
+        { duration: 6000 }
+      )
+      queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
+      queryClient.invalidateQueries({ queryKey: ['org-community'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // ---------- الجولة 40: رفض طلب الانضمام (إزالة الطلب مع إشعار الطبيب) ----------
+  const [rejecting, setRejecting] = useState<StaffNurse | null>(null)
+  const rejectJoinMutation = useMutation({
+    mutationFn: (affiliationId: string) =>
+      apiDelete<{ message: string }>(`/api/affiliations/${affiliationId}`),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['receiver-staff'] })
+      queryClient.invalidateQueries({ queryKey: ['org-community'] })
+      setRejecting(null)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const org = data?.org
   const nurses = data?.nurses ?? []
   const orgPending = org?.status === 'PENDING'
+  // الجولة 40: فصل طلبات انضمام الأطباء عن صفوف الكوادر — قرار قبول/رفض صريح
+  // المشرف يعتمد الأطباء حصراً، وطلبات الكادر التمريضي من اختصاص المستلم (الجولة 39)
+  const joinRequests = nurses.filter((n) => n.isJoinRequest && n.nurse.role === 'DOCTOR')
+  const staffRows = nurses.filter((n) => !(n.isJoinRequest && n.nurse.role === 'DOCTOR'))
 
   if (isLoading) return <DashboardSkeleton />
 
-  const pendingCount = nurses.filter((n) => n.nurse.status === 'PENDING').length
+  const pendingCount = staffRows.filter((n) => n.nurse.status === 'PENDING').length
 
   return (
     <div className="space-y-4">
@@ -239,6 +283,90 @@ export default function ReceiverStaffPage() {
           org={{ name: org.name, city: org.city, status: org.status }}
           stats={data.community ?? { accreditedNurses: 0, accreditedDoctors: 0, availableNow: 0 }}
         />
+      )}
+
+      {/* ---------- الجولة 40: طلبات انضمام أطباء إلى جهتك — قرار قبول/رفض صريح ---------- */}
+      {org && joinRequests.length > 0 && (
+        <section className="overflow-hidden rounded-3xl border border-sky-200 bg-sky-50/60 dark:border-sky-900/60 dark:bg-sky-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200 bg-sky-100/60 px-4 py-3 dark:border-sky-900/60 dark:bg-sky-900/30">
+            <h2 className="flex items-center gap-2 text-sm font-extrabold text-sky-900 dark:text-sky-200">
+              <Hourglass className="size-4" />
+              طلبات انضمام أطباء إلى جهتك
+              <Badge className="bg-sky-600 text-white">{joinRequests.length}</Badge>
+            </h2>
+            <p className="text-[11px] text-muted-foreground">
+              أطباء يطلبون إضافة أنفسهم لجهتك — القبول يضيفهم لمجتمع كوادر الجهة فقط،
+              واعتمادهم المهني يبقى من الإدارة بعد المستندات
+            </p>
+          </div>
+          <div className="grid gap-2 p-3">
+            {joinRequests.map((n) => (
+              <div
+                key={n.affiliationId}
+                className="flex flex-wrap items-center gap-3 rounded-2xl border bg-background p-3.5"
+              >
+                <span className="rounded-xl bg-sky-100 p-2.5 dark:bg-sky-900/40">
+                  <UserPlus className="size-5 text-sky-700 dark:text-sky-300" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold">
+                    {n.nurse.name}
+                    <span className="text-[10px] font-normal text-muted-foreground">الحساب:</span>
+                    <StatusBadge status={n.nurse.status} labels={USER_STATUS_LABELS} />
+                    {n.requestedStatusLabel && (
+                      <Badge variant="outline" className="text-[10px]">
+                        يطلب: {n.requestedStatusLabel}
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <StaffPhone data={n.nurse as StaffPhoneData} personName={n.nurse.name} />
+                    {n.nurse.specialty && <span>{n.nurse.specialty}</span>}
+                    {n.nurse.yearsOfExperience != null && n.nurse.yearsOfExperience > 0 && (
+                      <span>{n.nurse.yearsOfExperience} سنة خبرة</span>
+                    )}
+                    <span>قدّم الطلب {formatDate(n.createdAt)}</span>
+                  </p>
+                  {n.joinNote && (
+                    <p className="mt-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+                      «{n.joinNote}»
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                    disabled={acceptJoinMutation.isPending}
+                    onClick={() => acceptJoinMutation.mutate({ row: n })}
+                  >
+                    <Check className="size-3.5" />
+                    قبول وإضافة للجهة
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 border-red-300 text-xs text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                    disabled={rejectJoinMutation.isPending}
+                    onClick={() => setRejecting(n)}
+                  >
+                    <X className="size-3.5" />
+                    رفض الطلب
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => setDetails(n)}
+                  >
+                    <Eye className="size-3.5" />
+                    عرض
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* تنبيه حالة الجهة: بانتظار الاعتماد */}
@@ -276,7 +404,7 @@ export default function ReceiverStaffPage() {
             <TabsTrigger value="org" className="gap-1.5">
               <Building2 className="size-3.5" />
               أطباء جهتي
-              <span className="text-xs text-muted-foreground">{nurses.length}</span>
+              <span className="text-xs text-muted-foreground">{staffRows.length}</span>
             </TabsTrigger>
             <TabsTrigger value="all" className="gap-1.5 text-indigo-700 dark:text-indigo-400">
               <Globe2 className="size-3.5" />
@@ -294,11 +422,11 @@ export default function ReceiverStaffPage() {
           title="لا توجد جهة صحية مرتبطة بحسابك"
           description="إذا كانت جهتك جديدة فبانتظار اعتمادها من الإدارة — وإذا كانت قائمة يرجى مراجعة الإدارة لربطها بحسابك."
         />
-      ) : nurses.length === 0 ? (
+      ) : staffRows.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="لا يوجد أطباء في جهتك بعد"
-          description="أضف الممرضين الخاصين بجهتك الصحية — سيراهم حساب الإدارة مباشرة ويعتمدهم بعد مراجعة مستنداتهم."
+          title={joinRequests.length > 0 ? 'لا يوجد أطباء معتمدين بعد — راجع طلبات الانضمام أعلاه' : 'لا يوجد أطباء في جهتك بعد'}
+          description="أضف الأطباء الخاصين بجهتك الصحية — سيراهم حساب الإدارة مباشرة ويعتمدهم بعد مراجعة مستنداتهم."
           action={
             <Button onClick={() => setCreateOpen(true)} className="gap-2">
               <UserPlus className="size-4" />
@@ -308,7 +436,7 @@ export default function ReceiverStaffPage() {
         />
       ) : (
         <div className="grid gap-2">
-          {nurses.map((n) => (
+          {staffRows.map((n) => (
             <div key={n.affiliationId} className="flex flex-wrap items-center gap-3 rounded-2xl border p-4">
               <span className="rounded-xl bg-secondary p-2.5">
                 <Users className="size-5 text-primary" />
@@ -614,6 +742,21 @@ export default function ReceiverStaffPage() {
                   سيُعتمد تلقائياً مع اعتماد الجهة دون أي إجراء إضافي.
                 </p>
               )}
+              {/* الجولة 40: تفاصيل طلب الانضمام — ملاحظة الطبيب ونوع العمل المطلوب */}
+              {details.isJoinRequest && (
+                <div className="space-y-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+                  <p className="flex items-start gap-2">
+                    <Hourglass className="mt-0.5 size-4 shrink-0" />
+                    هذا <span className="font-bold">طلب انضمام ذاتي</span> قدّمه الطبيب بنفسه —
+                    القبول والرفض من قسم «طلبات الانضمام» في الأعلى، والقبول يضيفه لكوادر
+                    الجهة فقط دون الاعتماد المهني (من الإدارة بعد المستندات).
+                  </p>
+                  {details.requestedStatusLabel && (
+                    <p>نوع العمل المطلوب: <span className="font-bold">{details.requestedStatusLabel}</span></p>
+                  )}
+                  {details.joinNote && <p>ملاحظة الطبيب: «{details.joinNote}»</p>}
+                </div>
+              )}
               {details.nurse.status === 'PENDING' && (
                 <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
                   <BadgeCheck className="mt-0.5 size-4 shrink-0" />
@@ -661,6 +804,19 @@ export default function ReceiverStaffPage() {
           endorsing &&
           endorseMutation.mutate({ affiliationId: endorsing.row.affiliationId, status: endorsing.status })
         }
+      />
+
+      {/* ---------- الجولة 40: تأكيد رفض طلب انضمام طبيب ---------- */}
+      <ConfirmDialog
+        open={!!rejecting}
+        onOpenChange={(open) => !open && setRejecting(null)}
+        tone="warning"
+        icon={X}
+        title={`رفض طلب انضمام (${rejecting?.nurse.name})`}
+        description="سيُحذف طلب الانضمام نهائياً من طلبات جهتك ويصله إشعار بالرفض — إن أراد التقديم مجدداً فيمكنه ذلك في أي وقت."
+        confirmLabel="نعم، ارفض الطلب"
+        processing={rejectJoinMutation.isPending}
+        onConfirm={() => rejecting && rejectJoinMutation.mutate(rejecting.affiliationId)}
       />
 
       {/* ---------- السيرة الذاتية الكاملة — لمن مُنح الإذن من الإدارة (الجولة 32) ---------- */}

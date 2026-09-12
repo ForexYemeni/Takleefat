@@ -256,6 +256,16 @@ export async function GET() {
         workYears: a.workYears,
         createdAt: a.createdAt,
         isFavorite: favoriteSet.has(a.nurse.id),
+        // الجولة 40: طلب انضمام ذاتي من الكادر (PENDING وقد طلبه الكادر بنفسه)
+        // — يُعرض في قسم «طلبات الانضمام» بقرار قبول/رفض صريح بدل أن يختلط
+        // بصفوف الكوادر ويبدو خللاً في القسم
+        isJoinRequest: a.status === 'PENDING' && a.requestedById === a.nurse.id,
+        // نوع العمل الذي طلبه الكادر (يعمل حالياً/عمل سابقاً) وملاحظته
+        requestedStatusLabel:
+          a.requestedStatus != null
+            ? (AFFILIATION_STATUS_LABELS[a.requestedStatus] ?? a.requestedStatus)
+            : null,
+        joinNote: a.note,
         // الجولة 38: متاح الآن = بلا تكليف سارٍ (ACTIVE/RECEIVED)
         available: !busy.has(a.nurse.id),
         // الجولة 39: الاعتماد المهني من الإدارة — مستندات معتمدة من حساب الإدارة

@@ -257,6 +257,26 @@ export async function POST(req: NextRequest) {
           })
         )
       )
+      // الجولة 40 — إشعار مسؤول الجهة فوراً: طلب الانضمام لا يصل بصمت أبداً.
+      // مطابقة الدور: طلب الكادر التمريضي → المستلم الإداري لجهته، وطلب الطبيب →
+      // مشرف الأطباء لجهته (نفس قاعدة اعتماد الجهة — الجولة 39). الربط بالجهة
+      // عبر hospitalName كما في resolveReceiverOrg — بلا أي بيانات اتصال
+      // في الإشعار (القفل باتجاه واحد — الجولة 38).
+      const supportRole = nurse.role === 'DOCTOR' ? 'DOCTOR_SUPERVISOR' : 'RECEIVER'
+      const responsibles = await db.user.findMany({
+        where: { role: supportRole, hospitalName: hospital.name },
+        select: { id: true },
+      })
+      await Promise.all(
+        responsibles.map((r) =>
+          notify(r.id, {
+            title: 'طلب انضمام جديد لجهتك الصحية',
+            body: `${nurse.name} يطلب الانضمام إلى كوادر جهة (${hospital.name}) — راجع الطلب واقبله أو ارفضه من كوادر جهتي`,
+            type: 'AFFILIATION_UPDATED',
+            link: nurse.role === 'DOCTOR' ? '/supervisor/staff' : '/receiver/staff',
+          })
+        )
+      )
     } else {
       await notify(targetNurseId, {
         title: 'تحديث سجلك المهني',
