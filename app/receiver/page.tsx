@@ -13,6 +13,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { PromoBanner } from '@/components/shared/promo-banner'
 
 interface ReceiverStats {
   myAssignments: number
@@ -89,6 +90,8 @@ export default function ReceiverOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* الجولة 44: بانر العرض بدون رسوم إدارة */}
+      <PromoBanner />
       <div>
         <h1 className="text-2xl font-extrabold">نظرة عامة</h1>
         <p className="mt-1 text-sm text-muted-foreground">

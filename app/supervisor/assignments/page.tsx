@@ -28,6 +28,7 @@ import {
   cn,
   formatDate,
   formatDateTime,
+  formatTime12,
   formatCurrency,
   APPLICATION_STATUS_LABELS,
   ASSIGNMENT_STATUS_LABELS,
@@ -40,6 +41,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant-cv'
 import { CreatePostDialog } from '@/components/shared/create-post-dialog'
+import { ShiftCountdown } from '@/components/shared/shift-countdown'
 import { AssignmentContactChip } from '@/components/shared/staff-phone'
 import { Stars, StarRatingInput } from '@/components/shared/star-rating'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -357,7 +359,9 @@ function MyPosts({
                 </div>
                 <div className="rounded-lg bg-secondary/60 p-2.5">
                   <p className="text-muted-foreground">تاريخ البدء</p>
-                  <p className="mt-0.5 font-bold">{formatDate(post.startDate)}</p>
+                  <p className="mt-0.5 font-bold">
+                    {formatDate(post.startDate)} • {formatTime12(post.startDate)}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-secondary/60 p-2.5">
                   <p className="text-muted-foreground">الموقع (تلقائي من الجهة)</p>
@@ -670,8 +674,13 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                     />
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    تاريخ البدء: {formatDate(a.startDate)}
+                  <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      تاريخ البدء: {formatDate(a.startDate)} • {formatTime12(a.startDate)}
+                      {a.endDate ? ` — ينتهي ${formatTime12(a.endDate)}` : ''}
+                    </span>
+                    {/* الجولة 44: عداد تنازلي حي لبداية التكليف — بتوقيت مكة المكرمة */}
+                    <ShiftCountdown startDate={a.startDate} endDate={a.endDate} />
                   </p>
 
                   {/* الجولة 39: الإنهاء والتقييم متاحان حتى لو أغلق الطبيب التكليف من حسابه

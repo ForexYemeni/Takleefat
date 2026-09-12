@@ -21,11 +21,22 @@ import {
   TrendingUp,
   UserCheck,
   Users,
+  Globe2,
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPost } from '@/lib/api-client'
-import { POST_GENDER_LABELS } from '@/lib/utils'
+import {
+  POST_GENDER_LABELS,
+  formatDateTimeMecca,
+  formatTime12,
+  time12To24,
+  time24To12,
+  meccaDateTime,
+  addHoursToTime,
+  hoursBetween,
+  type Time12Parts,
+} from '@/lib/utils'
 import { AFFILIATION_STATUS_LABELS, DISTRIBUTION_LABELS, MATCH_PRIORITY_LABELS } from '@/lib/network'
 import {
   createPostSchema,
@@ -74,6 +85,66 @@ interface DepartmentOption {
   id: string
   name: string
   isActive: boolean
+}
+
+/** خيارات عدد الساعات السريعة — الجولة 44 (طلب المستلم المباشر) */
+const HOUR_CHIPS = [6, 8, 12, 16, 24] as const
+
+/** دقائق منتقي الوقت — ربع ساعة (سهولة إدخال فائقة) */
+const MINUTE_OPTIONS = ['00', '15', '30', '45'] as const
+
+/** منتقي وقت 12 ساعي (صباحاً/مساءً) — ثلاث قوائم: الساعة، الدقيقة، الفترة */
+function Time12Pick({
+  label,
+  value,
+  onChange,
+  idPrefix,
+}: {
+  label: string
+  value: Time12Parts
+  onChange: (p: Time12Parts) => void
+  idPrefix: string
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">{label}</Label>
+      <div className="grid grid-cols-3 gap-1.5">
+        <Select value={value.hour} onValueChange={(v) => onChange({ ...value, hour: v })}>
+          <SelectTrigger id={`${idPrefix}-hour`} className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-56">
+            {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((h) => (
+              <SelectItem key={h} value={h}>
+                {h}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={value.minute} onValueChange={(v) => onChange({ ...value, minute: v })}>
+          <SelectTrigger id={`${idPrefix}-minute`} className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MINUTE_OPTIONS.map((m) => (
+              <SelectItem key={m} value={m}>
+                {m}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={value.period} onValueChange={(v) => onChange({ ...value, period: v as Time12Parts['period'] })}>
+          <SelectTrigger id={`${idPrefix}-period`} className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AM">صباحاً</SelectItem>
+            <SelectItem value="PM">مساءً</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
 }
 
 /** بطاقات جمهور التكليف الفاخرة — كل طريقة توزيع ببطاقة أيقونة ووصف مختصر */
@@ -198,6 +269,8 @@ export function CreatePostDialog({
       department: '',
       location: '',
       startDate: '',
+      startTime: '',
+      endTime: '',
       nursesNeeded: '1',
       hours: '',
       gender: 'ANY',
@@ -240,6 +313,8 @@ export function CreatePostDialog({
         department: repostSource.department ?? '',
         location: '',
         startDate: new Date().toISOString().slice(0, 10),
+        startTime: '',
+        endTime: '',
         nursesNeeded: repostSource.nursesNeeded != null ? String(repostSource.nursesNeeded) : '1',
         hours: repostSource.hours != null ? String(repostSource.hours) : '',
         gender: (repostSource.gender as 'MALE' | 'FEMALE' | 'ANY') ?? 'ANY',
@@ -253,6 +328,74 @@ export function CreatePostDialog({
   const selectedHospitalId = form.watch('hospitalId')
   const selectedHospital = hospitals.find((h) => h.id === selectedHospitalId)
   const distribution = form.watch('distribution') || 'ALL_MATCHING'
+
+  // ---------- الجولة 44: وقت البدء والانتهاء بنظام 12 ساعي — بتوقيت مكة المكرمة ----------
+  // الحالة المحلية لمكونات القوائم (ساعة/دقيقة/فترة) والنموذج يحفظ 'HH:mm' بصيغة 24
+  // — إدخال فائق السهولة: اختيار الساعات يحسب الانتهاء تلقائياً، واختيار الانتهاء
+  // يحسب الساعات تلقائياً، والوردية الليلية العابرة لمنتصف الليل مدعومة.
+  const [startPart, setStartPart] = useState<Time12Parts>({ hour: '8', minute: '00', period: 'AM' })
+  const [endPart, setEndPart] = useState<Time12Parts>({ hour: '4', minute: '00', period: 'PM' })
+
+  // تهيئة الافتراضي عند كل فتح — وإعادة النشر تُشتق ساعات آخر تكليف إن وُجدت
+  useEffect(() => {
+    if (!open) return
+    const s: Time12Parts = { hour: '8', minute: '00', period: 'AM' }
+    const s24 = time12To24(s)
+    const h = repostSource?.hours != null && Number(repostSource.hours) > 0 ? Number(repostSource.hours) : null
+    const e24 = h != null ? addHoursToTime(s24, h) : '16:00'
+    setStartPart(s)
+    setEndPart(time24To12(e24))
+    form.setValue('startTime', s24)
+    form.setValue('endTime', e24)
+  }, [open])
+
+  const watchedHours = form.watch('hours')
+  const activeHours = watchedHours && Number(watchedHours) > 0 ? Number(watchedHours) : null
+
+  /** تغيير وقت البدء — الانتهاء يُعاد اشتقاقه من الساعات المحفوظة (أو العكس) */
+  const changeStartTime = (p: Time12Parts) => {
+    setStartPart(p)
+    const s24 = time12To24(p)
+    form.setValue('startTime', s24)
+    if (activeHours != null) {
+      const e24 = addHoursToTime(s24, activeHours)
+      setEndPart(time24To12(e24))
+      form.setValue('endTime', e24)
+    } else {
+      const end24 = time12To24(endPart)
+      if (end24 !== s24) {
+        form.setValue('hours', String(Math.min(999, Math.max(1, Math.round(hoursBetween(s24, end24))))))
+      }
+    }
+  }
+
+  /** تغيير وقت الانتهاء — الساعات تُشتق من الفرق (يدعم الوردية الليلية العابرة لمنتصف الليل) */
+  const changeEndTime = (p: Time12Parts) => {
+    setEndPart(p)
+    const e24 = time12To24(p)
+    form.setValue('endTime', e24)
+    const s24 = form.getValues('startTime') || time12To24(startPart)
+    if (e24 !== s24) {
+      form.setValue('hours', String(Math.min(999, Math.max(1, Math.round(hoursBetween(s24, e24))))))
+    }
+  }
+
+  /** اختيار سريع للساعات — وقت الانتهاء يُحسب تلقائياً من وقت البدء */
+  const applyHoursChip = (h: number) => {
+    form.setValue('hours', String(h), { shouldValidate: false })
+    const s24 = form.getValues('startTime') || time12To24(startPart)
+    const e24 = addHoursToTime(s24, h)
+    setEndPart(time24To12(e24))
+    form.setValue('endTime', e24)
+  }
+
+  // الملخص الحي — كل الأوقات بتوقيت مكة المكرمة بنظام 12 ساعي
+  const watchedDate = form.watch('startDate')
+  const watchedStart = form.watch('startTime')
+  const watchedEnd = form.watch('endTime')
+  const summaryStart =
+    watchedDate && watchedStart ? formatDateTimeMecca(meccaDateTime(watchedDate, watchedStart)) : null
+  const summaryEnd = watchedDate && watchedEnd ? formatTime12(meccaDateTime(watchedDate, watchedEnd)) : null
 
   // ---------- اختيار الكوادر عند التوزيع المحدد/الاستدعاء ----------
   const [selectedNurseIds, setSelectedNurseIds] = useState<string[]>([])
@@ -453,7 +596,62 @@ export function CreatePostDialog({
             </div>
           </div>
 
-          {/* المبلغ + الساعات + الكادر + الجنس */}
+          {/* ---------- الجولة 44: وقت البدء والانتهاء بنظام 12 ساعي — بتوقيت مكة المكرمة ---------- */}
+          <div className="space-y-3 rounded-2xl border bg-gradient-to-bl from-secondary/40 to-transparent p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="flex items-center gap-1.5 text-sm font-extrabold">
+                <Clock className="size-4 text-primary" />
+                وقت البدء والانتهاء
+              </Label>
+              <Badge variant="secondary" className="gap-1 text-[10px]">
+                <Globe2 className="size-3" />
+                نظام 12 ساعي — بتوقيت مكة المكرمة
+              </Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Time12Pick label="وقت البدء" value={startPart} onChange={changeStartTime} idPrefix="cp-start" />
+              <Time12Pick label="وقت الانتهاء" value={endPart} onChange={changeEndTime} idPrefix="cp-end" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">عدد الساعات — اختيار سريع (يحسب وقت الانتهاء تلقائياً)</Label>
+              <div className="flex flex-wrap gap-2">
+                {HOUR_CHIPS.map((h) => {
+                  const isActive = activeHours === h
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => applyHoursChip(h)}
+                      className={`min-w-14 rounded-xl border-2 px-3 py-1.5 text-xs font-extrabold tabular-nums transition-colors ${
+                        isActive
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                      }`}
+                    >
+                      {h} ساعات
+                    </button>
+                  )
+                })}
+                {activeHours != null && !HOUR_CHIPS.includes(activeHours as 6 | 8 | 12 | 16 | 24) && (
+                  <span className="rounded-xl border-2 border-primary bg-primary/10 px-3 py-1.5 text-xs font-extrabold text-primary tabular-nums">
+                    {activeHours} ساعات
+                  </span>
+                )}
+              </div>
+              {(summaryStart || summaryEnd) && (
+                <p className="flex flex-wrap items-center gap-1.5 rounded-xl bg-primary/5 px-3 py-2 text-[11px] font-bold text-foreground/80">
+                  <Globe2 className="size-3.5 shrink-0 text-primary" />
+                  {summaryStart && <span>تبدأ: {summaryStart}</span>}
+                  {summaryEnd && <span>• تنتهي: {summaryEnd}</span>}
+                  {activeHours != null && <span>• ({activeHours} ساعات)</span>}
+                  <span className="text-muted-foreground">— بتوقيت مكة المكرمة</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* المبلغ + الكادر + الجنس */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cp-value" className="flex items-center gap-1.5">
@@ -463,16 +661,6 @@ export function CreatePostDialog({
               <Input id="cp-value" type="number" min={1} placeholder="مثال: 120000" {...form.register('value')} />
               {form.formState.errors.value && (
                 <p className="text-xs text-destructive">{form.formState.errors.value.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cp-hours" className="flex items-center gap-1.5">
-                <Clock className="size-3.5" />
-                عدد الساعات
-              </Label>
-              <Input id="cp-hours" type="number" min={1} placeholder="مثال: 8" {...form.register('hours')} />
-              {form.formState.errors.hours && (
-                <p className="text-xs text-destructive">{form.formState.errors.hours.message}</p>
               )}
             </div>
             <div className="space-y-2">

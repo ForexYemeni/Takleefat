@@ -40,6 +40,10 @@ export async function PATCH(req: NextRequest) {
       paymentAccountNumber,
       paymentAccountName,
       paymentNotes,
+      // الجولة 44: العرض بدون رسوم إدارة
+      promoActive,
+      promoUntil,
+      promoNote,
     } = parsed.data
 
     await Promise.all([
@@ -52,6 +56,10 @@ export async function PATCH(req: NextRequest) {
       setSetting('paymentAccountNumber', paymentAccountNumber),
       setSetting('paymentAccountName', paymentAccountName),
       setSetting('paymentNotes', paymentNotes || ''),
+      // الجولة 44: العرض — promoUntil الفارغ = عرض مفتوح حتى الإيقاف اليدوي
+      setSetting('promoActive', promoActive ? '1' : '0'),
+      setSetting('promoUntil', promoUntil ? new Date(promoUntil).toISOString() : ''),
+      setSetting('promoNote', promoNote || ''),
     ])
 
     const settings = await getSettings()

@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { PromoBanner } from '@/components/shared/promo-banner'
 
 interface NurseStats {
   myAssignments: number
@@ -141,6 +142,8 @@ export default function NurseOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* الجولة 44: بانر العرض بدون رسوم إدارة */}
+      <PromoBanner />
       <div>
         <h1 className="text-2xl font-extrabold">نظرة عامة</h1>
         <p className="mt-1 text-sm text-muted-foreground">

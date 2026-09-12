@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Clock,
   History,
   Inbox,
@@ -28,6 +29,7 @@ import {
   cn,
   formatDate,
   formatDateTime,
+  formatTime12,
   formatCurrency,
   APPLICATION_STATUS_LABELS,
   ASSIGNMENT_STATUS_LABELS,
@@ -42,6 +44,7 @@ import { ApplicantCV, type ApplicantData } from '@/components/receiver/applicant
 import { CreatePostDialog } from '@/components/shared/create-post-dialog'
 import { AssignmentContactChip } from '@/components/shared/staff-phone'
 import { Stars, StarRatingInput } from '@/components/shared/star-rating'
+import { ShiftCountdown } from '@/components/shared/shift-countdown'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -78,6 +81,7 @@ interface ReceiverPost {
   department: string | null
   location: string | null
   startDate: string
+  endTime: string | null
   hours: number | null
   gender: string
   nursesNeeded: number
@@ -329,76 +333,81 @@ function MyPosts({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-2.5 md:grid-cols-2">
       {posts.map((post) => {
         const pendingCount = post._count?.applications ?? 0
         const approvedCount = post.assignments?.length ?? 0
         return (
-          <Card key={post.id} className={post.status === 'OPEN' ? 'border-teal-200 bg-teal-50/30' : ''}>
-            <CardContent className="space-y-3 p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-bold">{post.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {post.facility}
-                    {post.department ? ` — ${post.department}` : ''}
-                  </p>
-                </div>
+          <Card
+            key={post.id}
+            className={cn(
+              'overflow-hidden transition-colors',
+              post.status === 'OPEN'
+                ? 'border-teal-200/80 bg-teal-50/20 dark:border-teal-900'
+                : 'opacity-90'
+            )}
+          >
+            {/* بطاقة مصغّرة احترافية — الجولة 44: صف العنوان + صف الجهة + شريط مدمج + إجراءات */}
+            <CardContent className="space-y-2 p-3.5">
+              {/* الصف 1: العنوان + الحالة */}
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 rounded-lg bg-teal-500/10 p-1.5 text-teal-700 dark:text-teal-300">
+                  <ClipboardList className="size-3.5" />
+                </span>
+                <p className="min-w-0 flex-1 truncate text-sm font-extrabold">{post.title}</p>
                 <StatusBadge status={post.status} labels={POST_STATUS_LABELS} />
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">قيمة التكليف</p>
-                  <p className="mt-0.5 font-extrabold text-primary" dir="ltr">
-                    {formatCurrency(post.value)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">تاريخ البدء</p>
-                  <p className="mt-0.5 font-bold">{formatDate(post.startDate)}</p>
-                </div>
-                <div className="rounded-lg bg-secondary/60 p-2.5">
-                  <p className="text-muted-foreground">الموقع (تلقائي من الجهة)</p>
-                  <p className="mt-0.5 font-bold">{post.location ?? 'غير محدد'}</p>
-                </div>
-              </div>
+              {/* الصف 2: الجهة والقسم والموقع — سطر مقتطع واحد */}
+              <p className="truncate text-[11px] text-muted-foreground">
+                {post.facility}
+                {post.department ? ` — ${post.department}` : ''}
+                {post.location ? ` — ${post.location}` : ''}
+              </p>
 
-              <div className="flex flex-wrap gap-2 text-xs">
-                <Badge variant="secondary" className="gap-1">
-                  <Users className="size-3" />
-                  {pendingCount} تقديم بانتظار المراجعة
-                </Badge>
-                <Badge variant="outline" className="gap-1">
-                  <BadgeCheck className="size-3" />
-                  {approvedCount} / {post.nursesNeeded} كادر معتمد
-                </Badge>
+              {/* الشريط المدمج: القيمة + التوقيت + العداد الحي + العدادات */}
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                <span
+                  className="rounded-full bg-primary/10 px-2 py-0.5 font-extrabold text-primary tabular-nums"
+                  dir="ltr"
+                >
+                  {formatCurrency(post.value)}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-secondary/70 px-2 py-0.5 text-muted-foreground">
+                  <CalendarDays className="size-3" />
+                  {formatDate(post.startDate)} • {formatTime12(post.startDate)}
+                </span>
                 {post.hours ? (
-                  <Badge variant="outline" className="gap-1">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-secondary/70 px-2 py-0.5 text-muted-foreground tabular-nums">
                     <Clock className="size-3" />
                     {post.hours} ساعة
-                  </Badge>
+                  </span>
                 ) : null}
-                <Badge variant="outline" className="gap-1">
+                <ShiftCountdown startDate={post.startDate} endDate={post.endTime} compact />
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                  <Users className="size-3" />
+                  {pendingCount} تقديم
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                  <BadgeCheck className="size-3" />
+                  {approvedCount}/{post.nursesNeeded}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-secondary/70 px-2 py-0.5 text-muted-foreground">
                   <UserRound className="size-3" />
                   {POST_GENDER_LABELS[post.gender] ?? 'أي جنس'}
-                </Badge>
+                </span>
               </div>
 
               {post.status === 'OPEN' ? (
-                <Button className="w-full gap-2" onClick={() => onOpenApplications(post)}>
-                  <Users className="size-4" />
-                  مراجعة التقديمات والسيرة الذاتية
-                </Button>
-              ) : (
-                <p className="flex items-center gap-1.5 rounded-xl bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">
-                  <BadgeCheck className="size-3.5" />
-                  اكتمل اختيار الكادر لهذا التكليف — تابع التكليف المؤكد من تبويب «التكليفات المؤكدة»
-                </p>
-              )}
-
-              {post.status === 'OPEN' && (
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    className="h-8 flex-1 gap-1 text-[11px]"
+                    onClick={() => onOpenApplications(post)}
+                  >
+                    <Users className="size-3.5" />
+                    مراجعة التقديمات
+                  </Button>
                   <a
                     href={whatsappLink(
                       null,
@@ -406,23 +415,29 @@ function MyPosts({
                     )}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-xl border bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
                     title="أرسل تفاصيل التكليف عبر واتساب"
                   >
                     <MessageCircle className="size-3.5" />
-                    مشاركة عبر واتساب
+                    مشاركة
                   </a>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="flex-1 text-muted-foreground hover:text-destructive"
+                    className="h-8 gap-1 px-2 text-[11px] text-muted-foreground hover:text-destructive"
                     disabled={cancelMutation.isPending}
                     onClick={() => cancelMutation.mutate(post.id)}
+                    title="إلغاء الإعلان"
                   >
                     <XCircle className="size-3.5" />
-                    إلغاء الإعلان
+                    إلغاء
                   </Button>
                 </div>
+              ) : (
+                <p className="flex items-center gap-1.5 rounded-xl bg-cyan-50 px-2.5 py-1.5 text-[10px] font-bold text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300">
+                  <BadgeCheck className="size-3 shrink-0" />
+                  اكتمل اختيار الكادر — تابعه من تبويب «التكليفات المؤكدة»
+                </p>
               )}
             </CardContent>
           </Card>
@@ -669,8 +684,13 @@ function ConfirmedAssignments({ assignments }: { assignments: ReceiverAssignment
                     />
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    تاريخ البدء: {formatDate(a.startDate)}
+                  <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      تاريخ البدء: {formatDate(a.startDate)} • {formatTime12(a.startDate)}
+                      {a.endDate ? ` — ينتهي ${formatTime12(a.endDate)}` : ''}
+                    </span>
+                    {/* الجولة 44: عداد تنازلي حي لبداية التكليف — بتوقيت مكة المكرمة */}
+                    <ShiftCountdown startDate={a.startDate} endDate={a.endDate} />
                   </p>
 
                   {/* الجولة 39: الإنهاء والتقييم متاحان حتى لو أغلق الكادر التكليف من حسابه

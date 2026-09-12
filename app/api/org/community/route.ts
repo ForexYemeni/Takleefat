@@ -6,7 +6,7 @@ import {
   busyStaffIds,
   computeOrgCadreStats,
   healReceiverPendingAffiliations,
-  resolveReceiverOrg,
+  resolveReceiverOrgs,
 } from '@/lib/network'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 
@@ -38,8 +38,9 @@ export async function GET(req: NextRequest) {
       })
       if (!org) return jsonError('الجهة الصحية غير موجودة', 404)
     } else {
-      const own = await resolveReceiverOrg(session.user.id)
-      if (!own) {
+      // الجولة 44: المسؤول يرى مجتمع أي جهة من جهاته المعتمدة — الافتراضي الأساسية
+      const orgs = await resolveReceiverOrgs(session.user.id)
+      if (orgs.length === 0) {
         // المسؤول بلا جهة مصرّح بها — استجابة فارغة أنيقة بدل خطأ
         return NextResponse.json({
           org: null,
@@ -47,7 +48,10 @@ export async function GET(req: NextRequest) {
           cadres: [],
         })
       }
-      org = own
+      const orgIds = orgs.map((o) => o.id)
+      const selectedId =
+        hospitalIdParam && orgIds.includes(hospitalIdParam) ? hospitalIdParam : orgIds[0]
+      org = orgs.find((o) => o.id === selectedId) ?? orgs[0]
     }
 
     // شفاء كسول: ارتباطات أُضيفت من المستلم ثم اعتُمدت الجهة وتوقفت على PENDING

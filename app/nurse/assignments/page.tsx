@@ -29,6 +29,7 @@ import { apiFetcher, apiPost } from '@/lib/api-client'
 import {
   formatDate,
   formatDateTime,
+  formatTime12,
   formatCurrency,
   cn,
   ASSIGNMENT_STATUS_LABELS,
@@ -41,6 +42,7 @@ import { PaymentCard } from '@/components/shared/payment-card'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StaffPhone } from '@/components/shared/staff-phone'
+import { ShiftCountdown } from '@/components/shared/shift-countdown'
 import { RECEIVER_CONTACT_LOCKED_HINT } from '@/lib/phone-privacy'
 import { FeePaymentCard } from '@/components/shared/fee-payment-card'
 import { Button } from '@/components/ui/button'
@@ -70,6 +72,7 @@ interface OpenPost {
   department: string | null
   location: string | null
   startDate: string
+  endTime: string | null
   hours: number | null
   gender: string
   nursesNeeded: number
@@ -463,8 +466,22 @@ function AvailablePosts({
                       label="حصة الإدارة"
                       value={fees ? formatCurrency(fees.adminFee) : '—'}
                     />
-                    <InfoCell icon={CalendarDays} label="تاريخ البدء" value={formatDate(post.startDate)} />
+                    <InfoCell
+                      icon={CalendarDays}
+                      label="تاريخ البدء"
+                      value={`${formatDate(post.startDate)} • ${formatTime12(post.startDate)}`}
+                    />
                     <InfoCell icon={MapPin} label="الموقع" value={post.location ?? 'غير محدد'} />
+                  </div>
+
+                  {/* الجولة 44: عداد تنازلي حي لبداية التكليف + وقت الانتهاء — بتوقيت مكة المكرمة */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ShiftCountdown startDate={post.startDate} endDate={post.endTime} />
+                    {post.endTime && (
+                      <span className="rounded-full bg-secondary/70 px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                        ينتهي {formatTime12(post.endTime)}
+                      </span>
+                    )}
                   </div>
 
                   {post.description && (
@@ -956,7 +973,9 @@ function NurseAssignmentCard({
 
         {/* شرائح مصغّرة: التاريخ + القيمة + المستلم */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <MiniChip icon={CalendarDays}>{formatDate(a.startDate)}</MiniChip>
+          <MiniChip icon={CalendarDays}>{formatDate(a.startDate)} • {formatTime12(a.startDate)}</MiniChip>
+          {/* الجولة 44: العداد التنازلي الحي لبداية التكليف */}
+          <ShiftCountdown startDate={a.startDate} endDate={a.endDate} compact />
           {a.value != null && (
             <MiniChip icon={Banknote} tone="primary" ltr>
               {formatCurrency(a.value)}

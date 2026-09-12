@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { affiliationCreateSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
-import { AFFILIATION_STATUS_LABELS, ORG_MANAGEABLE_STATUSES, resolveReceiverOrg } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, ORG_MANAGEABLE_STATUSES, resolveReceiverOrg, resolveReceiverOrgs } from '@/lib/network'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
 import type { Prisma } from '@prisma/client'
 
@@ -44,33 +44,33 @@ export async function GET(req: NextRequest) {
       ...(nurseId ? { nurseId } : {}),
     }
 
+    // الجولة 44: مسؤول الجهة يدير كل جهاته المعتمدة (التاريخية + المعتمدة من الإدارة)
+    let selectedOrg: Awaited<ReturnType<typeof resolveReceiverOrg>> = null
     if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
       where = { ...where, nurseId: session.user.id }
     } else if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
       // الجولة 34: المشرف أيضاً محصور بجهته — كان يصل لكل الارتباطات (ثغرة أُغلقت)
-      const org = await resolveReceiverOrg(session.user.id)
-      if (!org) return NextResponse.json({ affiliations: [], org: null })
-      where = { ...where, hospitalId: org.id }
+      const orgs = await resolveReceiverOrgs(session.user.id)
+      if (orgs.length === 0) return NextResponse.json({ affiliations: [], org: null })
+      const orgIds = orgs.map((o) => o.id)
+      const selectedId = hospitalId && orgIds.includes(hospitalId) ? hospitalId : orgIds[0]
+      where = { ...where, hospitalId: selectedId }
+      selectedOrg = orgs.find((o) => o.id === selectedId) ?? null
     }
 
-    const [affiliations, org] = await Promise.all([
-      db.nurseAffiliation.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          hospital: { select: { id: true, name: true, type: true, city: true, status: true } },
-          nurse: {
-            select: {
-              id: true, name: true, phone: true, gender: true, specialty: true,
-              qualification: true, yearsOfExperience: true, status: true,
-            },
+    const affiliations = await db.nurseAffiliation.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        hospital: { select: { id: true, name: true, type: true, city: true, status: true } },
+        nurse: {
+          select: {
+            id: true, name: true, phone: true, gender: true, specialty: true,
+            qualification: true, yearsOfExperience: true, status: true,
           },
         },
-      }),
-      session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR'
-        ? resolveReceiverOrg(session.user.id)
-        : Promise.resolve(null),
-    ])
+      },
+    })
 
     // الجولة 34: أرقام الكوادر تُقنّع للمستلم/المشرف — تُفتح بتكليف سارٍ مسدد النسبة
     // (الكادر/الطبيب يرى رقمه هو في ارتباطاته — لا قناع عليه)
@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
           },
         }
       }),
-      org,
+      org: selectedOrg,
     })
   } catch (error) {
     return handleApiError(error)
@@ -194,12 +194,13 @@ export async function POST(req: NextRequest) {
     // فمن حساب الإدارة حصراً بعد رفع المستندات والموافقة عليها.
     if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
       const isSupervisor = session.user.role === 'DOCTOR_SUPERVISOR'
-      const org = await resolveReceiverOrg(session.user.id)
-      if (!org || org.id !== hospitalId) {
+      // الجولة 44: المسؤول يضيف لكل جهاته المعتمدة — التاريخية والمعتمدة من الإدارة
+      const orgs = await resolveReceiverOrgs(session.user.id)
+      if (!orgs.some((o) => o.id === hospitalId)) {
         throw new ApiError(
           isSupervisor
-            ? 'يمكنك اعتماد الأطباء لجهتك الصحية فقط'
-            : 'يمكنك اعتماد الكوادر التمريضيين لجهتك الصحية فقط',
+            ? 'يمكنك اعتماد الأطباء لجهاتك الصحية فقط'
+            : 'يمكنك اعتماد الكوادر التمريضيين لجهاتك الصحية فقط',
           403
         )
       }

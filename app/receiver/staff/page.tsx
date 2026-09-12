@@ -147,17 +147,28 @@ export default function ReceiverStaffPage() {
       .catch(() => null)
   }, [])
 
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('')
   const { data, isLoading } = useQuery({
-    queryKey: ['receiver-staff'],
+    queryKey: ['receiver-staff', selectedOrgId],
     queryFn: () =>
       apiFetcher<{
         org: { id: string; name: string; city: string | null; status: string } | null
+        /** الجولة 44: كل جهات المسؤول — لمبدّل الجهات */
+        orgs?: Array<{ id: string; name: string; city: string | null; status: string }>
         nurses: StaffNurse[]
         fullProfileAccess?: boolean
         /** الجولة 38: مجتمع كوادر الجهة الصحية */
         community?: OrgCadreStatsView
-      }>('/api/receiver/staff'),
+      }>(`/api/receiver/staff${selectedOrgId ? `?orgId=${selectedOrgId}` : ''}`),
   })
+
+  /** الجولة 44: مبدّل الجهات — يظهر عندما تكون للمسؤول جهات متعددة */
+  const myOrgs = data?.orgs ?? []
+  useEffect(() => {
+    if (myOrgs.length > 0 && !myOrgs.some((o) => o.id === selectedOrgId)) {
+      setSelectedOrgId(myOrgs[0].id)
+    }
+  }, [myOrgs.length])
 
   /** إذن رؤية البيانات الكاملة — يفتحه حساب الإدارة حصراً (الجولة 32) */
   const fullProfileAccess = data?.fullProfileAccess ?? false
@@ -272,6 +283,26 @@ export default function ReceiverStaffPage() {
               'لا توجد جهة صحية مرتبطة بحسابك بعد'
             )}
           </p>
+          {/* الجولة 44: مبدّل الجهات — للمسؤول الذي يدير أكثر من جهة صحية */}
+          {myOrgs.length > 1 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {myOrgs.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setSelectedOrgId(o.id)}
+                  className={`flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors ${
+                    org?.id === o.id
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:border-primary/40'
+                  }`}
+                >
+                  <Building2 className="size-3" />
+                  {o.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {org && (
           <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">

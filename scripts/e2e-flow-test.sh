@@ -3593,6 +3593,233 @@ check "api: الخمس حالات المهنية محكومة في PATCH وPOST 
 R43_NO_OLD=$(grep -c "SUPPORTER_ALLOWED_STATUSES" app/api/affiliations/route.ts "app/api/affiliations/[id]/route.ts" 2>/dev/null | awk -F: '{s+=$2} END {print (s==0)?0:s}')
 check "api: القائمة الواسعة القديمة (SUPPORTER_ALLOWED_STATUSES) أزيلت كلياً" "0" "$R43_NO_OLD"
 
+# ============================================================
+# الجولة 44 — قسم 53: المؤهلات العامة + معالج المستندات + التوقيت 12 ساعي
+# والعداد التنازلي + إشعار البداية + خصوصية المستندات + جهات المسؤول + العرض
+# ============================================================
+echo "=========== 53) الجولة 44: سبع ميزات جديدة ==========="
+
+TODAY44=$(date +%F)
+PROMO_UNTIL44=$(date -d "+7 days" +%F 2>/dev/null || date -v+7d +%F)
+
+# ---------- (أ) المؤهلات العلمية عامة — إصلاح صفحة التسجيل ----------
+G44_NOAUTH=$(code "$BASE/api/qualifications/public?audience=NURSE")
+check "R44: كتالوج المؤهلات متاح بدون جلسة (زائر التسجيل) → 200" "200" "$G44_NOAUTH"
+G44_LIST=$(curl -s "$BASE/api/qualifications/public?audience=DOCTOR" | python3 -c "import json,sys;print(len(json.load(sys.stdin)['qualifications'])>=1)" 2>/dev/null)
+check "R44: مؤهلات الأطباء العامة تعيد كتالوج الإدارة" "True" "$G44_LIST"
+
+# ---------- (ب) معالج رفع المستندات المتسلسل (ساكن) ----------
+WZ44=$([ -f components/shared/document-upload-wizard.tsx ] && echo 1 || echo 0)
+check "R44: مكون معالج رفع المستندات موجود" "1" "$WZ44"
+WZ44_ORDER=$(grep -c "'ID_CARD'\|'PRACTICE_LICENSE'\|'EXPERIENCE_CERT'" components/shared/document-upload-wizard.tsx 2>/dev/null | awk '{print ($1>=3)?1:0}')
+check "R44: خطوات المعالج: البطاقة ← المزاولة ← شهادة الخبرة" "1" "$WZ44_ORDER"
+WZ44_AUTO=$(grep -c "انتقلنا للخطوة التالية" components/shared/document-upload-wizard.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: الانتقال التلقائي للخطوة التالية بعد كل رفع" "1" "$WZ44_AUTO"
+WZ44_USE=$(grep -l "DocumentUploadWizard" app/nurse/documents/page.tsx app/doctor/documents/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "R44: المعالج مستخدم في صفحتي كادر المستندات والطبيب" "2" "$WZ44_USE"
+
+# ---------- (ج) التوقيت 12 ساعي + خيارات الساعات + العداد التنازلي ----------
+CP44_TIME=$(grep -c "time12To24\|meccaDateTime" components/shared/create-post-dialog.tsx | awk '{print ($1>=2)?1:0}')
+check "R44: منتقيا الوقت بنظام 12 ساعي في إنشاء التكليف" "1" "$CP44_TIME"
+CP44_CHIPS=$(grep -c "HOUR_CHIPS = \[6, 8, 12, 16, 24\]" components/shared/create-post-dialog.tsx)
+check "R44: خيارات الساعات 6/8/12/16/24 موجودة" "1" "$CP44_CHIPS"
+CP44_MECCA=$(grep -c "بتوقيت مكة المكرمة" components/shared/create-post-dialog.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: ملخص «بتوقيت مكة المكرمة» ظاهر في نموذج الإنشاء" "1" "$CP44_MECCA"
+CD44_USE=$(grep -l "ShiftCountdown" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx app/receiver/assignments/page.tsx app/supervisor/assignments/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "R44: العداد التنازلي الحي في صفحات التكليفات الأربع" "4" "$CD44_USE"
+SWEEP44=$(grep -c "notifyAssignmentStarts" app/api/me/assignments/route.ts lib/shift-alerts.ts 2>/dev/null | awk -F: '{s+=$2} END {print (s>=2)?1:0}')
+check "R44: إشعار بداية التكليف (كسول) مربوط بقراءة التكليفات" "1" "$SWEEP44"
+
+# تشغيلي: وردية ليلية 20:00 → 08:00 تعبر منتصف الليل = 12 ساعة
+P44N=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"department\":\"طوارئ\",\"startDate\":\"$TODAY44\",\"startTime\":\"20:00\",\"endTime\":\"08:00\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":60000,\"distribution\":\"ALL_MATCHING\"}")
+P44N_ID=$(echo "$P44N" | jget "['post']['id']")
+[ -n "$P44N_ID" ] && check "R44: إنشاء تكليف بوقت بدء 20:00 وانتهاء 08:00 → 201" "ok" "ok"
+P44N_CHK=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+p=[x for x in d['posts'] if x['id']=='$P44N_ID'][0]
+print(p['hours'], p['endTime'] is not None)" 2>/dev/null)
+check "R44: الوردية الليلية العابرة لمنتصف الليل = 12 ساعة + وقت انتهاء محسوب" "12 True" "$P44N_CHK"
+
+# ---------- (د) إشعار بداية التكليف — تكليف بدأ منذ ساعة ----------
+REG44A=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر بداية الجولة","phone":"744440404","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"MALE"}')
+N44A_ID=$(echo "$REG44A" | jget "['user']['id']")
+login "$DIR/n44a.jar" "744440404" "R44@Nurse"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+UP44A=$(code -b "$DIR/n44a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD")
+check "R44: كادر البداية يرفع مستنده (شرط التقديم) → 200" "200" "$UP44A"
+
+START44_H=$(python3 -c "import datetime;d=datetime.datetime.utcnow()+datetime.timedelta(hours=3)-datetime.timedelta(hours=1);print(d.strftime('%H:%M'))")
+END44_H=$(python3 -c "import datetime;d=datetime.datetime.utcnow()+datetime.timedelta(hours=3)+datetime.timedelta(hours=2);print(d.strftime('%H:%M'))")
+P44S=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY44\",\"startTime\":\"$START44_H\",\"endTime\":\"$END44_H\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":50000,\"distribution\":\"ALL_MATCHING\"}")
+P44S_ID=$(echo "$P44S" | jget "['post']['id']")
+APPLY44S=$(code -b "$DIR/n44a.jar" -X POST $BASE/api/posts/$P44S_ID/apply -H "Content-Type: application/json" -d '{}')
+check "R44: كادر البداية يقدّم على التكليف الجاري → 201" "201" "$APPLY44S"
+APP44S_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P44S_ID/applications | jget "['applications'][0]['applicationId']")
+APPR44S=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP44S_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
+check "R44: اعتماد تقديم كادر البداية → 200" "200" "$APPR44S"
+A44S_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x.get('postId')=='$P44S_ID'][0]
+print(a['id'])" 2>/dev/null)
+PAY44S=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$A44S_ID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "R44: الإدارة تسدّد نسبة التكليف الجاري (لفتح التقديم لاحقاً) → 200" "200" "$PAY44S"
+curl -s -b "$DIR/n44a.jar" $BASE/api/me/assignments > /dev/null
+START44_N=$(curl -s -b "$DIR/n44a.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='بدأ وقت تكليفك الآن']
+print(len(m))" 2>/dev/null)
+check "R44: إشعار بداية التكليف وصل للكادر عند بلوغ وقت البدء" "1" "$START44_N"
+curl -s -b "$DIR/n44a.jar" $BASE/api/me/assignments > /dev/null
+START44_N2=$(curl -s -b "$DIR/n44a.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='بدأ وقت تكليفك الآن']
+print(len(m))" 2>/dev/null)
+check "R44: إشعار البداية مرة واحدة فقط (لا تكرار عند كل قراءة)" "1" "$START44_N2"
+START44_R=$(curl -s -b "$DIR/receiver.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+m=[n for n in d.get('notifications',[]) if n['title']=='بدأ وقت التكليف الآن']
+print(len(m)>=1)" 2>/dev/null)
+check "R44: إشعار البداية وصل للمستلم الإداري أيضاً" "True" "$START44_R"
+
+# ---------- (هـ) خصوصية المستندات في السيرة الذاتية ----------
+# كادر خارج الجهة + مستند معتمد → يرى المستلم حالة «تم التحقق» بلا مستندات
+REG44B=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"متقدم خارجي موثق","phone":"744440505","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":4,"gender":"FEMALE"}')
+N44B_ID=$(echo "$REG44B" | jget "['user']['id']")
+login "$DIR/n44b.jar" "744440505" "R44@Nurse"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44B_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+curl -s -b "$DIR/n44b.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=PRACTICE_LICENSE" > /dev/null
+DOC44B_ID=$(curl -s -b "$DIR/n44b.jar" $BASE/api/me/documents | jget "['documents'][0]['id']")
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/documents/$DOC44B_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+
+# كادر من كوادر الجهة نفسها (ارتباط WORKING من المستلم)
+REG44C=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"متقدم من كوادر الجهة","phone":"744440606","password":"R44@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
+N44C_ID=$(echo "$REG44C" | jget "['user']['id']")
+login "$DIR/n44c.jar" "744440606" "R44@Nurse"
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N44C_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+curl -s -b "$DIR/n44c.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+R44_ORG=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/staff | jget "['org']['id']")
+END44C=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N44C_ID\",\"hospitalId\":\"$R44_ORG\",\"status\":\"WORKING\"}")
+check "R44: المستلم يضيف المتقدم الثاني لكوادر جهته → 201" "201" "$END44C"
+
+P44V=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY44\",\"nursesNeeded\":2,\"gender\":\"ANY\",\"value\":80000,\"distribution\":\"ALL_MATCHING\"}")
+P44V_ID=$(echo "$P44V" | jget "['post']['id']")
+curl -s -b "$DIR/n44b.jar" -X POST $BASE/api/posts/$P44V_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"متقدم خارجي"}' > /dev/null
+curl -s -b "$DIR/n44c.jar" -X POST $BASE/api/posts/$P44V_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"من كوادر الجهة"}' > /dev/null
+
+HIDE44=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P44V_ID/applications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['applications']
+ext=[a for a in d if a['nurse']['id']=='$N44B_ID'][0]
+same=[a for a in d if a['nurse']['id']=='$N44C_ID'][0]
+print(ext['nurse']['documentsHidden'], len(ext['nurse']['documents'])==0, ext['nurse']['documentsVerified'], same['nurse']['documentsHidden'], len(same['nurse']['documents']))" 2>/dev/null)
+check "R44: الخارجي: مستندات مخفية + تم التحقق (معتمد) | عضو الجهة: مستنداته ظاهرة" "True True True False 1" "$HIDE44"
+HIDE44_ADMIN=$(curl -s -b "$DIR/admin.jar" $BASE/api/posts/$P44V_ID/applications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['applications']
+print(all(not a['nurse']['documentsHidden'] for a in d))" 2>/dev/null)
+check "R44: الإدارة ترى المستندات دائماً (لا إخفاء عنها)" "True" "$HIDE44_ADMIN"
+WF44=$(grep -c "documentsHidden" components/shared/full-profile-dialog.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: حوار السيرة الكاملة يعرض حالة «تم التحقق» عند الإخفاء" "1" "$WF44"
+
+# ---------- (و) جهات المسؤول — إضافة جهة بموافقة الإدارة ----------
+ORG44=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"جهة ثانية للجولة 44","type":"MEDICAL_CENTER","city":"عدن","status":"ACTIVE","isActive":true}')
+ORG44_ID=$(echo "$ORG44" | jget "['hospital']['id']")
+REQ44=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/orgs -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG44_ID\",\"note\":\"أعمل مسؤولاً فيها أيضاً\"}")
+check "R44: المستلم يطلب إضافة جهة صحية ثانية → 201" "201" "$REQ44"
+REQ44_DUP=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/orgs -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG44_ID\"}")
+check "R44: منع تكرار طلب الربط نفسه → 409" "409" "$REQ44_DUP"
+LINK44_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/receiver-orgs?status=PENDING" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+l=[x for x in d['links'] if x['hospital']['id']=='$ORG44_ID' and x['receiver']['phone']=='733333333'][0]
+print(l['id'])" 2>/dev/null)
+[ -n "$LINK44_ID" ] && check "R44: طلب الربط يصل لطابور الإدارة معلقاً" "ok" "ok"
+APPROVE44=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/receiver-orgs/$LINK44_ID -H "Content-Type: application/json" -d '{"status":"ACTIVE"}')
+check "R44: الإدارة تعتمد الربط → 200" "200" "$APPROVE44"
+MY44=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/orgs | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(o['id']=='$ORG44_ID' for o in d['orgs']), len(d['orgs'])>=2)" 2>/dev/null)
+check "R44: الجهة الثانية صارت فعّالة في حساب المستلم" "True True" "$MY44"
+STAFF44=$(curl -s -b "$DIR/receiver.jar" "$BASE/api/receiver/staff?orgId=$ORG44_ID" | jget "['org']['id']")
+check "R44: كوادر جهتي تعرض الجهة الثانية بعد اختيارها" "$ORG44_ID" "$STAFF44"
+AFF44B=$(code -b "$DIR/receiver.jar" -X POST $BASE/api/affiliations -H "Content-Type: application/json" \
+  -d "{\"nurseId\":\"$N44C_ID\",\"hospitalId\":\"$ORG44_ID\",\"status\":\"WORKING\"}")
+check "R44: المستلم يضيف كادراً لجهته الثانية (تعدد الجهات فعّال) → 201" "201" "$AFF44B"
+# مسار الرفض
+ORG44X=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"جهة مرفوضة للجولة 44","status":"ACTIVE","isActive":true}')
+ORG44X_ID=$(echo "$ORG44X" | jget "['hospital']['id']")
+curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/receiver/orgs -H "Content-Type: application/json" -d "{\"hospitalId\":\"$ORG44X_ID\"}" > /dev/null
+LINK44X=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/receiver-orgs?status=PENDING" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+l=[x for x in d['links'] if x['hospital']['id']=='$ORG44X_ID' and x['receiver']['phone']=='733333333'][0]
+print(l['id'])" 2>/dev/null)
+REJ44=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/receiver-orgs/$LINK44X -H "Content-Type: application/json" -d '{"status":"REJECTED"}')
+check "R44: الإدارة ترفض طلب ربط → 200" "200" "$REJ44"
+MY44X=$(curl -s -b "$DIR/receiver.jar" $BASE/api/receiver/orgs | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(any(o['id']=='$ORG44X_ID' for o in d['orgs']))" 2>/dev/null)
+check "R44: الجهة المرفوضة لا تدخل جهات المسؤول الفعّالة" "False" "$MY44X"
+MYORG44_UI=$(grep -l "MyOrgsCard" app/receiver/profile/page.tsx app/supervisor/profile/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "R44: بطاقة «جهاتي الصحية» في ملفي المستلم والمشرف" "2" "$MYORG44_UI"
+ADMO44_UI=$(grep -c "ReceiverOrgRequests" app/admin/organizations/page.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: طابور طلبات الربط في صفحة جهات الإدارة" "1" "$ADMO44_UI"
+SCH44=$(grep -c "model ReceiverOrgLink\|enum ReceiverOrgStatus" prisma/schema.prisma | awk '{print ($1==2)?1:0}')
+check "R44: نموذج ReceiverOrgLink وحالته في المخطط" "1" "$SCH44"
+
+# ---------- (ز) العرض بدون رسوم إدارة لمدة محدودة ----------
+SET44=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/settings -H "Content-Type: application/json" \
+  -d "{\"feeMode\":\"ADMIN\",\"applicationFee\":1000,\"adminFeeType\":\"PERCENTAGE\",\"adminPercentage\":10,\"adminFeeFixed\":0,\"paymentMethod\":\"محفظة جيب\",\"paymentAccountNumber\":\"E2E-44\",\"paymentAccountName\":\"منصة تكليفات\",\"paymentNotes\":\"\",\"promoActive\":true,\"promoUntil\":\"$PROMO_UNTIL44\",\"promoNote\":\"عرض اختبار بدون رسوم\"}")
+CHECK44_ON=$(echo "$SET44" | jget "['settings']['promoActive']")
+check "R44: الإدارة تشغّل العرض بدون رسوم" "True" "$CHECK44_ON"
+P44P=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$ORG_ID\",\"startDate\":\"$TODAY44\",\"nursesNeeded\":1,\"gender\":\"ANY\",\"value\":100000,\"distribution\":\"ALL_MATCHING\"}")
+P44P_ID=$(echo "$P44P" | jget "['post']['id']")
+curl -s -b "$DIR/n44a.jar" -X POST $BASE/api/posts/$P44P_ID/apply -H "Content-Type: application/json" -d '{}' > /dev/null
+APP44P_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P44P_ID/applications | jget "['applications'][0]['applicationId']")
+APPR44P=$(code -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP44P_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}')
+check "R44: اعتماد تقديم أثناء العرض → 200" "200" "$APPR44P"
+FEE44=$(curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+a=[x for x in d['assignments'] if x.get('postId')=='$P44P_ID'][0]
+print(a['adminFee'])" 2>/dev/null)
+check "R44: حصة الإدارة صفر لتكليف أُنشئ أثناء العرض" "0" "$FEE44"
+SET44_OFF=$(curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/settings -H "Content-Type: application/json" \
+  -d "{\"feeMode\":\"ADMIN\",\"applicationFee\":1000,\"adminFeeType\":\"PERCENTAGE\",\"adminPercentage\":10,\"adminFeeFixed\":0,\"paymentMethod\":\"محفظة جيب\",\"paymentAccountNumber\":\"E2E-44\",\"paymentAccountName\":\"منصة تكليفات\",\"paymentNotes\":\"\",\"promoActive\":false,\"promoUntil\":\"\",\"promoNote\":\"\"}")
+CHECK44_OFF=$(echo "$SET44_OFF" | jget "['settings']['promoActive']")
+check "R44: الإدارة توقف العرض" "False" "$CHECK44_OFF"
+PRB44=$(grep -l "PromoBanner" app/nurse/page.tsx app/doctor/page.tsx app/receiver/page.tsx app/supervisor/page.tsx 2>/dev/null | wc -l | tr -d ' ')
+check "R44: بانر العرض في لوحات الحسابات الأربع" "4" "$PRB44"
+PRC44=$(grep -c "عرض بدون رسوم إدارة" app/admin/settings/page.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: بطاقة العرض الاحترافية في إعدادات الإدارة" "1" "$PRC44"
+SCH44P=$(grep -c "promoActive\|isPromoActive" lib/settings.ts | awk '{print ($1>=2)?1:0}')
+check "R44: محرك العرض (isPromoActive) في إعدادات المنصة" "1" "$SCH44P"
+
+# ---------- (ح) بطاقة تكليفاتي المعلنة الصغيرة ----------
+E44_CARD=$(grep -c "بطاقة مصغّرة احترافية" app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: بطاقة «تكليفاتي المعلنة» المصغّرة الاحترافية" "1" "$E44_CARD"
+E44_CD=$(grep -c "ShiftCountdown startDate={post.startDate}" app/receiver/assignments/page.tsx | awk '{print ($1>=1)?1:0}')
+check "R44: العداد الحي داخل بطاقة التكليف المعلن" "1" "$E44_CD"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

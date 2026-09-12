@@ -123,6 +123,8 @@ export async function PATCH(
           facility: application.post.facility,
           department: application.post.department,
           startDate: application.post.startDate,
+          // الجولة 44: وقت انتهاء المناوبة ينتقل من التكليف المُعلن — للعداد التنازلي الحي
+          endDate: application.post.endTime,
           status: 'RECEIVED',
           receivedAt: new Date(),
           nurseId: application.nurseId,

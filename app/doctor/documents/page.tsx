@@ -1,17 +1,16 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, FileText, FileUp, ImagePlus, Trash2, UploadCloud } from 'lucide-react'
+import { CheckCircle2, FileText, FileUp, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiDelete } from '@/lib/api-client'
-import { compressImage } from '@/lib/compress-image'
-import { formatDateTime, formatFileSize, DOCUMENT_STATUS_LABELS, DOCUMENT_TYPE_LABELS } from '@/lib/utils'
+import { formatDateTime, formatFileSize, DOCUMENT_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { EmptyState, DashboardSkeleton } from '@/components/shared/empty-state'
 import { DocumentViewer } from '@/components/shared/document-viewer'
+import { DocumentUploadWizard } from '@/components/shared/document-upload-wizard'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -19,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
 
 interface MyDocument {
   id: string
@@ -36,56 +34,14 @@ interface MyDocument {
 
 const DOC_TYPES = ['ID_CARD', 'PRACTICE_LICENSE', 'EXPERIENCE_CERT', 'OTHER'] as const
 
-export default function NurseDocumentsPage() {
+export default function DoctorDocumentsPage() {
   const queryClient = useQueryClient()
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [docType, setDocType] = useState<string>('ID_CARD')
-  const [isDragOver, setIsDragOver] = useState(false)
   const [viewDoc, setViewDoc] = useState<MyDocument | null>(null)
+  const [filterType, setFilterType] = useState<string>('ALL')
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-documents'],
     queryFn: () => apiFetcher<{ documents: MyDocument[] }>('/api/me/documents'),
-  })
-
-  const [lastCompression, setLastCompression] = useState<string | null>(null)
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      // ضغط الصورة من جهة العميل — جودة عالية بحجم صغير (≈ 100-400 كيلوبايت)
-      const { file: compressed, originalSize, compressedSize } = await compressImage(file)
-      setLastCompression(
-        originalSize !== compressedSize
-          ? `تم ضغط الصورة تلقائياً: ${formatFileSize(originalSize)} ← ${formatFileSize(compressedSize)} مع الحفاظ على الجودة`
-          : null
-      )
-
-      const formData = new FormData()
-      formData.append('file', compressed)
-      formData.append('type', docType)
-      const response = await fetch('/api/upload', { method: 'POST', body: formData })
-
-      // معالجة آمنة: قد تكون الاستجابة JSON أو خطأ HTML من الخادم
-      const contentType = response.headers.get('content-type') ?? ''
-      if (!contentType.includes('application/json')) {
-        if (response.status === 413) {
-          throw new Error('حجم الصورة كبير جداً للخادم — جرّب صورة أصغر')
-        }
-        throw new Error(
-          `تعذر رفع الصورة (رمز ${response.status}) — تأكد من اتصالك وأعد المحاولة`
-        )
-      }
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'فشل رفع الصورة')
-      return result as { message: string }
-    },
-    onSuccess: (res) => {
-      toast.success(res.message)
-      queryClient.invalidateQueries({ queryKey: ['my-documents'] })
-      queryClient.invalidateQueries({ queryKey: ['stats'] })
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    },
-    onError: (e: Error) => toast.error(e.message),
   })
 
   const deleteMutation = useMutation({
@@ -98,12 +54,14 @@ export default function NurseDocumentsPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const handleFile = (file: File | undefined) => {
-    if (!file) return
-    uploadMutation.mutate(file)
-  }
-
   const documents = data?.documents ?? []
+  const filtered =
+    filterType === 'ALL' ? documents : documents.filter((d) => d.type === filterType)
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['my-documents'] })
+    queryClient.invalidateQueries({ queryKey: ['stats'] })
+  }
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -112,95 +70,53 @@ export default function NurseDocumentsPage() {
       <div>
         <h1 className="text-2xl font-extrabold">مستنداتي</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          رفع المستندات الرسمية كصور: البطاقة الشخصية، صورة المزاولة، وشهادات الخبرة
+          رفع المستندات الرسمية في مسار واحد متسلسل: البطاقة الشخصية ← صورة المزاولة ← شهادة الخبرة
         </p>
       </div>
 
-      {/* منطقة الرفع */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">رفع مستند جديد (صورة فقط)</CardTitle>
-          <CardDescription>
-            الصور فقط (JPG / PNG / WEBP) — تُضغط الصورة تلقائياً في جهازك قبل الرفع وتصل للإدارة بجودة عالية واضحة للمراجعة.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 sm:w-72">
-            <Label>نوع المستند</Label>
-            <Select value={docType} onValueChange={setDocType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DOC_TYPES.map((type) => (
+      {/* الجولة 44: المعالج المتسلسل — رفع واحد تلقائي الانتقال بين الخطوات */}
+      <DocumentUploadWizard documents={documents} onChanged={invalidate} />
+
+      {/* فلتر القائمة */}
+      {documents.length > 0 && (
+        <div className="flex items-center gap-2 sm:w-64">
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger aria-label="تصفية المستندات">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">كل المستندات ({documents.length})</SelectItem>
+              {DOC_TYPES.map((type) => {
+                const count = documents.filter((d) => d.type === type).length
+                if (count === 0) return null
+                return (
                   <SelectItem key={type} value={type}>
-                    {DOCUMENT_TYPE_LABELS[type]}
+                    {type === 'ID_CARD'
+                      ? 'البطاقة الشخصية'
+                      : type === 'PRACTICE_LICENSE'
+                        ? 'صورة المزاولة'
+                        : type === 'EXPERIENCE_CERT'
+                          ? 'شهادة الخبرة'
+                          : 'مستندات أخرى'}{' '}
+                    ({count})
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label="رفع صورة"
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setIsDragOver(true)
-            }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setIsDragOver(false)
-              handleFile(e.dataTransfer.files?.[0])
-            }}
-            className={`flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
-              isDragOver ? 'border-primary bg-accent' : 'hover:border-primary/50 hover:bg-accent/50'
-            }`}
-          >
-            <span className="rounded-full bg-secondary p-4">
-              <UploadCloud className="size-7 text-primary" />
-            </span>
-            <div>
-              <p className="font-bold">
-                {uploadMutation.isPending ? 'جارٍ ضغط الصورة ورفعها...' : 'اضغط لاختيار صورة أو اسحبها هنا'}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                صورة البطاقة أو المزاولة — حتى 8 ميجابايت (تُضغط تلقائياً)
-              </p>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-              className="hidden"
-              onChange={(e) => handleFile(e.target.files?.[0])}
-              disabled={uploadMutation.isPending}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {lastCompression && (
-        <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-          <ImagePlus className="size-3.5" />
-          {lastCompression}
-        </p>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
       {/* قائمة المستندات */}
-      {documents.length === 0 ? (
+      {filtered.length === 0 ? (
         <EmptyState
           icon={FileUp}
           title="لم ترفع أي مستندات بعد"
-          description="ابدأ برفع البطاقة الشخصية وصورة المزاولة لاعتماد حسابك."
+          description="ابدأ من المعالج أعلاه — ارفع البطاقة الشخصية وسننتقل بك تلقائياً للمستند التالي."
         />
       ) : (
         <div className="grid gap-3">
-          {documents.map((doc) => (
+          {filtered.map((doc) => (
             <div
               key={doc.id}
               className="flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-4"

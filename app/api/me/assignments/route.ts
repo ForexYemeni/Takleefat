@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { getSettings } from '@/lib/settings'
-import { resolveReceiverOrg } from '@/lib/network'
+import { notifyAssignmentStarts } from '@/lib/shift-alerts'
+import { resolveReceiverOrgs } from '@/lib/network'
 import {
   isAssignmentPhoneOpen,
   isTrustedViewer,
@@ -41,6 +42,9 @@ const ACTIVE_AFFILIATION_STATUSES: AffiliationStatus[] = ['WORKING', 'ENDORSED']
 export async function GET() {
   try {
     const session = await requireRole('NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
+    // الجولة 44: إشعار بداية التكليف (كسول) — التكليفات التي بلغ وقت بدئها
+    // ولم يُشعَر أصحابها بعد — يُرسَل الإشعار للطرفين مرة واحدة لكل تكليف
+    await notifyAssignmentStarts()
     // الكادر والطبيب يرَون تكليفاتهم كطرف منفّذ — المستلم والمشرف كطرف مسانِد
     const isWorker =
       session.user.role === 'NURSE' || session.user.role === 'DOCTOR'
@@ -51,18 +55,20 @@ export async function GET() {
     if (isWorker) {
       where = { nurseId: session.user.id }
     } else if (session.user.role === 'DOCTOR_SUPERVISOR') {
-      const org = await resolveReceiverOrg(session.user.id)
+      // الجولة 44: أطباء جهاته بكل جهاته المعتمدة
+      const orgs = await resolveReceiverOrgs(session.user.id)
+      const orgIds = orgs.map((o) => o.id)
       where = {
         OR: [
           { receiverId: session.user.id },
-          ...(org
+          ...(orgIds.length > 0
             ? [
                 {
                   nurse: {
                     role: 'DOCTOR' as const,
                     affiliations: {
                       some: {
-                        hospitalId: org.id,
+                        hospitalId: { in: orgIds },
                         status: { in: ACTIVE_AFFILIATION_STATUSES },
                       },
                     },

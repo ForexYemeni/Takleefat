@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { affiliationUpdateSchema } from '@/lib/validations/post'
 import { notify } from '@/lib/notifications'
-import { AFFILIATION_STATUS_LABELS, ORG_MANAGEABLE_STATUSES, resolveReceiverOrg } from '@/lib/network'
+import { AFFILIATION_STATUS_LABELS, ORG_MANAGEABLE_STATUSES, resolveReceiverOrgs } from '@/lib/network'
 
 /**
  * PATCH /api/affiliations/[id] — تغيير حالة الارتباط المهني
@@ -41,11 +41,12 @@ async function loadWithAccess(id: string, role: string, userId: string) {
   })
   if (!affiliation) return { error: jsonError('الارتباط غير موجود', 404) }
 
-  // الجولة 39: المستلم والمشرف محصوران بجهتهما الصحية — كان المشرف يتجاوز الفحص (ثغرة)
+  // الجولة 39: المستلم والمشرف محصوران بجهاتهما الصحية — الجولة 44: بكل جهاتهما
+  // المعتمدة (التاريخية + المعتمدة من الإدارة) — والارتباطات الأخرى محرّمة
   if (role === 'RECEIVER' || role === 'DOCTOR_SUPERVISOR') {
-    const org = await resolveReceiverOrg(userId)
-    if (!org || org.id !== affiliation.hospitalId) {
-      return { error: jsonError('يمكنك إدارة كوادر جهتك الصحية فقط', 403) }
+    const orgs = await resolveReceiverOrgs(userId)
+    if (!orgs.some((o) => o.id === affiliation.hospitalId)) {
+      return { error: jsonError('يمكنك إدارة كوادر جهاتك الصحية فقط', 403) }
     }
     // مطابقة الدور مع الهدف: المستلم → كادر تمريضي | مشرف الأطباء → طبيب
     const expectedRole = role === 'DOCTOR_SUPERVISOR' ? 'DOCTOR' : 'NURSE'

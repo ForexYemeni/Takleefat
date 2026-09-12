@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import { apiFetcher, apiPatch } from '@/lib/api-client'
 import { formatDate, ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
+import { MyOrgsCard } from '@/components/shared/my-orgs-card'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -168,6 +169,9 @@ export default function ReceiverProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* الجولة 44: جهاتي الصحية — الأساسية + الإضافية بموافقة الإدارة */}
+      <MyOrgsCard />
 
       {/* تعديل الاسم */}
       <Card>

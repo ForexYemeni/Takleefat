@@ -190,3 +190,100 @@ export function timeAgo(date: string | Date): string {
   if (days < 30) return `منذ ${days} يوم`
   return formatDate(date)
 }
+
+// ---------- الجولة 44: توقيت مكة المكرمة + نظام 12 ساعي (صباحاً/مساءً) ----------
+
+/** المنطقة الزمنية الرسمية للمنصة — توقيت مكة المكرمة (UTC+3 ثابت) */
+export const MECCA_TIME_ZONE = 'Asia/Riyadh'
+
+/** وقت 12 ساعي (صباحاً/مساءً) بتوقيت مكة المكرمة — مثال: «8:30 مساءً» */
+export function formatTime12(date: string | Date | null | undefined): string {
+  if (!date) return '—'
+  return new Intl.DateTimeFormat('ar', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: MECCA_TIME_ZONE,
+  }).format(new Date(date))
+}
+
+/** تاريخ + وقت 12 ساعي بتوقيت مكة المكرمة — مثال: «12 سبتمبر، 8:30 مساءً» */
+export function formatDateTimeMecca(date: string | Date | null | undefined): string {
+  if (!date) return '—'
+  return new Intl.DateTimeFormat('ar', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: MECCA_TIME_ZONE,
+  }).format(new Date(date))
+}
+
+export interface Time12Parts {
+  hour: string // 1..12
+  minute: string // 00 | 15 | 30 | 45
+  period: 'AM' | 'PM' // AM = صباحاً | PM = مساءً
+}
+
+/** تحويل مكونات 12 ساعي إلى نص 24 ساعي 'HH:mm' — يُرسل للخادم */
+export function time12To24(p: Time12Parts): string {
+  const h = Math.min(12, Math.max(1, Number(p.hour) || 12))
+  const h24 = p.period === 'AM' ? (h === 12 ? 0 : h) : h === 12 ? 12 : h + 12
+  const minute = ['00', '15', '30', '45'].includes(p.minute) ? p.minute : '00'
+  return `${String(h24).padStart(2, '0')}:${minute}`
+}
+
+/** تحويل 'HH:mm' 24 ساعي إلى مكونات 12 ساعي — للعرض والتحرير */
+export function time24To12(t: string): Time12Parts {
+  const [h24Raw, mRaw] = t.split(':')
+  const h24 = Math.min(23, Math.max(0, Number(h24Raw) || 0))
+  const period: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM'
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return { hour: String(h12), minute: String(mRaw ?? '00').padStart(2, '0'), period }
+}
+
+/** تركيب تاريخ (YYYY-MM-DD) + وقت 24 ساعي (HH:mm) كتوقيت مكة المكرمة (+03:00 ثابت)
+ *  — مستقل عن منطقة الخادم الزمنية نهائياً */
+export function meccaDateTime(dateStr: string, timeStr: string): Date {
+  const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(timeStr) ? timeStr : '00:00'
+  return new Date(`${dateStr}T${time}:00+03:00`)
+}
+
+/** فرق الساعات بين وقتين 'HH:mm' — يدعم عبور منتصف الليل (وردية ليلية) */
+export function hoursBetween(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(':').map(Number)
+  const [eh, em] = endTime.split(':').map(Number)
+  let mins = eh * 60 + em - (sh * 60 + sm)
+  if (mins <= 0) mins += 24 * 60
+  return Math.round((mins / 60) * 100) / 100
+}
+
+/** إضافة ساعات إلى وقت 'HH:mm' — يعيد 'HH:mm' ويدعم عبور منتصف الليل */
+export function addHoursToTime(startTime: string, hours: number): string {
+  const [h, m] = startTime.split(':').map(Number)
+  const total = (h * 60 + m + Math.round(hours * 60)) % (24 * 60)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** حقول العرض بدون الرسوم — تُستخدم في العميل والخادم (آمنة للاستيراد من العميل) */
+export interface PromoFields {
+  promoActive?: boolean
+  promoUntil?: string | null
+}
+
+/**
+ * هل العرض بدون الرسوم نشط الآن؟ — الجولة 44
+ * نشط = promoActive + (promoUntil فارغ أو لم يحن بعده)
+ * تعيش هنا في utils لصحتها للاستيراد من مكونات العميل — lib/settings تُعيد تصديرها
+ */
+export function isPromoActive(
+  settings: PromoFields,
+  now: Date = new Date()
+): boolean {
+  if (!settings.promoActive) return false
+  if (!settings.promoUntil) return true
+  const until = new Date(settings.promoUntil)
+  return !Number.isNaN(until.getTime()) && now.getTime() <= until.getTime()
+}

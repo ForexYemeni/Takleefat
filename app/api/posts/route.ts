@@ -4,7 +4,7 @@ import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-help
 import { createPostSchema } from '@/lib/validations/post'
 import { getSettings, calcAdminFee, adminFeeLabel } from '@/lib/settings'
 import { notify } from '@/lib/notifications'
-import { formatCurrency, POST_GENDER_LABELS } from '@/lib/utils'
+import { formatCurrency, POST_GENDER_LABELS, meccaDateTime, addHoursToTime, hoursBetween } from '@/lib/utils'
 import {
   canNurseSeePost,
   escalateDueProgressivePosts,
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
             ? 'DOCTOR'
             : 'NURSE'
 
-    const { title, description, hospitalId, department, startDate, nursesNeeded, hours, gender, value } =
+    const { title, description, hospitalId, department, startDate, startTime, endTime, nursesNeeded, hours, gender, value } =
       parsed.data
     const distribution = parsed.data.distribution ?? 'ALL_MATCHING'
     const invitedNurseIds = parsed.data.invitedNurseIds ?? []
@@ -154,8 +154,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const start = new Date(startDate)
+    // ---------- الجولة 44: تركيب تاريخ ووقت البدء بتوقيت مكة المكرمة (+03:00 ثابت) ----------
+    // النظام 12 ساعي يُحوّل في النموذج إلى 'HH:mm' بصيغة 24 — والتركيب هنا مستقل
+    // تماماً عن منطقة الخادم الزمنية. وقت الانتهاء: اختياري من المستخدم، وإلا
+    // يُشتق من عدد الساعات، وإلا يُشتق عدد الساعات من الفرق بين الوقتين.
+    const start = meccaDateTime(startDate, startTime || '00:00')
     if (Number.isNaN(start.getTime())) return jsonError('تاريخ البدء غير صحيح', 422)
+
+    const start24 = startTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? startTime : '00:00'
+    const effHours = hours ? Number(hours) : null
+    let endAt: Date | null = null
+    let finalHours: number | null = effHours
+    if (endTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(endTime)) {
+      endAt = meccaDateTime(startDate, endTime)
+      // وردية ليلية تعبر منتصف الليل — وقت الانتهاء قبل وقت البدء يعني اليوم التالي
+      if (endAt.getTime() <= start.getTime()) endAt = new Date(endAt.getTime() + 24 * 60 * 60 * 1000)
+      if (finalHours == null) {
+        finalHours = Math.max(1, Math.round(hoursBetween(start24, endTime)))
+      }
+    } else if (effHours != null && effHours > 0) {
+      endAt = meccaDateTime(startDate, addHoursToTime(start24, effHours))
+      if (endAt.getTime() <= start.getTime()) endAt = new Date(endAt.getTime() + 24 * 60 * 60 * 1000)
+    }
 
     // الجهة الصحية من قوائم الإدارة — الموقع الفعلي يُشتق منها تلقائياً
     const hospital = await db.hospital.findUnique({ where: { id: hospitalId } })
@@ -177,7 +197,8 @@ export async function POST(req: NextRequest) {
         department: department || null,
         location: hospital.location || null,
         startDate: start,
-        hours: hours ? Number(hours) : null,
+        endTime: endAt,
+        hours: finalHours != null && finalHours > 0 ? Math.min(999, Math.round(finalHours)) : null,
         gender,
         audience,
         nursesNeeded,

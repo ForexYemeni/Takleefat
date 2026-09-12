@@ -131,6 +131,10 @@ export function FullProfileDialog({
 
   const profile = data?.profile
   const documents = data?.documents ?? []
+  // الجولة 44: المستندات مخفية عن هذا المشاهد — حالة «تم التحقق» بدل القائمة
+  const documentsHidden = data?.documentsHidden ?? false
+  const documentsVerified = data?.documentsVerified ?? false
+  const approvedDocuments = data?.approvedDocuments ?? 0
   const isDoctor = profile?.role === 'DOCTOR'
   const approvedDocs = documents.filter((d) => d.status === 'APPROVED').length
 
@@ -235,9 +239,15 @@ export function FullProfileDialog({
                 label={`من ${profile.ratings.count} تقييم`}
               />
               <StatTile
-                icon={FileText}
-                value={String(documents.length)}
-                label={`مستند (${approvedDocs} معتمد)`}
+                icon={documentsHidden ? ShieldCheck : FileText}
+                value={documentsHidden ? (documentsVerified ? 'تم التحقق ✓' : 'خاصة') : String(documents.length)}
+                label={
+                  documentsHidden
+                    ? documentsVerified
+                      ? 'مستندات معتمدة من الإدارة'
+                      : 'مستندات محفوظة وخاصة'
+                    : `مستند (${approvedDocs} معتمد)`
+                }
               />
             </div>
 
@@ -351,8 +361,32 @@ export function FullProfileDialog({
                 )}
 
                 {/* المستندات */}
-                <Section title={`المستندات المرفوعة (${documents.length})`} icon={FileText}>
-                  {documents.length === 0 ? (
+                <Section
+                  title={
+                    documentsHidden
+                      ? 'المستندات الرسمية — محفوظة وخاصة'
+                      : `المستندات المرفوعة (${documents.length})`
+                  }
+                  icon={documentsHidden ? ShieldCheck : FileText}
+                >
+                  {documentsHidden ? (
+                    // الجولة 44: المستندات مخفية — تظهر حالة التحقق فقط
+                    <div className="flex items-start gap-3 rounded-xl border-2 border-emerald-200 bg-gradient-to-bl from-emerald-50 to-transparent p-3.5 dark:border-emerald-900 dark:from-emerald-950/20">
+                      <span className="shrink-0 rounded-lg bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                        <ShieldCheck className="size-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-200">
+                          {documentsVerified ? 'تم التحقق من مستندات الكادر' : 'مستندات الكادر محفوظة وخاصة'}
+                          {documentsVerified && approvedDocuments > 0 && ` (${approvedDocuments} معتمدة)`}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                          المستندات الرسمية تُعرض فقط عندما يعمل الكادر في جهتك أو بإذن خاص من الإدارة —
+                          حفاظاً على خصوصية بياناتهم.
+                        </p>
+                      </div>
+                    </div>
+                  ) : documents.length === 0 ? (
                     <p className="rounded-xl border border-dashed py-4 text-center text-sm text-muted-foreground">
                       لا توجد مستندات مرفوعة لهذا الحساب بعد
                     </p>
@@ -564,6 +598,9 @@ function InfoItem({
 async function apiFetchProfile(userId: string): Promise<{
   profile: FullProfile
   documents: ProfileDocument[]
+  documentsHidden?: boolean
+  documentsVerified?: boolean
+  approvedDocuments?: number
 }> {
   const { apiFetcher } = await import('@/lib/api-client')
   return apiFetcher(`/api/workforce/${userId}`)

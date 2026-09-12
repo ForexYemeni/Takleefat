@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { resolveReceiverOrgs } from '@/lib/network'
 
 /**
  * GET /api/posts/[id]/applications — تقديمات التكليف المُعلن
@@ -154,15 +155,69 @@ export async function GET(
         trusted
       )
     }
+
+    // ---------- الجولة 44: خصوصية المستندات في السيرة الذاتية ----------
+    // «عند عرض السيرة الذاتية يجب ان تكون المستندات المرفوعة مخفية عنه وتظهر
+    // انه تم التحقق ولا تعرض الا اذا كان الكادر يعمل بنفس الجهة»:
+    //  - الإدارة: ترى المستندات دائماً
+    //  - المستلم/المشرف: تُخفى المستندات عن أي متقدم لا يعمل في جهته (ارتباط
+    //    معتمد غير معلق) — وبدلها تظهر حالة «تم التحقق» + عدد المعتمد من الإدارة
+    //  - الاستثناءان: المتقدم من كوادر جهته، أو مُنح صاحب الحساب إذن
+    //    «رؤية البيانات الكاملة» (fullProfileAccess) من الإدارة حصراً
+    let fullProfileAccess = false
+    const sameOrgSet = new Set<string>()
+    const verifiedMap = new Map<string, number>()
+    if (session.user.role !== 'ADMIN') {
+      const applicantIds = applicationsWithRatings.map((a) => a.nurse.id)
+      const [me, verifiedRows] = await Promise.all([
+        db.user.findUnique({
+          where: { id: session.user.id },
+          select: { fullProfileAccess: true },
+        }),
+        db.document.groupBy({
+          by: ['userId'],
+          where: { userId: { in: applicantIds }, status: 'APPROVED' },
+          _count: { _all: true },
+        }),
+      ])
+      fullProfileAccess = me?.fullProfileAccess ?? false
+      for (const v of verifiedRows) verifiedMap.set(v.userId, v._count._all)
+      if (!fullProfileAccess && applicantIds.length > 0) {
+        const orgs = await resolveReceiverOrgs(session.user.id)
+        if (orgs.length > 0) {
+          const links = await db.nurseAffiliation.findMany({
+            where: {
+              nurseId: { in: applicantIds },
+              hospitalId: { in: orgs.map((o) => o.id) },
+              status: { not: 'PENDING' },
+            },
+            select: { nurseId: true },
+          })
+          for (const l of links) sameOrgSet.add(l.nurseId)
+        }
+      }
+    }
+
     return NextResponse.json({
-      applications: applicationsWithRatings.map((a) => ({
-        ...a,
-        applicationId: a.id,
-        nurse: {
-          ...a.nurse,
-          ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
-        },
-      })),
+      applications: applicationsWithRatings.map((a) => {
+        const canSeeDocuments =
+          session.user.role === 'ADMIN' || fullProfileAccess || sameOrgSet.has(a.nurse.id)
+        return {
+          ...a,
+          applicationId: a.id,
+          nurse: {
+            ...a.nurse,
+            ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
+            // الجولة 44: إخفاء المستندات عن غير أهل الجهة — مع حالة التحقق
+            ...(canSeeDocuments
+              ? {}
+              : { documents: [] as typeof a.nurse.documents }),
+            documentsHidden: !canSeeDocuments,
+            documentsVerified: (verifiedMap.get(a.nurse.id) ?? 0) > 0,
+            approvedDocuments: verifiedMap.get(a.nurse.id) ?? 0,
+          },
+        }
+      }),
     })
   } catch (error) {
     return handleApiError(error)

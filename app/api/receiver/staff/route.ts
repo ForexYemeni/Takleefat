@@ -5,6 +5,7 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { receiverCreateNurseSchema, createDoctorSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 import {
+  resolveReceiverOrgs,
   resolveReceiverOrg,
   AFFILIATION_STATUS_LABELS,
   healReceiverPendingAffiliations,
@@ -186,13 +187,16 @@ export async function POST(req: NextRequest) {
  * الجولة 38: إحصاءات «مجتمع كوادر الجهة الصحية» (المعتمدون/المتاحون الآن)
  * + شارة التوفر لكل صف (available).
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
-    const org = await resolveReceiverOrg(session.user.id)
-    if (!org) {
-      return NextResponse.json({ org: null, nurses: [] })
+    // الجولة 44: كل جهات المسؤول المعتمدة — مع اختيار جهة العرض (?orgId=)
+    const orgs = await resolveReceiverOrgs(session.user.id)
+    if (orgs.length === 0) {
+      return NextResponse.json({ org: null, orgs: [], nurses: [] })
     }
+    const requestedId = req.nextUrl.searchParams.get('orgId')?.trim() ?? ''
+    const org = orgs.find((o) => o.id === requestedId) ?? orgs[0]
 
     // شفاء كسول: ارتباطات أُضيفت من المستلم ثم اعتُمدت الجهة وتوقفت على PENDING
     await healReceiverPendingAffiliations(org.id)
@@ -258,6 +262,8 @@ export async function GET() {
 
     return NextResponse.json({
       org,
+      // الجولة 44: كل جهات المسؤول — لمبدّل الجهات في صفحة كوادر جهتي
+      orgs,
       fullProfileAccess: me?.fullProfileAccess ?? false,
       // الجولة 38: مجتمع كوادر الجهة الصحية — ثلاثة عدادات فورية
       community,

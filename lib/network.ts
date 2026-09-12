@@ -126,19 +126,74 @@ export function genderMatches(postGender: Gender, nurseGender: Gender | null | u
 /**
  * الجهة الصحية المصرّح بها للمستلم الإداري — تُشتق من اسم الجهة المسجل في حسابه.
  * تُستخدم لتقييد إدارة الارتباطات وتسجيل المقابلات والاعتماد لجهته فقط.
+ * الجولة 44: صارت الصورة الأولى فقط — للصورة الكاملة استخدم resolveReceiverOrgs
+ * (روابط الجهات المعتمدة من الإدارة + الجهة التاريخية).
  */
 export async function resolveReceiverOrg(receiverId: string, hospitalName?: string | null) {
   let name = hospitalName ?? null
   if (!name) {
-    const user = await db.user.findUnique({ where: { id: receiverId }, select: { hospitalName: true } })
-    name = user?.hospitalName ?? null
+    const orgs = await resolveReceiverOrgs(receiverId)
+    return orgs[0] ?? null
   }
-  if (!name) return null
   return db.hospital.findFirst({
     where: { name, status: { not: 'INACTIVE' } },
     // الجولة 38: type مطلوب لعرض نوع الجهة في مجتمع الكوادر
     select: { id: true, name: true, type: true, city: true, status: true },
   })
+}
+
+/** الصورة المختصرة للجهة الصحية — تُستخدم في قوائم جهات المسؤول */
+export type ReceiverOrgLite = {
+  id: string
+  name: string
+  type: string
+  city: string | null
+  status: string
+}
+
+/**
+ * كل الجهات الصحية المصرّح بها لمسؤول (مستلم إداري / مشرف أطباء) — الجولة 44:
+ * «يمكنه اضافة جهه صحية اخرى بشرط الموافقة عليها من حساب الادارة»:
+ *  1) الجهة التاريخية المشتقة من اسم الجهة في حسابه (hospitalName) — الأساسية
+ *  2) + روابط الجهات المعتمدة (ReceiverOrgLink.status = ACTIVE) لجهات غير معطلة
+ * بلا تكرار — الترتيب: التاريخية أولاً ثم الروابط المعتمدة بأقدميتها.
+ */
+export async function resolveReceiverOrgs(receiverId: string): Promise<ReceiverOrgLite[]> {
+  const [links, legacyUser] = await Promise.all([
+    db.receiverOrgLink.findMany({
+      where: {
+        receiverId,
+        status: 'ACTIVE',
+        hospital: { status: { not: 'INACTIVE' } },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        hospital: { select: { id: true, name: true, type: true, city: true, status: true } },
+      },
+    }),
+    db.user.findUnique({ where: { id: receiverId }, select: { hospitalName: true } }),
+  ])
+
+  const result: ReceiverOrgLite[] = []
+  const seen = new Set<string>()
+  const legacyName = legacyUser?.hospitalName ?? null
+  if (legacyName) {
+    const legacy = await db.hospital.findFirst({
+      where: { name: legacyName, status: { not: 'INACTIVE' } },
+      select: { id: true, name: true, type: true, city: true, status: true },
+    })
+    if (legacy) {
+      result.push(legacy)
+      seen.add(legacy.id)
+    }
+  }
+  for (const l of links) {
+    if (!seen.has(l.hospital.id)) {
+      result.push(l.hospital)
+      seen.add(l.hospital.id)
+    }
+  }
+  return result
 }
 
 // ---------- شفاء الارتباطات المعلقة (إصلاح الجولة الثامنة) ----------

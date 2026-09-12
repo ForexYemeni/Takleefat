@@ -151,6 +151,14 @@ enum WithdrawalStatus {
   REJECTED
 }
 
+/// حالة ربط مسؤول (مستلم إداري / مشرف أطباء) بجهة صحية — الجولة 44:
+/// يضيف المسؤول جهة صحية أخرى لملفه فتُعرض للإدارة لاعتمادها أو رفضها
+enum ReceiverOrgStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
 /// أنواع الإشعارات
 enum NotificationType {
   ACCOUNT_APPROVED
@@ -159,6 +167,7 @@ enum NotificationType {
   DOCUMENT_REVIEWED
   ASSIGNMENT_CREATED
   ASSIGNMENT_RECEIVED
+  ASSIGNMENT_STARTED
   ASSIGNMENT_COMPLETED
   ASSIGNMENT_CANCELLED
   POST_CREATED
@@ -202,6 +211,9 @@ model User {
   trustedContactViewer Boolean @default(false)
   // الجهة الصحية (المستشفى) — يُدخلها المستلم الإداري عند التسجيل
   hospitalName      String?
+  // الجولة 44: الجهات الصحية المرتبطة بالمسؤول (المستلم/المشرف) — الجهة
+  // الأساسية من hospitalName، والإضافية تُطلب من ملفه وتُعتمد من الإدارة
+  orgLinks          ReceiverOrgLink[] @relation("ReceiverOrgLinks")
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -295,6 +307,8 @@ model Assignment {
   receiverDoneAt        DateTime?
   /// إجابة المستلم الإداري: هل تم الدفع للممرض؟
   nursePaid             Boolean?
+  /// الجولة 44: متى أُرسل إشعار بداية التكليف للطرفين — يُرسل مرة واحدة عند بلوغ وقت البدء
+  startNotifiedAt       DateTime?
   /// لقطة شاشة إثبات الدفع المرفوعة من الكادر (تظهر للإدارة بتكبير احترافي)
   paymentScreenshotUrl  String?
   paymentScreenshotName String?
@@ -348,6 +362,9 @@ model Post {
   startDate         DateTime
   /// عدد الساعات المطلوبة للوردية/التكليف
   hours             Int?
+  /// وقت انتهاء المناوبة المحسوب (من وقت البدء + الساعات) — بتوقيت مكة المكرمة (UTC+3)
+  /// الجولة 44: للعداد التنازلي الحي في كل الحسابات
+  endTime           DateTime?
   /// الجنس المطلوب للتكليف
   gender            Gender              @default(ANY)
   /// جمهور التكليف — NURSE: يقدّم عليه الكادر التمريضي | DOCTOR: يقدّم عليه الأطباء
@@ -402,8 +419,32 @@ model Hospital {
 
   affiliations NurseAffiliation[]
   posts        Post[]
+  orgLinks     ReceiverOrgLink[] @relation("ReceiverOrgHospitals")
 
   @@map("hospitals")
+}
+
+/// ربط الجهات الصحية بمسؤوليها (المستلم الإداري / مشرف الأطباء) — الجولة 44:
+/// «في حساب المستلم الإداري الملف الشخصي يجب ان تظهر الجهه الصحية التي يعمل
+/// فيها ويمكنه اضافه جهه صحية اخرى بشرط الموافقة عليها من حساب الادارة»
+model ReceiverOrgLink {
+  id           String            @id @default(cuid())
+  receiverId   String
+  hospitalId   String
+  status       ReceiverOrgStatus @default(PENDING)
+  /// ملاحظة طلب اختيارية من المسؤول
+  note         String?
+  createdAt    DateTime          @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  receiver User     @relation("ReceiverOrgLinks", fields: [receiverId], references: [id], onDelete: Cascade)
+  hospital Hospital @relation("ReceiverOrgHospitals", fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@unique([receiverId, hospitalId])
+  @@index([receiverId])
+  @@index([hospitalId, status])
+  @@map("receiver_org_links")
 }
 
 /// الأقسام الطبية — تُدار من حساب الإدارة (عناية، طوارئ، رقود، حضانة، قبالة، مختبر...)

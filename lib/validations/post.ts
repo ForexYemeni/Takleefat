@@ -16,6 +16,18 @@ export const createPostSchema = z.object({
   department: z.string().max(120).optional().or(z.literal('')),
   location: z.string().max(150, 'الموقع طويل جداً').optional().or(z.literal('')),
   startDate: z.string({ error: 'تاريخ البدء مطلوب' }).min(1, 'تاريخ البدء مطلوب'),
+  // ---------- الجولة 44: وقت البدء والانتهاء بنظام 12 ساعي بتوقيت مكة المكرمة ----------
+  // النموذج يحوّل 12 ساعي (صباحاً/مساءً) إلى 'HH:mm' بصيغة 24 ساعي قبل الإرسال
+  startTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'وقت البدء غير صحيح')
+    .optional()
+    .or(z.literal('')),
+  endTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'وقت الانتهاء غير صحيح')
+    .optional()
+    .or(z.literal('')),
   nursesNeeded: z.coerce
     .number({ error: 'عدد الكادر المطلوب غير صحيح' })
     .int('عدد الكادر يجب أن يكون رقماً صحيحاً')
@@ -131,6 +143,11 @@ export const settingsSchema = z
       .min(2, 'اسم الحساب مطلوب')
       .max(80, 'اسم الحساب طويل جداً'),
     paymentNotes: z.string().max(500, 'الملاحظات طويلة جداً').optional().or(z.literal('')),
+    // ---------- الجولة 44: عرض بدون رسوم إدارة (لفترة محدودة) ----------
+    // الحقول اختيارية حتى تبقى حفظات الإعدادات القديمة صالحة دون إرسالها
+    promoActive: z.boolean().optional(),
+    promoUntil: z.string().optional().or(z.literal('')),
+    promoNote: z.string().max(200, 'ملاحظة العرض طويلة جداً').optional().or(z.literal('')),
     // الجولة 32: نسب المستلمين ومشرفي الأطباء لم تعد إعدادات عامة —
     // تُدار لكل حساب على حدة من صفحتي المستلمين/مشرفي الأطباء (User.commissionPercent)
     // والافتراضي التلقائي = نصف نسبة الإدارة (autoSharePercent في lib/settings)

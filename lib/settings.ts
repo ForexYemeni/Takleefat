@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { isPromoActive } from '@/lib/utils'
 
 /**
  * إعدادات المنصة — تكليفات | Takleefat
@@ -34,6 +35,13 @@ export interface PlatformSettings {
   paymentAccountName: string
   /** ملاحظات إضافية على الدفع */
   paymentNotes: string
+  // ---------- الجولة 44: عرض بدون رسوم إدارة (لفترة محدودة) ----------
+  /** تشغيل جميع التكليفات بدون حصة إدارة — عرض تسويقي من الإدارة */
+  promoActive: boolean
+  /** نهاية العرض (ISO) — null = بدون نهاية حتى إيقافه يدوياً */
+  promoUntil: string | null
+  /** ملاحظة العرض التي تظهر في البانرات — مثال: «بمناسبة افتتاح المنصة» */
+  promoNote: string
 }
 
 /**
@@ -71,6 +79,9 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   paymentAccountNumber: '',
   paymentAccountName: 'منصة تكليفات',
   paymentNotes: '',
+  promoActive: false,
+  promoUntil: null,
+  promoNote: '',
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
@@ -83,6 +94,9 @@ const KEYS: Record<keyof PlatformSettings, string> = {
   paymentAccountNumber: 'paymentAccountNumber',
   paymentAccountName: 'paymentAccountName',
   paymentNotes: 'paymentNotes',
+  promoActive: 'promoActive',
+  promoUntil: 'promoUntil',
+  promoNote: 'promoNote',
 }
 
 /**
@@ -98,7 +112,13 @@ export function calcApplicationFee(settings: PlatformSettings): number {
  * حساب حصة الإدارة من قيمة التكليف — نسبة مئوية أو مبلغ ثابت
  * تُحصَّل فقط عندما يكون نمط الرسوم «حصة إدارة»، وإلا تكون صفراً
  */
-export function calcAdminFee(value: number, settings: PlatformSettings): number {
+export function calcAdminFee(
+  value: number,
+  settings: PlatformSettings,
+  now: Date = new Date()
+): number {
+  // الجولة 44: أثناء العرض النشط تُعفى كل التكليفات الجديدة من حصة الإدارة كلياً
+  if (isPromoActive(settings, now)) return 0
   if (settings.feeMode !== 'ADMIN') return 0
   if (settings.adminFeeType === 'FIXED') {
     return Math.max(0, Math.round(settings.adminFeeFixed))
@@ -107,10 +127,25 @@ export function calcAdminFee(value: number, settings: PlatformSettings): number 
 }
 
 /**
+ * هل العرض بدون الرسوم نشط الآن؟ — الجولة 44
+ * نشط = promoActive + (promoUntil فارغ أو لم يحن بعده)
+ */
+export { isPromoActive } from '@/lib/utils'
+
+/**
  * وصف نصي لاحتساب الرسوم حسب النمط النشط
  * مثال: «رسوم تقديم: 1,000 ريال» أو «10٪ من قيمة التكليف»
  */
 export function feeLabel(settings: PlatformSettings): string {
+  // الجولة 44: العرض النشط يطغى على الوصف — «بدون رسوم إدارة» حتى انتهائه
+  if (isPromoActive(settings)) {
+    const until = settings.promoUntil
+      ? new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' }).format(
+          new Date(settings.promoUntil)
+        )
+      : 'حتى إشعار آخر'
+    return `عرض بدون رسوم إدارة حتى ${until}`
+  }
   if (settings.feeMode === 'APPLICATION') {
     return `رسوم تقديم ${settings.applicationFee.toLocaleString('ar-YE')} ريال`
   }
@@ -145,6 +180,10 @@ export async function getSettings(): Promise<PlatformSettings> {
     const feeMode = map.get(KEYS.feeMode) === 'APPLICATION' ? 'APPLICATION' : 'ADMIN'
     const adminFeeType = map.get(KEYS.adminFeeType) === 'FIXED' ? 'FIXED' : 'PERCENTAGE'
 
+    const promoUntilRaw = map.get(KEYS.promoUntil) ?? ''
+    const promoUntil =
+      promoUntilRaw && !Number.isNaN(new Date(promoUntilRaw).getTime()) ? promoUntilRaw : null
+
     return {
       feeMode,
       applicationFee: num('applicationFee', SETTINGS_DEFAULTS.applicationFee),
@@ -155,6 +194,9 @@ export async function getSettings(): Promise<PlatformSettings> {
       paymentAccountNumber: str('paymentAccountNumber', SETTINGS_DEFAULTS.paymentAccountNumber),
       paymentAccountName: str('paymentAccountName', SETTINGS_DEFAULTS.paymentAccountName),
       paymentNotes: map.get(KEYS.paymentNotes) ?? SETTINGS_DEFAULTS.paymentNotes,
+      promoActive: map.get(KEYS.promoActive) === '1',
+      promoUntil,
+      promoNote: map.get(KEYS.promoNote) ?? SETTINGS_DEFAULTS.promoNote,
     }
   } catch {
     // في حال عدم توفر الجداول بعد — نُرجع الافتراضي بدل تعطيل الخدمة

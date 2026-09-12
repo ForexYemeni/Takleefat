@@ -11,6 +11,7 @@ import {
   Lock,
   MessageCircle,
   Phone as PhoneIcon,
+  ShieldCheck,
   Stethoscope,
   UserRound,
   XCircle,
@@ -83,6 +84,12 @@ export interface ApplicantData {
     /** أقسام العمل المصرّح بها — ممرض طوارئ/رقود/عناية/مختبر... */
     workDepartments?: string[]
     documents: ApplicantDocument[]
+    /** الجولة 44: المستندات مخفية عن هذا المشاهد — تظهر حالة «تم التحقق» بدلها */
+    documentsHidden?: boolean
+    /** الجولة 44: هل لديه مستندات معتمدة من الإدارة؟ */
+    documentsVerified?: boolean
+    /** الجولة 44: عدد المستندات المعتمدة من الإدارة */
+    approvedDocuments?: number
     ratings?: ApplicantRatings
     /** السجل المهني — الجهات التي عمل بها مع سنوات العمل (الجولة الثامنة) */
     affiliations?: Array<{
@@ -324,46 +331,74 @@ export function ApplicantCV({
       )}
 
       {/* المستندات — صور البطاقة والمزاولة */}
-      <div className="space-y-2">
-        <p className="text-sm font-bold">المستندات الرسمية</p>
-        {nurse.documents.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
-            لم يرفع الكادر مستندات بعد
-          </p>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {nurse.documents.map((doc) => (
-              <button
-                key={doc.id}
-                onClick={() =>
-                  setViewerDoc({
-                    fileUrl: doc.fileUrl,
-                    fileName: doc.fileName,
-                    title: doc.title,
-                    mimeType: doc.mimeType,
-                  })
-                }
-                className="flex items-center gap-2.5 rounded-xl border p-3 text-start transition-colors hover:bg-accent"
-              >
-                <span className="rounded-lg bg-secondary p-2">
-                  {doc.type === 'ID_CARD' ? (
-                    <IdCard className="size-4 text-primary" />
-                  ) : (
-                    <FileText className="size-4 text-primary" />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-bold">
-                    {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.title}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">اضغط للعرض</span>
-                </span>
-                <StatusBadge status={doc.status} labels={{ PENDING: 'قيد المراجعة', APPROVED: 'معتمد', REJECTED: 'مرفوض' }} />
-              </button>
-            ))}
+      {nurse.documentsHidden ? (
+        // الجولة 44: المستندات مخفية عن هذا المشاهد — حالة «تم التحقق» فقط
+        <div className="space-y-2">
+          <p className="text-sm font-bold">المستندات الرسمية</p>
+          <div className="flex items-start gap-3 rounded-2xl border-2 border-emerald-200 bg-gradient-to-bl from-emerald-50 to-transparent p-4 dark:border-emerald-900 dark:from-emerald-950/20">
+            <span className="shrink-0 rounded-xl bg-emerald-100 p-2.5 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+              <ShieldCheck className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-emerald-800 dark:text-emerald-200">
+                {nurse.documentsVerified ? 'تم التحقق من مستندات الكادر' : 'مستندات الكادر محفوظة وخاصة'}
+                {nurse.documentsVerified && (
+                  <Badge className="gap-1 bg-emerald-500 text-white">
+                    <BadgeCheck className="size-3" />
+                    مستندات معتمدة من الإدارة
+                  </Badge>
+                )}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                المستندات الرسمية (البطاقة والمزاولة) مخفية حفاظاً على خصوصية الكادر — لا
+                تُعرض إلا إذا كان الكادر من كوادر جهتك الصحية، أما حالته المهنية وتقييماته
+                فكلها أمامك في هذه السيرة الذاتية.
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm font-bold">المستندات الرسمية</p>
+          {nurse.documents.length === 0 ? (
+            <p className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
+              لم يرفع الكادر مستندات بعد
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {nurse.documents.map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() =>
+                    setViewerDoc({
+                      fileUrl: doc.fileUrl,
+                      fileName: doc.fileName,
+                      title: doc.title,
+                      mimeType: doc.mimeType,
+                    })
+                  }
+                  className="flex items-center gap-2.5 rounded-xl border p-3 text-start transition-colors hover:bg-accent"
+                >
+                  <span className="rounded-lg bg-secondary p-2">
+                    {doc.type === 'ID_CARD' ? (
+                      <IdCard className="size-4 text-primary" />
+                    ) : (
+                      <FileText className="size-4 text-primary" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold">
+                      {DOCUMENT_TYPE_LABELS[doc.type] ?? doc.title}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">اضغط للعرض</span>
+                  </span>
+                  <StatusBadge status={doc.status} labels={{ PENDING: 'قيد المراجعة', APPROVED: 'معتمد', REJECTED: 'مرفوض' }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* قرار المراجعة */}
       {applicant.status === 'PENDING' && onReview && (

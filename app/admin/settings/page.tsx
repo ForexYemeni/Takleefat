@@ -6,6 +6,7 @@ import {
   BadgeDollarSign,
   Banknote,
   Coins,
+  Gift,
   Hash,
   Percent,
   PiggyBank,
@@ -30,6 +31,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -78,6 +80,9 @@ export default function AdminSettingsPage() {
       paymentAccountNumber: '',
       paymentAccountName: 'منصة تكليفات',
       paymentNotes: '',
+      promoActive: false,
+      promoUntil: '',
+      promoNote: '',
     },
   })
 
@@ -102,8 +107,18 @@ export default function AdminSettingsPage() {
   const adminPercentage = Number(form.watch('adminPercentage')) || 0
   const adminFeeFixed = Number(form.watch('adminFeeFixed')) || 0
   const adminFeeType = form.watch('adminFeeType')
+  // الجولة 44: حالة العرض بدون الرسوم
+  const promoActive = form.watch('promoActive') ?? false
+  const promoUntilRaw = form.watch('promoUntil') ?? ''
   /** النسبة التلقائية للمستلمين/المشرفين — نصف نسبة الإدارة (الجولة 32) */
   const autoSharePercent = Math.round((adminPercentage / 2) * 10) / 10
+
+  /** ضبط مدة العرض بأيام من الآن — أزرار سريعة (7/14/30 يوماً) */
+  const applyPromoDays = (days: number) => {
+    const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+    form.setValue('promoUntil', until.toISOString().slice(0, 10), { shouldDirty: true })
+    if (!promoActive) form.setValue('promoActive', true, { shouldDirty: true })
+  }
 
   if (isLoading) return <DashboardSkeleton />
 
@@ -282,6 +297,86 @@ export default function AdminSettingsPage() {
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* ---------- الجولة 44: عرض بدون رسوم إدارة — لفترة محدودة ---------- */}
+        <Card className={promoActive ? 'border-emerald-300 ring-1 ring-emerald-200' : ''}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Gift className="size-4 text-emerald-600" />
+              عرض بدون رسوم إدارة
+            </CardTitle>
+            <CardDescription>
+              شغّل جميع التكليفات بدون حصة إدارة كعرض لفترة محدودة — يظهر للجميع بانر
+              «عرض بدون رسوم» وتُحسب حصة الإدارة صفراً لكل تكليف جديد أثناء العرض، ثم
+              تعود النسبة تلقائياً بعد انتهاء المدة
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/40 p-4">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={promoActive}
+                  onCheckedChange={(v) => form.setValue('promoActive', v, { shouldDirty: true })}
+                  aria-label="تشغيل عرض بدون رسوم إدارة"
+                />
+                <div>
+                  <p className="text-sm font-extrabold">
+                    {promoActive ? 'العرض نشط الآن — بدون رسوم إدارة' : 'العرض غير نشط'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {promoActive
+                      ? promoUntilRaw
+                        ? `ينتهي تلقائياً في ${new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }).format(new Date(promoUntilRaw))}`
+                        : 'مفتوح حتى إيقافه يدوياً من هنا'
+                      : 'شغّله لتحفيز الجهات والكوادر في الفترات الترويجية'}
+                  </p>
+                </div>
+              </div>
+              <Badge className={promoActive ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}>
+                {promoActive ? 'مفعّل' : 'متوقف'}
+              </Badge>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>مدة العرض — أزرار سريعة</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[7, 14, 30].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => applyPromoDays(d)}
+                      className="rounded-xl border-2 px-3 py-1.5 text-xs font-extrabold tabular-nums transition-colors hover:border-emerald-400 hover:text-emerald-700"
+                    >
+                      {d} يوماً
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  الضغط يفعّل العرض ويضبط تاريخ الانتهاء تلقائياً — ويمكنك تعديل التاريخ يدوياً
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="s-promo-until">ينتهي في (اختياري — بتوقيت مكة المكرمة)</Label>
+                <Input
+                  id="s-promo-until"
+                  type="date"
+                  value={promoUntilRaw ? promoUntilRaw.slice(0, 10) : ''}
+                  onChange={(e) => form.setValue('promoUntil', e.target.value, { shouldDirty: true })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="s-promo-note">ملاحظة العرض (تظهر في البانر — اختياري)</Label>
+              <Input
+                id="s-promo-note"
+                placeholder="مثال: بمناسبة افتتاح المنصة — عروض شهر كامل بدون رسوم"
+                {...form.register('promoNote')}
+              />
+            </div>
           </CardContent>
         </Card>
 
