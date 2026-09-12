@@ -2346,6 +2346,18 @@ check "القائمة الكاملة (status=ALL) تضم مستندات الجم
 # ============================================================
 echo "=========== 43) الجولة 34: قفل أرقام الكادر حتى سداد نسبة الإدارة + أطباء القائمة العامة ==========="
 
+# إعداد تكليف سارٍ مسدد خاص بفحوص القفل (تقديم → اعتماد → سداد) —
+# تحتاجه فحوص السيرة المفتوحة والدليل المختلط والتوافق التبادلي (الأقسام 43-45)
+P36=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"فحوص القفل 43\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":30000}")
+P36_ID=$(echo "$P36" | jget "['post']['id']")
+APPLY44=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P36_ID/apply -H "Content-Type: application/json" -d '{}')
+check "تقديم الكادر على تكليف فحوص القفل → 201" "201" "$APPLY44"
+APP44_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P36_ID/applications | jget "['applications'][0]['applicationId']")
+N36_ASSIGN=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP44_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' | jget "['assignment']['id']")
+PAY44=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N36_ASSIGN -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
+check "الإدارة تؤكد سداد تكليف فحوص القفل → 200" "200" "$PAY44"
+
 # --- فحوص ساكنة: البنية الجديدة ---
 R34_LIB=$([ -f lib/phone-privacy.ts ] && grep -c "revealedStaffIds\|phoneView\|maskPhone" lib/phone-privacy.ts | awk '{print ($1>=3)?1:0}')
 check "api: مكتبة الخصوصية المركزية lib/phone-privacy.ts موجودة بالقواعد الثلاث" "1" "$R34_LIB"
@@ -2549,17 +2561,7 @@ echo "=========== 44) الجولة 35/36 — القفل التبادلي أثن�
 # بعد دفع الكادر للإدارة وتأكيد الدفع من حساب الإدارة، تظهر بيانات الاتصال
 # للمستلم الإداري والكادر التمريضي/الطبيب (ومشرف الأطباء) أثناء سير التكليف —
 # وتُغلق تلقائياً بعد إنهائه (يُختبر في القسم 45)
-
-# إعداد تكليف سارٍ جديد خاص بهذا القسم (تقديم → اعتماد → سداد)
-P36=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"قفل تبادلي 44\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":30000}")
-P36_ID=$(echo "$P36" | jget "['post']['id']")
-APPLY44=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P36_ID/apply -H "Content-Type: application/json" -d '{}')
-check "تقديم الكادر على تكليف القسم 44 → 201" "201" "$APPLY44"
-APP44_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P36_ID/applications | jget "['applications'][0]['applicationId']")
-N36_ASSIGN=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$APP44_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' | jget "['assignment']['id']")
-PAY44=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N36_ASSIGN -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
-check "الإدارة تؤكد سداد تكليف القسم 44 → 200" "200" "$PAY44"
+# التكليف الساري المُعد في بداية القسم 43 هو مصدر الحقيقة هنا
 
 # مصدر الحقيقة: أول تكليف سارٍ مسدد غير منتهٍ للكادر الحالي
 curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_assign.json" 2>/dev/null
