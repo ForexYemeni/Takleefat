@@ -6,6 +6,28 @@ cd /home/z/my-project
 # 1) قتل أي خوادم زومبي
 pkill -9 -f "server.js" 2>/dev/null; pkill -9 -f "next-server" 2>/dev/null; sleep 1
 
+# 1.5) لقطة حالة الإنتاج (postgres) قبل أي تحويل — الاستعادة تعتمد اللقطة لا git
+# (الدرس: التُقط commit وهو داخل وضع sqlite فصار git checkout يستعيد sqlite إلى الأبد
+#  وتعطّل النشر على Vercel — لا يجوز أن يصل وضع الاختبار المحلي إلى GitHub)
+SNAP_DIR=$(mktemp -d /tmp/takleefat-prod-snap.XXXXXX)
+cp prisma/schema.prisma "$SNAP_DIR/schema.prisma"
+cp -r app "$SNAP_DIR/app"
+if [ ! -f "$SNAP_DIR/schema.prisma" ] || [ ! -d "$SNAP_DIR/app" ]; then
+  echo "SNAPSHOT FAILED — إلغاء قبل أي تعديل على مساحة العمل"; rm -rf "$SNAP_DIR"; exit 1
+fi
+RESTORED=0
+restore_prod() {
+  [ "$RESTORED" = "1" ] && return 0
+  RESTORED=1
+  cp "$SNAP_DIR/schema.prisma" prisma/schema.prisma
+  rm -rf app && cp -r "$SNAP_DIR/app" app
+  npx prisma generate >/dev/null 2>&1
+  rm -rf "$SNAP_DIR"
+  echo "RESTORED postgres snapshot + prisma generate"
+}
+trap restore_prod EXIT
+trap 'restore_prod; exit 130' INT TERM
+
 # 2) تحويل sqlite للنشر المحلي
 sed -i 's/provider = "postgresql"/provider = "sqlite"/' prisma/schema.prisma
 # إزالة mode:'insensitive' (غير مدعوم في sqlite)
@@ -22,12 +44,12 @@ for CRITICAL in app/api/upload/route.ts app/api/auth/register/route.ts app/api/a
 done
 
 npx prisma db push >/dev/null 2>&1
-node prisma/seed.js >/dev/null 2>&1 || { echo "SEED FAILED"; git checkout -- prisma/schema.prisma; exit 1; }
+node prisma/seed.js >/dev/null 2>&1 || { echo "SEED FAILED"; exit 1; }
 
 # 4) بناء وتشغيل الخادم على 3111
-npx next build >/tmp/e2e-build.log 2>&1 || { echo "BUILD FAILED"; tail -30 /tmp/e2e-build.log; git checkout -- prisma/schema.prisma app/; npx prisma generate >/dev/null 2>&1; exit 1; }
+npx next build >/tmp/e2e-build.log 2>&1 || { echo "BUILD FAILED"; tail -30 /tmp/e2e-build.log; exit 1; }
 # حماية: بناء turbopack قد يُخفي مسارات — تحقق أن مسار الرفع في قائمة البناء
-grep -q "api/upload" /tmp/e2e-build.log || { echo "BUILD MISSING /api/upload!"; tail -40 /tmp/e2e-build.log; git checkout -- prisma/schema.prisma app/; npx prisma generate >/dev/null 2>&1; exit 1; }
+grep -q "api/upload" /tmp/e2e-build.log || { echo "BUILD MISSING /api/upload!"; tail -40 /tmp/e2e-build.log; exit 1; }
 cp -r .next/static .next/standalone/.next/ 2>/dev/null
 cp -r public .next/standalone/ 2>/dev/null
 cd /home/z/my-project
@@ -59,9 +81,5 @@ kill -9 $SERVER_PID 2>/dev/null
 sleep 1
 pkill -9 -f "server.js" 2>/dev/null; pkill -9 -f "next-server" 2>/dev/null
 
-# 8) استعادة postgres + generate
-git checkout -- prisma/schema.prisma app/ 2>/dev/null
-# إعادة وضع التعديلات الجلسة الحالية: schema.prisma لم يتغير في هذه الجلسة، لكن تحقق
-npx prisma generate >/dev/null 2>&1
-echo "RESTORED postgres schema + prisma generate"
+# 8) استعادة postgres + generate — عبر trap EXIT (لقطة ما قبل التحويل)
 exit $E2E_EXIT

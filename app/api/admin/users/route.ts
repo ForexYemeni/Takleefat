@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
           ...(search
             ? {
                 OR: [
-                  { name: { contains: search } },
+                  { name: { contains: search, mode: 'insensitive' } },
                   { phone: { contains: search } },
                 ],
               }

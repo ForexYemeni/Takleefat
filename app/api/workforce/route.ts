@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
           // الجولة 34: البحث بالاسم حصراً — البحث بالهاتف كان يسرّب وجود الرقم في المنصة
           ...(search
             ? {
-                name: { contains: search },
+                name: { contains: search, mode: 'insensitive' },
               }
             : {}),
         },
