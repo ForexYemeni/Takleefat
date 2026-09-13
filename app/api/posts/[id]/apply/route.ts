@@ -3,7 +3,8 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { notify, notifyAdmins } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
-import { canNurseSeePost, audienceRole } from '@/lib/network'
+import { canNurseSeePost, audienceRole, findTimeConflict } from '@/lib/network'
+import { formatDate, formatTime12 } from '@/lib/utils'
 
 /**
  * POST /api/posts/[id]/apply — تقديم الكادر التمريضي/الطبيب على تكليف مُعلن
@@ -81,6 +82,18 @@ export async function POST(
       return jsonError(
         `لا يمكنك التقديم على تكليف جديد قبل أن تؤكد إدارة المنصة دفع رسوم أو نسبة الإدارة لتكليفك (${unpaid.title}) — ارفع إثبات الدفع وتابع مع الإدارة`,
         403
+      )
+    }
+
+    // ---------- الجولة 49: منع التقديم على تكليف يتقاطع وقته مع تكليف يعمل به الكادر ----------
+    // البلاغ الحرفي: «لا يتمكن الكادر التمريضي او الطبيب من التقديم في تكليف جديد
+    // اذا كان بنفس التاريخ والوقت الذي هو يعمل فية» — التقديم يُرفض برسالة احترافية
+    // تُسمّي التكليف المتعارض ونافذته الزمنية حتى يعيد الكادر ترتيب جدوله
+    const conflict = await findTimeConflict(post, session.user.id)
+    if (conflict) {
+      return jsonError(
+        `لا يمكنك التقديم على هذا التكليف — وقته (${formatDate(post.startDate)} من ${formatTime12(post.startDate)} إلى ${formatTime12(post.endTime)}) يتقاطع مع تكليفك الحالي «${conflict.title}» (${formatTime12(conflict.startDate)} — ${formatTime12(conflict.endDate ?? post.endTime)}) — أنهِ التكليف الحالي أولاً أو اختر تكليفاً بوقت آخر`,
+        409
       )
     }
 

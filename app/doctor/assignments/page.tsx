@@ -290,6 +290,16 @@ function NurseAssignmentsContent() {
   // لا تقديم قبل رفع المستندات — شرط أساسي لتقديم أي طلب تكليف
   const needsDocuments = (data?.documentsCount ?? 0) === 0
 
+  // الجولة 49: نوافذ وقت تكليفات الطبيب السارية — لتحذير التقديم على وقت متعارض
+  const busyWindows = assignments
+    .filter((a) => a.status === 'ACTIVE' || a.status === 'RECEIVED')
+    .map((a) => ({
+      start: new Date(a.startDate).getTime(),
+      end: a.endDate
+        ? new Date(a.endDate).getTime()
+        : new Date(a.startDate).getTime() + 24 * 60 * 60 * 1000,
+    }))
+
   return (
     <div className="space-y-4">
       <div>
@@ -323,6 +333,7 @@ function NurseAssignmentsContent() {
           blocked={hasUnpaidFees}
           needsDocuments={needsDocuments}
           firstUnpaidId={unpaidAssignments[0]?.id}
+          busyWindows={busyWindows}
         />
       )}
 
@@ -350,12 +361,15 @@ function AvailablePosts({
   blocked,
   needsDocuments,
   firstUnpaidId,
+  busyWindows,
 }: {
   posts: OpenPost[]
   settings?: PlatformSettings
   blocked: boolean
   needsDocuments: boolean
   firstUnpaidId?: string
+  /** الجولة 49: نوافذ وقت التكليفات السارية للطبيب — لمنع التقديم على وقت متعارض */
+  busyWindows: { start: number; end: number }[]
 }) {
   const [search, setSearch] = useState('')
   const [applyPost, setApplyPost] = useState<OpenPost | null>(null)
@@ -453,6 +467,11 @@ function AvailablePosts({
             const myApp = post.applications?.[0]
             const fees = settings ? computeFees(post.value, settings) : null
             const deptMatch = !!post.department && myWorkDepartments.has(post.department)
+            // الجولة 49: هل يتقاطع وقت هذا التكليف مع تكليف سارٍ للطبيب؟
+            const postStart = new Date(post.startDate).getTime()
+            const postEnd = post.endTime ? new Date(post.endTime).getTime() : null
+            const timeConflict =
+              postEnd != null && busyWindows.some((w) => postStart < w.end && w.start < postEnd)
             return (
               <Card key={post.id} className={deptMatch ? 'border-primary/50 bg-primary/5' : 'border-teal-200 bg-teal-50/30'}>
                 <CardContent className="space-y-3 p-5">
@@ -464,10 +483,16 @@ function AvailablePosts({
                         {post.department ? ` — ${post.department}` : ''}
                       </p>
                     </div>
+                    {timeConflict && (
+                      <Badge className="gap-1 bg-amber-500 shadow-sm hover:bg-amber-500">
+                        <AlertTriangle className="size-3" />
+                        يتعارض مع وقتك
+                      </Badge>
+                    )}
                     {deptMatch ? (
                       <Badge className="gap-1 bg-primary shadow-sm">
                         <Sparkles className="size-3" />
-                        يطابق قسم عملك
+                        يطابق تخصص عملك
                       </Badge>
                     ) : (
                       <Badge className="bg-teal-600">متاح للتقديم</Badge>
@@ -563,7 +588,7 @@ function AvailablePosts({
                   ) : (
                     <Button
                       className="w-full gap-2"
-                      disabled={blocked || needsDocuments}
+                      disabled={blocked || needsDocuments || timeConflict}
                       onClick={() => setApplyPost(post)}
                     >
                       <Send className="size-4" />
@@ -571,7 +596,9 @@ function AvailablePosts({
                         ? 'ارفع مستنداتك أولاً للتقديم'
                         : blocked
                           ? 'التقديم موقوف — أكمل دفع الرسوم أولاً'
-                          : 'التقديم على التكليف'}
+                          : timeConflict
+                            ? 'يتعارض مع وقت تكليفك الحالي'
+                            : 'التقديم على التكليف'}
                     </Button>
                   )}
                 </CardContent>

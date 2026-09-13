@@ -300,10 +300,16 @@ export async function getAudiencePreview(opts: {
   const affMap = new Map(affs.map((a) => [a.nurseId, a.status as string]))
 
   const dept = (opts.department ?? '').trim()
+  // الجولة 49: الكادر المصرّح بأقسام/تخصصات عمل مقابل غير المصرّح (التاريخي)
+  const isDeclared = (nurseId: string): boolean => (workDeptsMap.get(nurseId) ?? []).length > 0
+  /** مصرّح بأقسام عمل لكنها لا تشمل القسم المطلوب — محجوب ببوابة الجولة 49 */
+  const isDeclaredMismatch = (n: { id: string }): boolean =>
+    !!dept && isDeclared(n.id) && !(workDeptsMap.get(n.id) ?? []).includes(dept)
   const deptMatch = (n: { id: string; specialty: string | null; qualification: string | null }): boolean => {
     if (!dept) return false
     // علائقياً أولاً: القسم ضمن أقسام عمله المصرّح بها
     if ((workDeptsMap.get(n.id) ?? []).includes(dept)) return true
+    if (isDeclared(n.id)) return false
     const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`.trim()
     if (!hay) return false
     return hay.includes(dept) || dept.includes(hay)
@@ -340,7 +346,7 @@ export async function getAudiencePreview(opts: {
   let total = 0
   let progressive: AudiencePreviewResult['progressive'] | undefined
 
-  // جمهور الإشعارات الفوري — كوادر القسم (علائقي + نصي) عند تحديد قسم
+  // جمهور الإشعارات الفوري — كوادر القسم (علائقي + نصي للغير المصرّحين) عند تحديد قسم
   const deptAudienceIds = dept ? nurses.filter((n) => deptMatch(n)).map((n) => n.id) : []
 
   switch (distribution) {
@@ -357,9 +363,11 @@ export async function getAudiencePreview(opts: {
       total = nurses.filter((n) => affIs(n.id, ['INTERVIEWED', 'ENDORSED'])).length
       break
     case 'AUTO_MATCH':
+      // الجولة 49: بوابة القسم تحجب المصرّح بأقسام أخرى حتى لو كان مرتبطاً بالجهة
       total = nurses.filter(
         (n) =>
-          affIs(n.id, ['WORKING', 'ENDORSED', 'INTERVIEWED', 'EXTERNAL', 'FORMER']) || deptMatch(n)
+          !isDeclaredMismatch(n) &&
+          (affIs(n.id, ['WORKING', 'ENDORSED', 'INTERVIEWED', 'EXTERNAL', 'FORMER']) || deptMatch(n))
       ).length
       break
     case 'INVITE_SELECTED':
@@ -380,8 +388,9 @@ export async function getAudiencePreview(opts: {
       break
     }
     default: {
-      // ALL_MATCHING — الجميع المطابقون للجنس
-      total = nurses.length
+      // ALL_MATCHING — الجميع المطابقون للجنس (الجولة 49: ما عدا المصرّحين بأقسام
+      // عمل أخرى عند تحديد قسم — مرآة بواة canNurseSeePost حرفياً)
+      total = dept ? nurses.filter((n) => !isDeclaredMismatch(n)).length : nurses.length
       break
     }
   }
@@ -424,6 +433,90 @@ export function isPrivateDistribution(distribution: DistributionMethod | null | 
     distribution === 'SAME_ORG' || distribution === 'ENDORSED' || distribution === 'INTERVIEWED'
 }
 
+// ---------- الجولة 49: بوابة القسم/التخصص (حصريّة الجمهور) ----------
+
+/** حالة مطابقة الكادر لقسم التكليف المُعلن (أو تخصص الطبيب) */
+export type DepartmentMatchStatus = 'match' | 'mismatch' | 'unclassified'
+
+/**
+ * حالة مطابقة الكادر/الطبيب لقسم التكليف المُعلن أو تخصصه — الجولة 49:
+ * - match: أضاف القسم/التخصص ضمن أقسام/تخصصات عمله (مطابقة علائقية من كتالوج الإدارة)
+ * - mismatch: يصرّح بأقسام/تخصصات عمل لكنها لا تشمل المطلوب — لا يصل التكليف إطلاقاً
+ *   (البلاغ الحرفي: «التكليف قسم ممرض عناية يصل فقط لممرض عناية ولا يصل لأي ممرض
+ *   آخر إذا كان يعمل في قسم الرقود أو الحضانة — يُتاح حصراً للقسم أو التخصص
+ *   الذي اختاره الكادر عند إنشاء الحساب أو أضافه من الملف الشخصي»)
+ * - unclassified: كادر بلا أي أقسام/تخصصات مصرّح بها (تاريخي) — سلوكه القائم لا يتغير
+ */
+export async function staffDepartmentMatch(
+  post: Pick<Post, 'department' | 'audience'>,
+  staffId: string
+): Promise<DepartmentMatchStatus> {
+  const dept = post.department?.trim()
+  if (!dept) return 'unclassified'
+  if (post.audience === 'DOCTOR') {
+    const [matched, anyDeclared] = await Promise.all([
+      db.doctorSpecialty.findFirst({
+        where: { doctorId: staffId, specialty: { name: dept, isActive: true } },
+        select: { id: true },
+      }),
+      db.doctorSpecialty.count({ where: { doctorId: staffId } }),
+    ])
+    if (matched) return 'match'
+    return anyDeclared > 0 ? 'mismatch' : 'unclassified'
+  }
+  const [matched, anyDeclared] = await Promise.all([
+    db.workDepartment.findFirst({
+      where: { nurseId: staffId, department: { name: dept, isActive: true } },
+      select: { id: true },
+    }),
+    db.workDepartment.count({ where: { nurseId: staffId } }),
+  ])
+  if (matched) return 'match'
+  return anyDeclared > 0 ? 'mismatch' : 'unclassified'
+}
+
+/** هل تنطبق بوابة القسم/التخصص على طريقة التوزيع؟ — التوزيع الواسع والمطابقة الذكية حصراً */
+function departmentGateApplies(distribution: DistributionMethod | null | undefined): boolean {
+  const d = distribution ?? 'ALL_MATCHING'
+  return d === 'ALL_MATCHING' || d === 'AUTO_MATCH'
+}
+
+// ---------- الجولة 49: منع ازدواج الوقت (تعارض المناوبات) ----------
+
+/**
+ * البحث عن تكليف سارٍ للكادر يتقاطع وقته مع نافذة التكليف المُعلن — الجولة 49.
+ * البلاغ الحرفي: «لا يتمكن الكادر التمريضي او الطبيب من التقديم في تكليف جديد
+ * اذا كان بنفس التاريخ والوقت الذي هو يعمل فية».
+ * - نافذة التكليف المُعلن: [startDate, endTime] — وقت الانتهاء يُحسب عند النشر من
+ *   الساعات أو وقت الانتهاء؛ والتكليف بلا وقت محدد (لا ساعات ولا وقت انتهاء) لا
+ *   يمكن إثبات تعارضه الزمني فيُستثنى من الفحص.
+ * - نافذة التكليف الساري: [startDate, endDate ?? نهاية يوم بدايته].
+ * - التقاطع الحقيقي: pStart < aEnd && aStart < pEnd.
+ * - الحالات السارية: ACTIVE و RECEIVED حصراً (المكتمل والملغى لا يعارض).
+ */
+export async function findTimeConflict(
+  post: Pick<Post, 'startDate' | 'endTime'>,
+  staffId: string
+): Promise<{ id: string; title: string; startDate: Date; endDate: Date | null } | null> {
+  if (!post.endTime) return null
+  const pStart = post.startDate.getTime()
+  const pEnd = post.endTime.getTime()
+  if (!(pEnd > pStart)) return null
+  const working = await db.assignment.findMany({
+    where: { nurseId: staffId, status: { in: ['ACTIVE', 'RECEIVED'] } },
+    select: { id: true, title: true, startDate: true, endDate: true },
+    orderBy: { startDate: 'asc' },
+  })
+  const DAY_MS = 24 * 60 * 60 * 1000
+  return (
+    working.find((a) => {
+      const aStart = a.startDate.getTime()
+      const aEnd = (a.endDate ?? new Date(aStart + DAY_MS)).getTime()
+      return pStart < aEnd && aStart < pEnd
+    }) ?? null
+  )
+}
+
 export interface PostVisibilityContext {
   nurseId: string
   nurseGender: Gender | null
@@ -444,6 +537,15 @@ export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): P
   if (post.status !== 'OPEN' && post.status !== 'ASSIGNED') return false
 
   const distribution = post.distribution ?? 'ALL_MATCHING'
+
+  // 1.5) الجولة 49: بوابة القسم/التخصص — التكليف المحدد بقسم (أو تخصص أطباء) في
+  // التوزيع الواسع أو المطابقة الذكية لا يُرى حصراً إلا لمن أضاف هذا القسم ضمن
+  // أقسام عمله (أو التخصص ضمن تخصصاته) — الكادر الذي يصرّح بقسم آخر (رقود/حضانة...)
+  // لا يصل تكليف «عناية» إطلاقاً، والكادر بلا أي أقسام مصرّح بها يبقى على سلوكه القائم
+  if (post.department && departmentGateApplies(distribution)) {
+    const deptStatus = await staffDepartmentMatch(post, ctx.nurseId)
+    if (deptStatus === 'mismatch') return false
+  }
 
   // 2) التوزيع الخاص — الاستدعاء المباشر يراه المستدعى فقط
   if (distribution === 'INVITE_SELECTED') {
@@ -598,12 +700,26 @@ export async function getDepartmentAudience(opts: {
   const deptSet = new Set(departmentNurseIds)
 
   // 2) الجمهور الموسع: مطابقة نصية للكوادر التاريخيين + المرتبطون بالجهة الصحية
+  // الجولة 49: من يصرّح بأقسام/تخصصات عمل (ولا تشمل القسم المطلوب) يُستبعد من
+  // الجمهور الموسع والإشعارات — تناظراً حرفياً مع بوابة الرؤية في canNurseSeePost
+  // (لا إشعار لتكليف لا يستطيع صاحبه رؤيته أصلاً)
   const candidates = await db.user.findMany({
     where: { ...base, id: { notIn: departmentNurseIds } },
     select: { id: true, specialty: true, qualification: true },
   })
+  const candidateIds = candidates.map((c) => c.id)
+  const declaredRows =
+    candidateIds.length === 0
+      ? []
+      : role === 'DOCTOR'
+        ? await db.doctorSpecialty.findMany({ where: { doctorId: { in: candidateIds } }, select: { doctorId: true } })
+        : await db.workDepartment.findMany({ where: { nurseId: { in: candidateIds } }, select: { nurseId: true } })
+  const declaredSet = new Set(
+    declaredRows.map((r) => ('nurseId' in r ? r.nurseId : (r as { doctorId: string }).doctorId))
+  )
   const extended = new Set<string>()
   for (const n of candidates) {
+    if (declaredSet.has(n.id)) continue
     const hay = `${n.specialty ?? ''} ${n.qualification ?? ''}`.trim()
     if (hay && (hay.includes(dept) || dept.includes(hay))) extended.add(n.id)
   }
@@ -616,7 +732,7 @@ export async function getDepartmentAudience(opts: {
       },
       select: { nurseId: true },
     })
-    for (const a of affs) extended.add(a.nurseId)
+    for (const a of affs) if (!declaredSet.has(a.nurseId)) extended.add(a.nurseId)
   }
 
   return {

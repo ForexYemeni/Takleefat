@@ -184,6 +184,17 @@ export default function NurseOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* الجولة 49 — البلاغ الحرفي: «اضف في أعلى صفحة نظرة عامة الوقت التنازلي
+          لانتهاء التكليف بشكل احترافي جداً» — بطاقة التكليف الساري بعدّ تنازلي
+          مجزأ فاخر هي أول ما يراه الكادر في نظرة عامة */}
+      {currentCard && (
+        <ActiveAssignmentCard
+          assignment={currentCard}
+          href="/nurse/assignments"
+          ctaLabel="متابعة التكليف"
+        />
+      )}
+
       {/* الجولة 44: بانر العرض بدون رسوم إدارة */}
       <PromoBanner />
       <div>
@@ -218,37 +229,32 @@ export default function NurseOverviewPage() {
         />
       )}
 
-      {/* بطاقة التكليف الحالي بعد تنازلي حي — أعلى النظرة العامة (الجولة 46) */}
-      {currentCard ? (
-        <ActiveAssignmentCard
-          assignment={currentCard}
-          href="/nurse/assignments"
-          ctaLabel="متابعة التكليف"
-        />
-      ) : suggestedPost ? (
-        <AssignmentAlertCard
-          tone="open"
-          eyebrow="تكليف جديد قد يناسبك"
-          title={suggestedPost.title}
-          subtitle={`${suggestedPost.facility}${suggestedPost.department ? ` — ${suggestedPost.department}` : ''}`}
-          chips={
-            <Badge variant="outline" className="gap-1">
-              {formatCurrency(suggestedPost.value)}
-            </Badge>
-          }
-          href="/nurse/assignments"
-          ctaLabel="استعرض وتقدّم"
-        />
-      ) : (
-        <AssignmentAlertCard
-          tone="empty"
-          eyebrow="التكليفات"
-          title="لا توجد تكليفات متاحة حالياً"
-          subtitle="سيصلك إشعار فور نشر تكليف جديد مطابق لمجالك"
-          href="/nurse/assignments"
-          ctaLabel="تكليفاتي"
-        />
-      )}
+      {/* عند غياب تكليف سارٍ: بطاقة اقتراح تكليف مفتوح أو حالة فارغة */}
+      {!currentCard &&
+        (suggestedPost ? (
+          <AssignmentAlertCard
+            tone="open"
+            eyebrow="تكليف جديد قد يناسبك"
+            title={suggestedPost.title}
+            subtitle={`${suggestedPost.facility}${suggestedPost.department ? ` — ${suggestedPost.department}` : ''}`}
+            chips={
+              <Badge variant="outline" className="gap-1">
+                {formatCurrency(suggestedPost.value)}
+              </Badge>
+            }
+            href="/nurse/assignments"
+            ctaLabel="استعرض وتقدّم"
+          />
+        ) : (
+          <AssignmentAlertCard
+            tone="empty"
+            eyebrow="التكليفات"
+            title="لا توجد تكليفات متاحة حالياً"
+            subtitle="سيصلك إشعار فور نشر تكليف جديد مطابق لمجالك"
+            href="/nurse/assignments"
+            ctaLabel="تكليفاتي"
+          />
+        ))}
 
       {/* حالة الحساب */}
       {status === 'PENDING' && (

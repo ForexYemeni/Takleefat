@@ -7,16 +7,19 @@ import { Button } from '@/components/ui/button'
 import { cn, formatTime12, formatDate } from '@/lib/utils'
 
 /**
- * بطاقة التكليف الحالي مع العد التنازلي الحي — الجولة 46
+ * بطاقة التكليف الحالي مع العد التنازلي الحي — الجولتان 46/49
  * =====================================================================
  * البلاغ الحرفي: «عندما يكون لدى الكادر التمريضي او الطبيب تكليف يجب ان
  * تظهر بطاقة صغيرة احترافية جدا في اعلى صفحة نظرة عامة مع العد التنازلي».
- *
- * بطاقة مدمجة أعلى صفحة «نظرة عامة» للكادر التمريضي والطبيب:
- *  - قبل البدء: عدّاد تنازلي حي «تبدأ بعد HH:MM:SS» (كل ثانية)
- *  - أثناء التكليف: «جارية الآن» + عدّاد حتى نهاية الوقت + شريط تقدم نسبة الوقت
- *  - بعد انتهاء الوقت (قبل الإنهاء الرسمي): تنبيه هادئ «انتهى وقت التكليف»
- * الأوقات بتوقيت مكة المكرمة بنظام 12 ساعة — والعدّاد يبدأ بعد الترطيب
+ * الجولة 49 — البلاغ الحرفي: «اضف في أعلى صفحة نظرة عامة للكادر التمريضي او
+ * الطبيب الوقت التنازلي لانتهاء التكليف بشكل احترافي جداً»:
+ *  - عدّ تنازلي مجزأ فاخر: أيام / ساعات / دقائق / ثواني (كل ثانية) —
+ *    بدل صيغة الساعات الممتدة، فتكليف بعد يومين يُقرأ «02 أيام : 05 ساعات»
+ *    لا «53:12:09».
+ *  - قبل البدء: «تبدأ بعد» بعدّ مجزأ كهرماني.
+ *  - أثناء التكليف: «جارية الآن — تنتهي بعد» بعدّ مجزأ زمردي + شريط تقدم نسبة الوقت.
+ *  - بعد انتهاء الوقت (قبل الإنهاء الرسمي): تنبيه هادئ «انتهى وقت التكليف».
+ * الأوقات بتوقيت مكة المكرمة بنظام 12 ساعة — والعدّ يبدأ بعد الترطيب
  * لتفادي اختلاف الخادم والمتصفح.
  */
 
@@ -24,13 +27,64 @@ function pad(n: number): string {
   return String(Math.max(0, n)).padStart(2, '0')
 }
 
-function diffParts(ms: number): { h: number; m: number; s: number } {
+function diffParts(ms: number): { d: number; h: number; m: number; s: number } {
   const total = Math.max(0, Math.floor(ms / 1000))
   return {
-    h: Math.floor(total / 3600),
+    d: Math.floor(total / 86400),
+    h: Math.floor((total % 86400) / 3600),
     m: Math.floor((total % 3600) / 60),
     s: total % 60,
   }
+}
+
+/**
+ * العد التنازلي المجزأ الفاخر — الجولة 49: خلايا أيام/ساعات/دقائق/ثواني بأرقام
+ * ضخمة ثابتة العرض (tabular-nums) تُقرأ فوراً كجدول مواعيد، مع إظهار خلية
+ * الأيام فقط عند الحاجة للحفاظ على نظافة التكوين.
+ */
+function CountdownSegments({
+  parts,
+  tone,
+}: {
+  parts: { d: number; h: number; m: number; s: number }
+  tone: 'emerald' | 'amber'
+}) {
+  const cells = [
+    { v: parts.d, label: 'أيام', show: parts.d > 0 },
+    { v: parts.h, label: 'ساعات', show: true },
+    { v: parts.m, label: 'دقائق', show: true },
+    { v: parts.s, label: 'ثواني', show: true },
+  ].filter((c) => c.show)
+  return (
+    <div className="flex items-stretch gap-1.5" dir="ltr">
+      {cells.map((c, i) => (
+        <div key={c.label} className="flex items-stretch gap-1.5">
+          {i > 0 && (
+            <span
+              className={cn(
+                'self-center text-lg font-extrabold leading-none opacity-40',
+                tone === 'emerald' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+              )}
+              aria-hidden
+            >
+              :
+            </span>
+          )}
+          <div
+            className={cn(
+              'min-w-12 rounded-xl border px-2 py-1.5 text-center shadow-sm',
+              tone === 'emerald'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+            )}
+          >
+            <p className="text-xl font-extrabold leading-none tabular-nums">{pad(c.v)}</p>
+            <p className="mt-1 text-[9px] font-bold opacity-70">{c.label}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export interface ActiveAssignmentData {
@@ -153,18 +207,17 @@ export function ActiveAssignmentCard({
             <div className="text-left">
               {remain ? (
                 <>
-                  <p className="flex items-center justify-start gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <p className="mb-1.5 flex items-center justify-start gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
                     <span className="relative flex size-1.5">
                       <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-70" />
                       <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
                     </span>
                     جارية الآن — تنتهي بعد
                   </p>
-                  <p dir="ltr" className="text-2xl font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">
-                    {pad(remain.h)}:{pad(remain.m)}:{pad(remain.s)}
-                  </p>
+                  {/* الجولة 49: عدّ تنازلي مجزأ فاخر حتى نهاية التكليف */}
+                  <CountdownSegments parts={remain} tone="emerald" />
                   {progress != null && (
-                    <div className="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+                    <div className="mt-2 h-1.5 w-44 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
                       <div
                         className="h-full rounded-full bg-gradient-to-l from-emerald-500 to-teal-500 transition-[width] duration-1000 ease-linear"
                         style={{ width: `${progress}%` }}
@@ -186,11 +239,10 @@ export function ActiveAssignmentCard({
 
           {phase === 'upcoming' && untilStart && (
             <div className="text-left">
-              <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300">تبدأ بعد</p>
-              <p dir="ltr" className="text-2xl font-extrabold tabular-nums text-amber-700 dark:text-amber-300">
-                {pad(untilStart.h)}:{pad(untilStart.m)}:{pad(untilStart.s)}
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="mb-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">تبدأ بعد</p>
+              {/* الجولة 49: عدّ تنازلي مجزأ فاخر حتى بداية التكليف */}
+              <CountdownSegments parts={untilStart} tone="amber" />
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
                 بتوقيت مكة المكرمة • {formatDate(assignment.startDate)} — {formatTime12(assignment.startDate)}
               </p>
             </div>
@@ -207,7 +259,7 @@ export function ActiveAssignmentCard({
             </div>
           )}
 
-          {phase === 'loading' && <span className="inline-block h-10 w-40" aria-hidden />}
+          {phase === 'loading' && <span className="inline-block h-14 w-44" aria-hidden />}
 
           <Button asChild className="shrink-0 gap-2">
             <Link href={href}>{ctaLabel}</Link>

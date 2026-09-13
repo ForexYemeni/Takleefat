@@ -403,7 +403,7 @@ MODE2=$(echo "$SET_ADM" | jget "['settings']['feeMode']")
 check "العودة لنمط حصة الإدارة" "ADMIN" "$MODE2"
 
 POST4=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"مختبر\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":80000}")
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"مختبر\",\"startDate\":\"$TODAY\",\"startTime\":\"05:00\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":80000}")
 P4_ID=$(echo "$POST4" | jget "['post']['id']")
 APPLY4=$(code -b "$DIR/nurse2.jar" -X POST $BASE/api/posts/$P4_ID/apply -H "Content-Type: application/json" -d '{}')
 check "تقديم على تكليف نمط حصة الإدارة → 201" "201" "$APPLY4"
@@ -435,7 +435,7 @@ check "إشعار الكادر عند الاعتماد يتضمن تفاصيل �
 
 # 17-أ) منع التقديم قبل تأكيد دفع الرسوم
 P5=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":6,\"gender\":\"ANY\",\"value\":50000}")
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"startTime\":\"09:00\",\"nursesNeeded\":1,\"hours\":6,\"gender\":\"ANY\",\"value\":50000}")
 P5_ID=$(echo "$P5" | jget "['post']['id']")
 BLOCKED=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P5_ID/apply -H "Content-Type: application/json" -d '{}')
 check "منع التقديم على تكليف جديد قبل تأكيد الإدارة دفع الرسوم → 403" "403" "$BLOCKED"
@@ -1080,7 +1080,7 @@ check "عقد الأقسام: /api/departments يعيد isActive لكل قسم (
 
 # --- ب) توزيع الرسوم عند تأكيد الدفع مباشرة (دون إنهاء من الكادر أو المستلم) ---
 R11_P=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":3,\"gender\":\"ANY\",\"value\":60000}")
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"عناية\",\"startDate\":\"$TODAY\",\"startTime\":\"15:00\",\"nursesNeeded\":1,\"hours\":3,\"gender\":\"ANY\",\"value\":60000}")
 R11_P_ID=$(echo "$R11_P" | jget "['post']['id']")
 R11_APPLY=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$R11_P_ID/apply -H "Content-Type: application/json" -d '{}')
 check "تقديم الكادر على تكليف قسم 25 → 201" "201" "$R11_APPLY"
@@ -2804,7 +2804,7 @@ done
 
 # تكليف جديد غير مسدد لفحوص البطاقة (تقديم → اعتماد → بلا سداد)
 P37=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
-  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"فحوص السداد 37\",\"startDate\":\"$TODAY\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":25000}")
+  -d "{\"hospitalId\":\"$HOSP\",\"department\":\"فحوص السداد 37\",\"startDate\":\"$TODAY\",\"startTime\":\"03:00\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":25000}")
 P37_ID=$(echo "$P37" | jget "['post']['id']")
 APPLY37=$(code -b "$DIR/nurse.jar" -X POST $BASE/api/posts/$P37_ID/apply -H "Content-Type: application/json" -d '{}')
 check "تقديم الكادر على تكليف فحوص بطاقة السداد → 201" "201" "$APPLY37"
@@ -3984,6 +3984,142 @@ NAMETWO=$(grep -c "nameWords.length !== 2" "app/(auth)/register/page.tsx" | awk 
 check "R45: عميل التسجيل يقبض اسمين حصراً (لا أكثر ولا أقل)" "1" "$NAMETWO"
 SHAKE45=$(grep -c "field-error-shake" app/globals.css "app/(auth)/register/page.tsx" | awk -F: '{s+=$2} END {print (s>=2)?1:0}')
 check "R45: الحقول الخاطئة تهتز وتتلون بالأحمر مع العودة إليها" "1" "$SHAKE45"
+
+# ============================================================
+# القسم 55 — الجولة 49: حصريّة القسم/التخصص + منع ازدواج وقت التكليفات
+#             + العد التنازلي المجزأ بأعلى نظرة عامة
+# ============================================================
+echo "=========== 55) الجولة 49: بوابة القسم + تعارض الوقت + العد المجزأ ==========="
+
+TODAY49=$(date +%F)
+
+# --- فحوص ساكنة: بنية البوابة والتعارض والعد المجزأ ---
+R49_LIB=$(grep -c "staffDepartmentMatch\|findTimeConflict" lib/network.ts | awk '{print ($1>=2)?1:0}')
+check "R49: محرك بوابة القسم ومنع التعارض في lib/network.ts" "1" "$R49_LIB"
+R49_GATE=$(grep -c "deptStatus === 'mismatch'" lib/network.ts | awk '{print ($1==1)?1:0}')
+check "R49: بوابة القسم محمية داخل canNurseSeePost (قائمة + رابط + تقديم)" "1" "$R49_GATE"
+R49_APPLY=$(grep -c "findTimeConflict" "app/api/posts/[id]/apply/route.ts" | awk '{print ($1>=1)?1:0}')
+check "R49: فحص التعارض الزمني في مسار التقديم المباشر" "1" "$R49_APPLY"
+R49_INV=$(grep -c "findTimeConflict" "app/api/me/invitations/[id]/route.ts" | awk '{print ($1>=1)?1:0}')
+check "R49: فحص التعارض الزمني في قبول الاستدعاء (نفس القاعدة)" "1" "$R49_INV"
+R49_SEG=$(grep -c "CountdownSegments" components/shared/active-assignment-card.tsx | awk '{print ($1>=3)?1:0}')
+check "R49: العد التنازلي المجزأ (أيام/ساعات/دقائق/ثواني) في بطاقة التكليف" "1" "$R49_SEG"
+R49_TOPN=$(grep -n "<ActiveAssignmentCard" app/nurse/page.tsx | head -1 | cut -d: -f1)
+R49_PRON=$(grep -n "<PromoBanner" app/nurse/page.tsx | head -1 | cut -d: -f1)
+check "R49: بطاقة العد التنازلي أول عنصر في نظرة عامة الكادر" "1" "$([ -n "$R49_TOPN" ] && [ -n "$R49_PRON" ] && [ "$R49_TOPN" -lt "$R49_PRON" ] && echo 1 || echo 0)"
+R49_TOPD=$(grep -n "<ActiveAssignmentCard" app/doctor/page.tsx | head -1 | cut -d: -f1)
+R49_PROD=$(grep -n "<PromoBanner" app/doctor/page.tsx | head -1 | cut -d: -f1)
+check "R49: بطاقة العد التنازلي أول عنصر في نظرة عامة الطبيب" "1" "$([ -n "$R49_TOPD" ] && [ -n "$R49_PROD" ] && [ "$R49_TOPD" -lt "$R49_PROD" ] && echo 1 || echo 0)"
+R49_WARN=$(grep -c "يتعارض مع وقتك" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s>=2)?1:0}')
+check "R49: شارة «يتعارض مع وقتك» وتعطيل الزر في صفحتي الكادر والطبيب" "1" "$R49_WARN"
+
+# --- إعداد: كتالوج الأقسام + جهة صحية + ثلاثة كوادر ---
+R49_DEPT_A=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/departments -H "Content-Type: application/json" \
+  -d '{"name":"عناية 49"}')
+R49_DEPT_A_ID=$(echo "$R49_DEPT_A" | jget "['department']['id']")
+R49_DEPT_B=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/departments -H "Content-Type: application/json" \
+  -d '{"name":"رقود 49"}')
+R49_DEPT_B_ID=$(echo "$R49_DEPT_B" | jget "['department']['id']")
+[ -n "$R49_DEPT_A_ID" ] && [ -n "$R49_DEPT_B_ID" ] && check "R49: الإدارة تضيف قسمي «عناية 49» و«رقود 49» للكتالوج" "ok" "ok" || check "R49: إنشاء قسمي الكتالوج" "id" "null"
+
+R49_HOSP=$(curl -s -b "$DIR/admin.jar" -X POST $BASE/api/admin/hospitals -H "Content-Type: application/json" \
+  -d '{"name":"مستشفى الجولة 49","status":"ACTIVE"}')
+R49_HOSP_ID=$(echo "$R49_HOSP" | jget "['hospital']['id']")
+
+REG49A=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر عناية-49","phone":"744460101","password":"R49@Nurse","specialty":"عناية مركزة","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":3,"gender":"MALE"}')
+N49A_ID=$(echo "$REG49A" | jget "['user']['id']")
+login "$DIR/n49a.jar" "744460101" "R49@Nurse"
+curl -s -b "$DIR/n49a.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N49A_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+R49_WD_A=$(code -b "$DIR/n49a.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
+  -d "{\"departmentIds\":[\"$R49_DEPT_A_ID\"]}")
+check "R49: كادر عناية يصرّح بقسم «عناية 49» → 200" "200" "$R49_WD_A"
+
+REG49B=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر رقود-49","phone":"744460202","password":"R49@Nurse","specialty":"تمريض رقود","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"MALE"}')
+N49B_ID=$(echo "$REG49B" | jget "['user']['id']")
+login "$DIR/n49b.jar" "744460202" "R49@Nurse"
+curl -s -b "$DIR/n49b.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N49B_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+R49_WD_B=$(code -b "$DIR/n49b.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
+  -d "{\"departmentIds\":[\"$R49_DEPT_B_ID\"]}")
+check "R49: كادر رقود يصرّح بقسم «رقود 49» → 200" "200" "$R49_WD_B"
+
+REG49C=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر عام-49","phone":"744460303","password":"R49@Nurse","specialty":"عام","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":1,"gender":"MALE"}')
+N49C_ID=$(echo "$REG49C" | jget "['user']['id']")
+login "$DIR/n49c.jar" "744460303" "R49@Nurse"
+curl -s -b "$DIR/n49c.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N49C_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+
+# --- بوابة القسم: تكليف «عناية 49» يصل لكادر العناية حصراً ---
+P49A=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R49_HOSP_ID\",\"department\":\"عناية 49\",\"startDate\":\"$TODAY49\",\"startTime\":\"09:00\",\"nursesNeeded\":1,\"hours\":3,\"gender\":\"ANY\",\"value\":40000,\"distribution\":\"ALL_MATCHING\"}")
+P49A_ID=$(echo "$P49A" | jget "['post']['id']")
+[ -n "$P49A_ID" ] && check "R49: نشر تكليف قسم «عناية 49» (09:00 — 12:00) → 201" "ok" "ok" || check "R49: نشر تكليف القسم" "id" "null"
+
+R49_SEE_A=$(curl -s -b "$DIR/n49a.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$P49A_ID' in ids else 'no')" 2>/dev/null)
+check "R49: كادر العناية المصرّح بالقسم يرى تكليف عناية" "yes" "$R49_SEE_A"
+
+R49_SEE_B=$(curl -s -b "$DIR/n49b.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$P49A_ID' in ids else 'no')" 2>/dev/null)
+check "R49: كادر الرقود (قسم آخر مصرّح به) لا يرى تكليف العناية إطلاقاً" "no" "$R49_SEE_B"
+
+R49_BLOCK_B=$(code -b "$DIR/n49b.jar" -X POST $BASE/api/posts/$P49A_ID/apply -H "Content-Type: application/json" -d '{}')
+check "R49: كادر الرقود ممنوع من التقديم على تكليف العناية → 403" "403" "$R49_BLOCK_B"
+
+R49_SEE_C=$(curl -s -b "$DIR/n49c.jar" $BASE/api/posts | python3 -c "
+import json,sys
+ids=[p['id'] for p in json.load(sys.stdin)['posts']]
+print('yes' if '$P49A_ID' in ids else 'no')" 2>/dev/null)
+check "R49: الكادر التاريخي بلا أقسام مصرّح بها يبقى على سلوكه (يرى التكليف)" "yes" "$R49_SEE_C"
+
+R49_NOTIF_B=$(curl -s -b "$DIR/n49b.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'عناية 49' in (n.get('title') or '') and n.get('type')=='POST_CREATED']
+print('no' if not ns else 'yes')" 2>/dev/null)
+check "R49: كادر الرقود لا يصلهم إشعار تكليف العناية (تناظر البوابة)" "no" "$R49_NOTIF_B"
+
+R49_NOTIF_A=$(curl -s -b "$DIR/n49a.jar" $BASE/api/notifications | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ns=[n for n in d.get('notifications',[]) if 'تكليف جديد في قسم عناية 49' in (n.get('title') or '')]
+print('yes' if ns else 'no')" 2>/dev/null)
+check "R49: كادر العناية يصلهم إشعار مخصص «تكليف جديد في قسم عناية 49»" "yes" "$R49_NOTIF_A"
+
+# --- منع ازدواج الوقت: تقديم → اعتماد → سداد → تكليف متقاطع يُرفض ---
+R49_APPLY_A=$(code -b "$DIR/n49a.jar" -X POST $BASE/api/posts/$P49A_ID/apply -H "Content-Type: application/json" -d '{}')
+check "R49: كادر العناية يقدّم على تكليف قسمه → 201" "201" "$R49_APPLY_A"
+R49_APP_ID=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P49A_ID/applications | jget "['applications'][0]['applicationId']")
+R49_ASSIGN=$(curl -s -b "$DIR/receiver.jar" -X PATCH $BASE/api/applications/$R49_APP_ID -H "Content-Type: application/json" -d '{"action":"APPROVE"}' | jget "['assignment']['id']")
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$R49_ASSIGN -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}' > /dev/null
+
+P49B=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R49_HOSP_ID\",\"department\":\"عناية 49\",\"startDate\":\"$TODAY49\",\"startTime\":\"11:00\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":30000,\"distribution\":\"ALL_MATCHING\"}")
+P49B_ID=$(echo "$P49B" | jget "['post']['id']")
+R49_CONFLICT=$(code -b "$DIR/n49a.jar" -X POST $BASE/api/posts/$P49B_ID/apply -H "Content-Type: application/json" -d '{}')
+check "R49: التقديم على تكليف متقاطع (11:00-13:00 مع 09:00-12:00) → 409" "409" "$R49_CONFLICT"
+R49_CONFLICT_MSG=$(curl -s -b "$DIR/n49a.jar" -X POST $BASE/api/posts/$P49B_ID/apply -H "Content-Type: application/json" -d '{}' | python3 -c "
+import json,sys
+m=json.load(sys.stdin).get('error','')
+print('yes' if 'يتقاطع مع تكليفك الحالي' in m and '«' in m else 'no')" 2>/dev/null)
+check "R49: رسالة التعارض احترافية وتُسمّي التكليف المتعارض" "yes" "$R49_CONFLICT_MSG"
+
+P49C=$(curl -s -b "$DIR/receiver.jar" -X POST $BASE/api/posts -H "Content-Type: application/json" \
+  -d "{\"hospitalId\":\"$R49_HOSP_ID\",\"department\":\"عناية 49\",\"startDate\":\"$TODAY49\",\"startTime\":\"14:00\",\"nursesNeeded\":1,\"hours\":2,\"gender\":\"ANY\",\"value\":30000,\"distribution\":\"ALL_MATCHING\"}")
+P49C_ID=$(echo "$P49C" | jget "['post']['id']")
+R49_OK_C=$(code -b "$DIR/n49a.jar" -X POST $BASE/api/posts/$P49C_ID/apply -H "Content-Type: application/json" -d '{}')
+check "R49: التقديم على تكليف غير متقاطع (14:00-16:00) → 201" "201" "$R49_OK_C"
+
+# --- تنظيف القسم 55 ---
+curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R49_HOSP_ID -o /dev/null
 
 echo ""
 echo "==========================================="

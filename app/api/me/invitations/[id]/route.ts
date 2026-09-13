@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notifications'
 import { getSettings } from '@/lib/settings'
+import { findTimeConflict } from '@/lib/network'
 
 /**
  * PATCH /api/me/invitations/[id] — رد الكادر على الاستدعاء { action: 'ACCEPT' | 'DECLINE' }
@@ -23,7 +24,12 @@ export async function PATCH(
     const invitation = await db.nurseInvitation.findUnique({
       where: { id },
       include: {
-        post: { select: { id: true, title: true, status: true, value: true, facility: true } },
+        post: {
+          select: {
+            id: true, title: true, status: true, value: true, facility: true,
+            startDate: true, endTime: true,
+          },
+        },
       },
     })
     if (!invitation) return jsonError('الاستدعاء غير موجود', 404)
@@ -81,6 +87,16 @@ export async function PATCH(
       throw new ApiError(
         `سوِّ رسوم تكليفك السابق (${unpaid.title}) مع الإدارة أولاً ثم اقبل الاستدعاء`,
         403
+      )
+    }
+
+    // الجولة 49: منع قبول استدعاء يتقاطع وقته مع تكليف يعمل به الكادر حالياً
+    // (نفس قاعدة التقديم المباشر حرفياً — لا ازدواج وقت في كل مسارات التقديم)
+    const conflict = await findTimeConflict(invitation.post, session.user.id)
+    if (conflict) {
+      return jsonError(
+        `لا يمكنك قبول هذا الاستدعاء — وقت التكليف يتقاطع مع تكليفك الحالي «${conflict.title}» — أنهِ التكليف الحالي أولاً أو رفض الاستدعاء ليستدعي الجهة غيرك`,
+        409
       )
     }
 
