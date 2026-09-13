@@ -2071,8 +2071,8 @@ check "ui: قسم المؤهلات بتبويبَي كتالوج + إسناد" "
 R32_ACTIONS=$(grep -c "نسبة الحصة\|أذونات رؤية البيانات الكاملة" components/admin/user-actions.tsx | awk '{print ($1>=2)?1:0}')
 check "ui: قائمة إجراءات الحساب تضم نسبة الحصة والأذونات (للمستلم/المشرف)" "1" "$R32_ACTIONS"
 
-R32_WF=$(grep -c "fullProfileAccess" app/api/workforce/\[id\]/route.ts | awk '{print ($1>=2)?1:0}')
-check "api: نقطة /api/workforce/[id] تحرسها بوابة الإذن" "1" "$R32_WF"
+R32_WF=$(grep -c "documentsHidden\|documentStatuses" app/api/workforce/\[id\]/route.ts | awk '{print ($1>=2)?1:0}')
+check "api: نقطة /api/workforce/[id] تطبق خصوصية المستندات (مخفي + شارات الحالة — الجولة 46)" "1" "$R32_WF"
 
 # --- فحوص حية: كتالوج المؤهلات ---
 R32_QADD=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r32_q.json" -w "%{http_code}" -X POST $BASE/api/admin/qualifications -H "Content-Type: application/json" \
@@ -2186,8 +2186,10 @@ check "رفض نسبة أعلى من 100٪ → 422" "422" "$R32_BADPCT"
 DOC32_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=DOCTOR" | jget "['users'][0]['id']")
 NURSE32_ID=$(curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users?role=NURSE" | jget "['users'][0]['id']")
 
+# الجولة 46: السيرة الكاملة متاحة لكل مستلم/مشرف — الخصوصية على مستوى المستندات
+# (محتوى المستندات يظهر لنفس الجهة فقط؛ وغير ذلك: مستندات مخفية + شارات الحالة)
 R32_WF403=$(code -b "$DIR/supervisor.jar" $BASE/api/workforce/$DOC32_ID)
-check "قبل المنح: مشرف الأطباء ممنوع من السيرة الكاملة → 403" "403" "$R32_WF403"
+check "الجولة 46: السيرة الكاملة متاحة لمشرف الأطباء بلا إذن (الخصوصية على مستوى المستندات) → 200" "200" "$R32_WF403"
 
 R32_WFACCESS=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH $BASE/api/admin/users/$SUP32_ID -H "Content-Type: application/json" \
   -d '{"fullProfileAccess":true}')
@@ -2224,7 +2226,7 @@ R32_REVOKE=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATCH
 check "الإدارة تسحب إذن المستلم → 200" "200" "$R32_REVOKE"
 
 R32_REVOKED=$(code -b "$DIR/receiver.jar" $BASE/api/workforce/$NURSE32_ID)
-check "بعد السحب: المستلم ممنوع من السيرة الكاملة مرة أخرى → 403" "403" "$R32_REVOKED"
+check "الجولة 46: السيرة الكاملة متاحة للمستلم حتى بعد سحب الإذن (الخصوصية على مستوى المستندات) → 200" "200" "$R32_REVOKED"
 
 # ============================================================
 # القسم 42 — الجولة 33: دليل المنصة الكامل بالإذن + السيرة الاحترافية + فصل مستندات الأطباء عن الكادر
@@ -2265,7 +2267,7 @@ check "ui: هوية بصرية مميزة لكل جمهور في بطاقات ا
 # --- فحوص حية: دليل المنصة الكامل خلف الإذن ---
 # (نهاية القسم 41: إذن المستلم مسحوب — المشرف ما زال مُصرّحاً له من القسم 41)
 R33_DIR403=$(code -b "$DIR/receiver.jar" $BASE/api/workforce)
-check "بدون إذن: المستلم ممنوع من دليل المنصة الكامل → 403" "403" "$R33_DIR403"
+check "الجولة 46: دليل المنصة متاح للمستلم بلا إذن (الخصوصية على الهاتف والمستندات) → 200" "200" "$R33_DIR403"
 
 R33_ROLE403=$(code -b "$DIR/nurse.jar" $BASE/api/workforce)
 check "حماية الدور: الكادر ممنوع من دليل المنصة → 403" "403" "$R33_ROLE403"
@@ -2315,7 +2317,7 @@ R33_REVOKE2=$(curl -s -b "$DIR/admin.jar" -o /dev/null -w "%{http_code}" -X PATC
 check "الإدارة تسحب إذن المستلم مرة أخرى → 200" "200" "$R33_REVOKE2"
 
 R33_DIRREVOKED=$(code -b "$DIR/receiver.jar" $BASE/api/workforce)
-check "بعد السحب: دليل المنصة مغلق فوراً للمستلم → 403" "403" "$R33_DIRREVOKED"
+check "الجولة 46: دليل المنصة يبقى متاحاً بعد سحب الإذن (الباب مفتوح، الخصوصية داخلية) → 200" "200" "$R33_DIRREVOKED"
 
 # --- فحوص حية: فصل مستندات الأطباء عن الكادر التمريضي ---
 R33_DOCNURSE=$(curl -s -b "$DIR/admin.jar" -o "$DIR/r33_dn.json" -w "%{http_code}" "$BASE/api/admin/documents?audience=NURSE")
@@ -2490,7 +2492,7 @@ print('ok' if apps and ok else 'bad')" 2>/dev/null)
 check "الكادر: تقديماته — اتصال المستلم يُفتح بالتكليف المرتبط (مسدد/بلا رسوم وسارٍ) ويُغلق بعد الإنهاء (الجولة 48)" "ok" "$R38_NURSE_APPS"
 
 # الجولة 48: ملخص التكليف المرتبط في تقديماتي — تمييز احترافي بلا رسوم / ذات رسوم
-R48_LINK=$(grep -c "assignmentByPost" app/api/me/applications/route.ts | awk '($1>=3)?1:0')
+R48_LINK=$(grep -c "assignmentByPost" app/api/me/applications/route.ts | awk '{print ($1>=3)?1:0}')
 check "R48: api تقديماتي يربط كل تقديم بتكليفه الفعلي (مصدر الحقيقة للسداد والرسوم)" "1" "$R48_LINK"
 R48_BADGE=$(grep -c "تكليف بدون رسوم إدارة" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s==2)?1:0}')
 check "R48: شارة «تكليف بدون رسوم إدارة» المميزة في تقديماتي (تمريضي+طبيب)" "1" "$R48_BADGE"
@@ -2597,16 +2599,16 @@ N35_AID=$(echo "$N35_PAID_ROW" | cut -d'|' -f1)
 N35_RCVID=$(echo "$N35_PAID_ROW" | cut -d'|' -f2)
 [ -n "$N35_AID" ] && check "سياق: يوجد تكليف مسدد للكادر مع مستلم (سياق الفحص)" "id" "id" || check "سياق: يوجد تكليف مسدد للكادر (سياق مطلوب)" "id" "null"
 
-# (أ) القفل المطلق للكادر: بيانات المستلم قناع مقفل حتى في التكليف الساري المسدد
+# (أ) الاتصال المتناظر — الجولة 48: بيانات المستلم تُفتح للكادر في التكليف الساري المسدد
 N38_LOCKED=$(python3 -c "
 import json
 d=json.load(open('$DIR/r35_assign.json'))['assignments']
 rows=[a for a in d if a['id']=='$N35_AID']
 r=rows[0]['receiver'] if rows else None
-print('ok' if r and r['phone'] is None and r['phoneLocked'] is True and '•' in r['phoneMasked'] else 'bad')" 2>/dev/null)
-check "الكادر: في التكليف الساري المسدد بيانات المستلم قناع مقفل (القفل المطلق — الجولة 38)" "ok" "$N38_LOCKED"
+print('ok' if r and r['phone'] is not None and r['phoneLocked'] is False and '•' in r['phoneMasked'] else 'bad')" 2>/dev/null)
+check "الكادر: في التكليف الساري المسدد بيانات المستلم مفتوحة (الاتصال المتناظر — الجولة 48)" "ok" "$N38_LOCKED"
 
-# (ب) الرقم الحقيقي موجود لدى الإدارة لكنه لا يُرسل للكادر إطلاقاً — لا تسرب من الخادم
+# (ب) الرقم الحقيقي يُرسل للكادر حصراً في التكليف المسدد الساري — من الخادم (الجولة 48)
 curl -s -b "$DIR/admin.jar" "$BASE/api/admin/users/$N35_RCVID" -o "$DIR/r35_rcv_admin.json" 2>/dev/null
 N35_ADMIN_PHONE=$(python3 -c "
 import json
@@ -2618,10 +2620,10 @@ d=json.load(open('$DIR/r35_assign.json'))['assignments']
 rows=[a for a in d if a['id']=='$N35_AID']
 r=rows[0]['receiver'] if rows else None
 full='$N35_ADMIN_PHONE'
-print('ok' if r and r['phone'] is None and full not in json.dumps(r) else 'bad')" 2>/dev/null)
-check "استجابة الكادر خالية تماماً من رقم المستلم الحقيقي ($N35_ADMIN_PHONE) — الإخفاء من الخادم حصراً" "ok" "$N38_NOT_SENT"
+print('ok' if r and r['phone']==full and r['phoneLocked'] is False else 'bad')" 2>/dev/null)
+check "استجابة الكادر تتضمن رقم المستلم الكامل في التكليف المسدد الساري ($N35_ADMIN_PHONE) — الجولة 48" "ok" "$N38_NOT_SENT"
 
-# (ج) مفتاح السداد يتحكم باتجاه واحد: فتح/غلق رقم الكادر لدى المستلم حصراً
+# (ج) مفتاح السداد يتحكم بالاتجاهين معاً (الاتصال المتناظر — الجولة 48): فتح/غلق رقم الكادر لدى المستلم ورقم المستلم لدى الكادر
 TOG_OFF=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N35_AID -H "Content-Type: application/json" -d '{"paymentStatus":"UNPAID"}')
 check "الإدارة تلغي تأكيد السداد → 200" "200" "$TOG_OFF"
 curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments -o "$DIR/r35_r_off.json" 2>/dev/null
@@ -2630,7 +2632,14 @@ import json
 d=json.load(open('$DIR/r35_r_off.json'))['assignments']
 rows=[a for a in d if a['id']=='$N35_AID']
 print('ok' if rows and rows[0]['nurse']['phone'] is None and rows[0]['nurse']['phoneLocked'] is True else 'bad')" 2>/dev/null)
-check "بعد إلغاء التأكيد: رقم الكادر مقفل للمستلم (مفتاح السداد باتجاه المستلم فقط)" "ok" "$N38_R_LOCKED"
+check "بعد إلغاء التأكيد: رقم الكادر مقفل للمستلم (مفتاح السداد — اتجاه المستلم)" "ok" "$N38_R_LOCKED"
+curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_n_off.json" 2>/dev/null
+N48_N_LOCKED=$(python3 -c "
+import json
+d=json.load(open('$DIR/r35_n_off.json'))['assignments']
+rows=[a for a in d if a['id']=='$N35_AID']
+print('ok' if rows and rows[0]['receiver']['phone'] is None and rows[0]['receiver']['phoneLocked'] is True else 'bad')" 2>/dev/null)
+check "بعد إلغاء التأكيد: بيانات المستلم مقفلة للكادر أيضاً (مفتاح السداد — اتجاه الكادر، الجولة 48)" "ok" "$N48_N_LOCKED"
 TOG_ON=$(code -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/assignments/$N35_AID -H "Content-Type: application/json" -d '{"paymentStatus":"PAID"}')
 check "الإدارة تعيد تأكيد السداد → 200" "200" "$TOG_ON"
 curl -s -b "$DIR/receiver.jar" $BASE/api/me/assignments -o "$DIR/r35_r_on.json" 2>/dev/null
@@ -2972,7 +2981,7 @@ check "ui: لوحة المجتمع مدمجة في (كوادر جهتي + أطب
 R38_API_NEW=$([ -f app/api/org/community/route.ts ] && grep -c "computeOrgCadreStats" app/api/org/community/route.ts)
 check "خادم: مسار GET /api/org/community يعتمد محرك إحصاءات المجتمع المشترك" "2" "$R38_API_NEW"
 R38_RSAPI=$(grep -c "community" app/api/receiver/staff/route.ts)
-check "خادم: مسار كوادر الجهة يعيد إحصاءات المجتمع وشارة التوفر" "2" "$R38_RSAPI"
+check "خادم: مسار كوادر الجهة يعيد إحصاءات المجتمع وشارة التوفر (حتى بلا جهة — الجولة 46)" "3" "$R38_RSAPI"
 R38_AHAPI=$(grep -c "computeAllOrgCadreStats" app/api/admin/hospitals/route.ts)
 check "خادم: قائمة جهات الإدارة تجمع إحصاءات كل المجتمعات دفعة واحدة" "2" "$R38_AHAPI"
 
@@ -3742,18 +3751,17 @@ P44V_ID=$(echo "$P44V" | jget "['post']['id']")
 curl -s -b "$DIR/n44b.jar" -X POST $BASE/api/posts/$P44V_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"متقدم خارجي"}' > /dev/null
 curl -s -b "$DIR/n44c.jar" -X POST $BASE/api/posts/$P44V_ID/apply -H "Content-Type: application/json" -d '{"coverNote":"من كوادر الجهة"}' > /dev/null
 
-# إذن «رؤية البيانات الكاملة» ممنوح للمستلم من فحوص الجولة 34 — نُغلقها مؤقتاً
-# لقياس قاعدة الإخفاء الجديدة (الجولة 44) على المستلم العادي ثم نعيدها
-curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" -d '{"fullProfileAccess":false}' > /dev/null
-
+# الجولة 46 (البلاغ الحرفي: «عند التقديم على تكليف لأي كان كادر تمريضي او طبيب
+# يجب ان تظهر المستندات بشكل طبيعي جداً»): مستندات كل متقدم تُرسل كاملة مع
+# بقية السيرة في تقديمات التكليف — الخصوصية الكاملة بقي حصراً لسياق تصفّح
+# «كل الكوادر في المنصة» (/api/workforce و/[id])
 HIDE44=$(curl -s -b "$DIR/receiver.jar" $BASE/api/posts/$P44V_ID/applications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['applications']
 ext=[a for a in d if a['nurse']['id']=='$N44B_ID'][0]
 same=[a for a in d if a['nurse']['id']=='$N44C_ID'][0]
-print(ext['nurse']['documentsHidden'], len(ext['nurse']['documents'])==0, ext['nurse']['documentsVerified'], same['nurse']['documentsHidden'], len(same['nurse']['documents']))" 2>/dev/null)
-check "R44: الخارجي: مستندات مخفية + تم التحقق (معتمد) | عضو الجهة: مستنداته ظاهرة" "True True True False 1" "$HIDE44"
-curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$RCV_ID -H "Content-Type: application/json" -d '{"fullProfileAccess":true}' > /dev/null
+print(ext['nurse']['documentsHidden'], len(ext['nurse']['documents']), ext['nurse']['documentsVerified'], same['nurse']['documentsHidden'], len(same['nurse']['documents']))" 2>/dev/null)
+check "R46: تقديمات التكليف — مستندات كل متقدم تظهر بشكل طبيعي (خارجي وعضو الجهة) + تم التحقق" "False 1 True False 1" "$HIDE44"
 HIDE44_ADMIN=$(curl -s -b "$DIR/admin.jar" $BASE/api/posts/$P44V_ID/applications | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['applications']
