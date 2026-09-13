@@ -32,6 +32,12 @@ export async function GET() {
       process.env.POSTGRESQL_URL?.trim()
   )
 
+  // جاهزية خدمة البريد (Google Apps Script) — وجود المتغيرين معاً دون كشف أي قيم
+  const emailServiceConfigured = Boolean(
+    process.env.GOOGLE_APPS_SCRIPT_URL?.trim() &&
+      process.env.GOOGLE_APPS_SCRIPT_SECRET?.trim()
+  )
+
   let database = 'error'
   let databaseError: string | undefined
 
@@ -58,6 +64,15 @@ export async function GET() {
     time: new Date().toISOString(),
     database,
     databaseUrlConfigured,
+    emailService: {
+      configured: emailServiceConfigured,
+      ...(emailServiceConfigured
+        ? {}
+        : {
+            fix:
+              'خدمة البريد غير مهيأة في هذا النشر — أضف GOOGLE_APPS_SCRIPT_URL و GOOGLE_APPS_SCRIPT_SECRET في Vercel ← Settings ← Environment Variables ثم اضغط Redeploy (بدونهما تُتخطى الرسائل صامتاً)',
+          }),
+    },
     ...(databaseError ? { databaseError } : {}),
     ...(database !== 'ok'
       ? { setup: setupSteps, ...(isSchemaDrift(databaseError) ? { schemaDrift: true } : {}) }
@@ -74,6 +89,9 @@ export async function GET() {
       STORAGE_SECRET_KEY: env('STORAGE_SECRET_KEY'),
       STORAGE_BUCKET: env('STORAGE_BUCKET'),
       STORAGE_ENDPOINT: env('STORAGE_ENDPOINT'),
+      GOOGLE_APPS_SCRIPT_URL: env('GOOGLE_APPS_SCRIPT_URL'),
+      GOOGLE_APPS_SCRIPT_SECRET: env('GOOGLE_APPS_SCRIPT_SECRET'),
+      APP_URL: env('APP_URL'),
     },
     hints: {
       database_url_missing:
