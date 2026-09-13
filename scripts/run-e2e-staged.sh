@@ -17,7 +17,16 @@ npx prisma db push >/dev/null 2>&1
 npx prisma generate >/dev/null 2>&1
 node prisma/seed.js >/dev/null 2>&1 || { echo "SEED FAILED"; git checkout -- prisma/schema.prisma app/; exit 1; }
 
-# 4) تشغيل الخادم على 3111 من البناء الجاهز
+# حارس: عميل Prisma المولّد يجب أن يكون sqlite — وإلا فالبناء غير متوافق مع قاعدة الاختبار
+if ! grep -q 'provider = "sqlite"' node_modules/.prisma/client/schema.prisma 2>/dev/null; then
+  echo "GUARD FAILED: prisma client ليس sqlite — شغّل sed sqlite + db push + generate + next build أولاً"
+  git checkout -- prisma/schema.prisma app/ 2>/dev/null
+  exit 1
+fi
+
+# 4) تشغيل الخادم على 3111 من البناء الجاهز — مع نسخ الأصول الثابتة كما في run-e2e.sh الموثق
+cp -r .next/static .next/standalone/.next/ 2>/dev/null
+cp -r public .next/standalone/ 2>/dev/null
 VAPID_KEYS=$(node -e "const k=require('web-push').generateVAPIDKeys();console.log(k.publicKey+'|'+k.privateKey)")
 export NEXT_PUBLIC_VAPID_PUBLIC_KEY="${VAPID_KEYS%%|*}"
 export VAPID_PRIVATE_KEY="${VAPID_KEYS##*|}"

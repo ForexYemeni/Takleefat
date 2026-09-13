@@ -15,6 +15,12 @@ import { isEmailServiceConfigured } from '@/lib/email/gas-client'
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole('ADMIN')
+
+    // فحص تهيئة الخدمة أولاً — رسالة البنية أوضح من رسالة حالة المستخدم
+    if (!isEmailServiceConfigured()) {
+      return jsonError('خدمة البريد غير مهيأة — أضف GOOGLE_APPS_SCRIPT_URL و GOOGLE_APPS_SCRIPT_SECRET في متغيرات البيئة', 503)
+    }
+
     const body = (await req.json().catch(() => ({}))) as { email?: string }
 
     let to: string | null = null
