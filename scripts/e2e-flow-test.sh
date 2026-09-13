@@ -2463,22 +2463,43 @@ ok=all((a['nurse']['phone'] is not None)==(a['paymentStatus']=='PAID' and a['sta
 print('ok' if d and ok else 'bad')" 2>/dev/null)
 check "تكليفات المستلم: الرقم مفتوح حصراً في التكليفات السارية المسددة (الإنهاء يُغلق — الجولة 36)" "ok" "$R34_MEASSIGN"
 
-# (6) الجولة 38 — القفل باتجاه واحد: بيانات اتصال المستلم/المشرف لا تُرسل للكادر أبداً
+# (6) الجولة 48 — الاتصال المتناظر: بيانات اتصال المستلم/المشرف تُفتح للكادر
+#     بعد تأكيد الإدارة سداد الرسوم (أو بلا أي رسوم) أثناء سير التكليف حصراً،
+#     وتُغلق تلقائياً بعد الإنهاء/الإلغاء — تناظر كامل مع اتجاه الكادر→المستلم.
+#     (تُلغي قفل الجولة 38 باتجاه واحد — البلاغ الحرفي: «يبقى رقم التواصل
+#     مغلق رغم انه تم تاكيد الدفع»)
 R38_NURSE_CONS=$(curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['assignments']
-ok=all(a['receiver']['phone'] is None and a['receiver']['phoneLocked'] is True for a in d)
+# applicationFee=1000 في هذا المسار → مسار «بلا رسوم» لا يسري إلا للإسناد المباشر (null/null)
+ok=all((a['receiver']['phone'] is not None)==(a['status'] in ('RECEIVED','ACTIVE') and (a['paymentStatus']=='PAID' or (a['adminFee'] is None and a['value'] is None))) for a in d)
 print('ok' if d and ok else 'bad')" 2>/dev/null)
-check "الكادر: بيانات اتصال المستلم مقفلة في كل تكليفاته مهما كانت حالتها (قفل باتجاه واحد — الجولة 38)" "ok" "$R38_NURSE_CONS"
+check "الكادر: اتصال المستلم مفتوح حصراً في التكليف الساري المسدد/بلا رسوم (الجولة 48 — تناظر)" "ok" "$R38_NURSE_CONS"
 
 curl -s -b "$DIR/nurse.jar" $BASE/api/me/assignments -o "$DIR/r35_assign.json" 2>/dev/null
 curl -s -b "$DIR/nurse.jar" $BASE/api/me/applications -o "$DIR/r35_apps.json" 2>/dev/null
 R38_NURSE_APPS=$(python3 -c "
 import json
 apps=json.load(open('$DIR/r35_apps.json'))['applications']
-ok=all(a['post']['receiver']['phone'] is None and a['post']['receiver']['phoneLocked'] is True for a in apps)
+def open_(a):
+    asg=a.get('assignment')
+    if not asg: return False
+    return asg['status'] in ('RECEIVED','ACTIVE') and (asg['paymentStatus']=='PAID' or asg.get('feeless')==True)
+ok=all((a['post']['receiver']['phone'] is not None)==open_(a) for a in apps)
 print('ok' if apps and ok else 'bad')" 2>/dev/null)
-check "الكادر: تقديماته — بيانات اتصال المستلم قناع مقفل في كل التقديمات بلا استثناء" "ok" "$R38_NURSE_APPS"
+check "الكادر: تقديماته — اتصال المستلم يُفتح بالتكليف المرتبط (مسدد/بلا رسوم وسارٍ) ويُغلق بعد الإنهاء (الجولة 48)" "ok" "$R38_NURSE_APPS"
+
+# الجولة 48: ملخص التكليف المرتبط في تقديماتي — تمييز احترافي بلا رسوم / ذات رسوم
+R48_LINK=$(grep -c "assignmentByPost" app/api/me/applications/route.ts | awk '($1>=3)?1:0')
+check "R48: api تقديماتي يربط كل تقديم بتكليفه الفعلي (مصدر الحقيقة للسداد والرسوم)" "1" "$R48_LINK"
+R48_BADGE=$(grep -c "تكليف بدون رسوم إدارة" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s==2)?1:0}')
+check "R48: شارة «تكليف بدون رسوم إدارة» المميزة في تقديماتي (تمريضي+طبيب)" "1" "$R48_BADGE"
+R48_PAID=$(grep -c "الرسوم مسددة ومؤكدة من الإدارة" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s==2)?1:0}')
+check "R48: شارة «الرسوم مسددة ومؤكدة» بعد تأكيد الدفع في تقديماتي (تمريضي+طبيب)" "1" "$R48_PAID"
+R48_DUE=$(grep -c "بانتظار سداد الرسوم" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s==2)?1:0}')
+check "R48: شارة «بانتظار سداد الرسوم» للتكليفات ذات الرسوم غير المسددة (تمريضي+طبيب)" "1" "$R48_DUE"
+R48_NOPAY=$(grep -c "app.assignment?.paymentStatus !== 'PAID' && !(app.assignment?.feeless)" app/nurse/assignments/page.tsx app/doctor/assignments/page.tsx | awk -F: '{s+=$2} END {print (s==2)?1:0}')
+check "R48: بطاقة السداد تختفي من تقديماتي بعد تأكيد الدفع أو بلا رسوم (تمريضي+طبيب)" "1" "$R48_NOPAY"
 
 # (7) المشرف: رقم الطبيب مقفل في تكليفه غير المسدد + شبكته كلها مقفلة
 R34_SUP_LOCKED=$(curl -s -b "$DIR/supervisor.jar" $BASE/api/me/assignments | python3 -c "

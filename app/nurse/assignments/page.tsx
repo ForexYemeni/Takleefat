@@ -133,6 +133,15 @@ interface MyApplication {
     }
   }
   fees: FeeBreakdown
+  /** الجولة 48: التكليف المرتبط بالتقديم — مصدر الحقيقة للرسوم المحفوظة وقت الاعتماد وحالة السداد */
+  assignment: {
+    id: string
+    status: string
+    paymentStatus: string
+    adminFee: number | null
+    value: number | null
+    feeless: boolean
+  } | null
 }
 
 interface MyAssignment {
@@ -853,10 +862,33 @@ function ApplicationCard({
           <StatusBadge status={app.status} labels={APPLICATION_STATUS_LABELS} />
         </div>
 
+        {/* الجولة 48: تمييز احترافي — التكليف بدون رسوم مقابل ذات الرسوم + حالة السداد
+            (من التكليف المرتبط — مصدر الحقيقة المحفوظ وقت الاعتماد، لا من إعدادات اليوم) */}
+        {app.assignment && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {app.assignment.feeless ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-gradient-to-l from-emerald-50 to-teal-50 px-2.5 py-0.5 text-[11px] font-black text-emerald-700 shadow-sm dark:border-emerald-800 dark:from-emerald-950/40 dark:to-teal-950/40 dark:text-emerald-300">
+                <Gift className="size-3 shrink-0" />
+                تكليف بدون رسوم إدارة
+              </span>
+            ) : app.assignment.paymentStatus === 'PAID' ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-black text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <BadgeCheck className="size-3 shrink-0" />
+                الرسوم مسددة ومؤكدة من الإدارة
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[11px] font-black text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                <Wallet className="size-3 shrink-0" />
+                بانتظار سداد الرسوم
+              </span>
+            )}
+          </div>
+        )}
+
         {/* شرائح مصغّرة: الجهة + القيمة + التاريخ */}
         <div className="flex flex-wrap items-center gap-1.5">
           <MiniChip icon={UserRound}>{app.post.receiver.name}</MiniChip>
-          {/* الجولة 38: اتصال المستلم/المشرف خاص — لا يُفتح للكادر في أي حال */}
+          {/* الجولة 48: اتصال المستلم/المشرف يُفتح بعد تأكيد الدفع أثناء السير (أو بلا رسوم) — تلميح القفل يوضح الخطوات */}
           <StaffPhone data={app.post.receiver} personName={app.post.receiver.name} lockedHint={RECEIVER_CONTACT_LOCKED_HINT} />
           <MiniChip icon={Banknote} ltr>
             {formatCurrency(app.fees.value)}
@@ -871,15 +903,16 @@ function ApplicationCard({
           </p>
         )}
 
-        {/* الجولة 45: عرض بدون رسوم — لا مبلغ ولا طرق دفع: رسالة سلاسة فقط */}
-        {app.status === 'APPROVED' && settings && app.fees.dueToAdmin === 0 && (
+        {/* الجولة 45+48: عرض بدون رسوم — لا مبلغ ولا طرق دفع: رسالة سلاسة فقط
+            (الحكم من التكليف المرتبط — لا من إعدادات اليوم حتى لا يظهر مبلغ على تكليف عرض قديم بعد انتهاء العرض) */}
+        {app.status === 'APPROVED' && settings && (app.assignment ? app.assignment.feeless : app.fees.dueToAdmin === 0) && (
           <p className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
             <Gift className="size-3.5 shrink-0" />
             عرض بدون رسوم — لا مبلغ واجب سداده، وبيانات الاتصال متاحة أثناء سير التكليف وتُغلق بعد إنهائه
           </p>
         )}
 
-        {app.status === 'APPROVED' && settings && app.fees.dueToAdmin > 0 && (
+        {app.status === 'APPROVED' && settings && app.fees.dueToAdmin > 0 && app.assignment?.paymentStatus !== 'PAID' && !(app.assignment?.feeless) && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 dark:border-emerald-900 dark:bg-emerald-950/30">
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
