@@ -28,6 +28,7 @@ import { DashboardSkeleton } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmailServicePanel } from '@/components/admin/email-service-panel'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -497,6 +498,9 @@ export default function AdminSettingsPage() {
           </Button>
         </div>
       </form>
+
+      {/* الجولة 51: إعدادات البريد الإلكتروني — خدمة GAS+Gmail المركزية (بطاقة مستقلة بنموذجها الخاص) */}
+      <EmailServicePanel />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import type { NotificationType } from '@prisma/client'
 import { deliverPushToUser, type PushPayload } from '@/lib/push'
+import { scheduleEmailDelivery, type EmailCardData } from '@/lib/email/send'
 import { after } from 'next/server'
 
 interface NotifyInput {
@@ -8,6 +9,8 @@ interface NotifyInput {
   body?: string
   type?: NotificationType
   link?: string
+  // الجولة 51: بيانات بطاقة بريد اختيارية — غيابها لا يمنع البريد (تُبنى بطاقة عامة من العنوان والنص)
+  email?: Partial<EmailCardData>
 }
 
 /**
@@ -47,6 +50,12 @@ export async function notify(userId: string, input: NotifyInput) {
     body: input.body,
     link: input.link,
     tag: createdId ?? undefined,
+  }
+
+  // الجولة 51: البريد قناة إشعار رسمية إضافية — يُجدول مع الإشعار الفوري بلا أي
+  // انتظار على مسار الاستجابة، وفشله لا يمس الإشعار الداخلي ولا العملية الأساسية
+  if (createdId) {
+    scheduleEmailDelivery(userId, input, createdId, input.email)
   }
 
   // الجولة التاسعة عشرة: بعد() تضمن استكمال الإرسال حتى بعد إرجاع الاستجابة

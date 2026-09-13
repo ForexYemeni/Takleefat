@@ -264,3 +264,44 @@ export const workSpecialtiesSchema = z.object({
 })
 
 export type WorkSpecialtiesInput = z.infer<typeof workSpecialtiesSchema>
+
+// ---------- الجولة 51: البريد الإلكتروني — قناة إشعارات رسمية إضافية ----------
+
+/** صيغة بريد إلكتروني آمنة — بأسلوب مبسط يمنع الأخطاء الشائعة */
+export const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+
+export const setEmailSchema = z.object({
+  email: z
+    .string({ error: 'البريد الإلكتروني مطلوب' })
+    .trim()
+    .toLowerCase()
+    .max(120, 'البريد الإلكتروني طويل جداً')
+    .regex(EMAIL_REGEX, 'صيغة البريد الإلكتروني غير صحيحة'),
+})
+
+export const verifyEmailSchema = z.object({
+  code: z
+    .string({ error: 'رمز التحقق مطلوب' })
+    .trim()
+    .regex(/^\d{6}$/, 'رمز التحقق يجب أن يكون 6 أرقام'),
+})
+
+/** تفضيلات أقسام الإشعارات — أقسام الأمان مقفلة ولا تُقبل هنا إطلاقاً */
+export const emailSettingsSchema = z.object({
+  enabled: z.boolean({ error: 'قيمة المفتاح الرئيس غير صحيحة' }).optional(),
+  preferences: z
+    .object({
+      assignments: z.boolean().optional(),
+      requests: z.boolean().optional(),
+      updates: z.boolean().optional(),
+      documents: z.boolean().optional(),
+      admin: z.boolean().optional(),
+      account: z.boolean().optional(),
+      important: z.boolean().optional(),
+    })
+    .optional(),
+})
+
+export type SetEmailInput = z.infer<typeof setEmailSchema>
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>
+export type EmailSettingsInput = z.infer<typeof emailSettingsSchema>

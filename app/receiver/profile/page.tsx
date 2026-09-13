@@ -23,6 +23,7 @@ import { formatDate, ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { MyOrgsCard } from '@/components/shared/my-orgs-card'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmailAccountCard } from '@/components/shared/email-account-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -169,6 +170,10 @@ export default function ReceiverProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* الجولة 51: بطاقة البريد الإلكتروني — إضافة/تأكيد/إعدادات الإشعارات (قناة إشعارات رسمية إضافية) */}
+      <EmailAccountCard />
+
 
       {/* الجولة 44: جهاتي الصحية — الأساسية + الإضافية بموافقة الإدارة */}
       <MyOrgsCard />

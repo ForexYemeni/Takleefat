@@ -4193,6 +4193,141 @@ import json,sys
 print(len(json.load(sys.stdin).get('departments',[])))" 2>/dev/null)
 check "R50: بعد الإضافة → شريط النجاح (قسم واحد)" "1" "$R50_AFTER"
 
+# ============================================================
+# القسم 57 — الجولة 51: نظام البريد الإلكتروني المركزي
+#   Google Apps Script + Gmail حصراً — رمز 6 أرقام + إعدادات الأقسام
+#   + سجل الإرسال + منع التكرار + فشل آمن لا يعطل العملية الأساسية
+# ============================================================
+echo "=========== 57) الجولة 51: نظام البريد الإلكتروني المركزي ==========="
+
+# --- فحوص ساكنة: المرسل المركزي + التكامل + السكربت الواحد ---
+R51_SEND="lib/email/send.ts"
+check "R51: المرسل المركزي lib/email/send.ts موجود" "1" "$([ -f "$R51_SEND" ] && echo 1 || echo 0)"
+check "R51: منع التكرار عبر idempotencyKey فريد في سجل الإرسال" "1" "$(grep -c 'idempotencyKey' prisma/schema.prisma | awk '{print ($1>=1)?1:0}')"
+check "R51: تكامل البريد مركزياً في notify() — بلا منطق موزع" "1" "$(grep -c 'scheduleEmailDelivery' lib/notifications.ts | awk '{print ($1>=1)?1:0}')"
+check "R51: رابط وسر GAS من البيئة حصراً (لا قيم صلبة)" "1" "$(grep -c 'process.env.GOOGLE_APPS_SCRIPT_URL' lib/email/gas-client.ts | awk '{print ($1>=1)?1:0}')"
+check "R51: مهلة 8 ثوانٍ وبلا استثناءات صاعدة في عميل GAS" "1" "$(grep -c 'GAS_TIMEOUT_MS = 8000' lib/email/gas-client.ts | awk '{print ($1>=1)?1:0}')"
+check "R51: Google Apps Script واحد بدالة doPost ورمز تحقق" "1" "$(grep -c 'function doPost' google-apps-script/Code.gs | awk '{print ($1>=1)?1:0}')"
+check "R51: قالب موحد baseEmailTemplate في السكربت" "1" "$(grep -c 'baseEmailTemplate_' google-apps-script/Code.gs | awk '{print ($1>=2)?1:0}')"
+check "R51: بطاقة البريد مركبة في ملفات الأدوار الخمسة" "10" "$(cat app/nurse/profile/page.tsx app/doctor/profile/page.tsx app/receiver/profile/page.tsx app/supervisor/profile/page.tsx app/admin/profile/page.tsx | grep -c 'EmailAccountCard')"
+check "R51: لوحة إدارة البريد في صفحة الإعدادات" "1" "$(grep -c 'EmailServicePanel' app/admin/settings/page.tsx | awk '{print ($1>=2)?1:0}')"
+check "R51: أقسام الأمان مقفلة لا تُعطَّل (سياسة النظام)" "1" "$(grep -c 'SECURITY_CATEGORY' lib/email/config.ts | awk '{print ($1>=2)?1:0}')"
+
+# --- تجهيز: كادر جديد للرحلة الكاملة ---
+REG51=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر بريد-51","phone":"744460505","password":"R51@Nurse","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"MALE"}')
+N51_ID=$(echo "$REG51" | jget "['user']['id']")
+login "$DIR/n51e.jar" "744460505" "R51@Nurse"
+curl -s -b "$DIR/n51e.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N51_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+
+R51_E0=$(curl -s -b "$DIR/n51e.jar" $BASE/api/me/email | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('none' if d.get('email') is None and d.get('emailVerified') is False else 'other')" 2>/dev/null)
+check "R51: الحالة الابتدائية — لا بريد مضاف" "none" "$R51_E0"
+
+# --- بريد غير صحيح يُرفض ---
+R51_BAD=$(code -b "$DIR/n51e.jar" -X POST $BASE/api/me/email -H "Content-Type: application/json" -d '{"email":"بريد-غير-صالح"}')
+check "R51: رفض بريد بصيغة خاطئة → 422" "422" "$R51_BAD"
+
+# --- إضافة بريد صحيح: العملية تنجح حتى مع خدمة GAS غير المهيأة (لا تعطيل) ---
+R51_SET=$(curl -s -b "$DIR/n51e.jar" -o "$DIR/r51_set.json" -w "%{http_code}" -X POST $BASE/api/me/email -H "Content-Type: application/json" -d '{"email":"nurse51.takleefat@gmail.com"}')
+R51_SET_BODY=$(cat "$DIR/r51_set.json")
+check "R51: إضافة بريد صحيح → 200 (فشل البريد لا يعطل العملية)" "200" "$R51_SET"
+echo "$R51_SET_BODY" | grep -q 'emailVerificationCode' && R51_LEAK="yes" || R51_LEAK="no"
+check "R51: الرمز لا يظهر في الاستجابة البرمجية إطلاقاً" "no" "$R51_LEAK"
+R51_SET_CODE=$(echo "$R51_SET_BODY" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('masked' if d.get('maskedEmail','').startswith('nu') and '@' in d.get('maskedEmail','') else 'bad')" 2>/dev/null)
+check "R51: البريد يُعرض مقنّعاً (nu***@gmail.com)" "masked" "$R51_SET_CODE"
+
+# --- حماية من طلب الرموز المتكرر ---
+sleep 1
+R51_RL=$(code -b "$DIR/n51e.jar" -X POST $BASE/api/me/email/resend)
+check "R51: إعادة إرسال خلال 60 ثانية مرفوضة → 429" "429" "$R51_RL"
+
+# --- رمز خاطئ ---
+R51_WRONG=$(code -b "$DIR/n51e.jar" -X POST $BASE/api/me/email/verify -H "Content-Type: application/json" -d '{"code":"000000"}')
+check "R51: رمز خاطئ مرفوض → 422 برسالة ودودة" "422" "$R51_WRONG"
+
+# --- قراءة الرمز من قاعدة البيانات مباشرة (الاختبار الوحيد المشروع — بلا عرض برمجي) ---
+R51_CODE=$(python3 -c "
+import sqlite3
+c=sqlite3.connect('db/custom.db')
+row=c.execute('SELECT emailVerificationCode FROM users WHERE id=?', ('$N51_ID',)).fetchone()
+print(row[0] if row and row[0] else '')")
+[ -n "$R51_CODE" ] && check "R51: رمز 6 أرقام محفوظ في القاعدة" "ok" "ok" || check "R51: الرمز في القاعدة" "code" "empty"
+
+# --- فشل البريد مسجل للإدارة (GAS غير مهيأ في بيئة الاختبار) ---
+R51_LOGFAIL=$(curl -s -b "$DIR/admin.jar" $BASE/api/admin/email | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+logs=[l for l in d.get('logs',[]) if l.get('notificationType')=='EMAIL_VERIFICATION']
+print('yes' if logs and logs[0].get('status')=='failed' else 'no')" 2>/dev/null)
+check "R51: فشل إرسال الرمز مسجل في سجل الإدارة (الخدمة غير مهيأة)" "yes" "$R51_LOGFAIL"
+
+# --- رمز منتهي الصلاحية (تقليص الصلاحية مباشرة في القاعدة — بصيغة ملي ثانية كما يخزن Prisma) ---
+python3 -c "
+import sqlite3
+from datetime import datetime
+c=sqlite3.connect('db/custom.db')
+past=int(datetime(2020,1,1).timestamp()*1000)
+c.execute('UPDATE users SET emailVerificationExpires=? WHERE id=?', (past, '$N51_ID'))
+c.commit()"
+R51_EXP=$(code -b "$DIR/n51e.jar" -X POST $BASE/api/me/email/verify -H "Content-Type: application/json" -d "{\"code\":\"$R51_CODE\"}")
+check "R51: رمز منتهي الصلاحية مرفوض → 422" "422" "$R51_EXP"
+
+# --- إعادة إرسال بعد انقضاء فترة الحماية (تصفير وقت آخر إرسال مباشرة) ثم الرمز الصحيح ---
+python3 -c "
+import sqlite3
+from datetime import datetime
+c=sqlite3.connect('db/custom.db')
+past=int(datetime(2020,1,1).timestamp()*1000)
+c.execute('UPDATE users SET emailVerificationSentAt=? WHERE id=?', (past, '$N51_ID'))
+c.commit()"
+curl -s -b "$DIR/n51e.jar" -X POST $BASE/api/me/email/resend > /dev/null
+R51_CODE2=$(python3 -c "
+import sqlite3
+c=sqlite3.connect('db/custom.db')
+row=c.execute('SELECT emailVerificationCode FROM users WHERE id=?', ('$N51_ID',)).fetchone()
+print(row[0] if row and row[0] else '')")
+R51_OK=$(code -b "$DIR/n51e.jar" -X POST $BASE/api/me/email/verify -H "Content-Type: application/json" -d "{\"code\":\"$R51_CODE2\"}")
+check "R51: إدخال الرمز الصحيح → 200 والتأكيد" "200" "$R51_OK"
+R51_VD=$(curl -s -b "$DIR/n51e.jar" $BASE/api/me/email | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('yes' if d.get('emailVerified') is True and d.get('enabled') is True else 'no')" 2>/dev/null)
+check "R51: التأكيد فعّل إشعارات البريد تلقائياً" "yes" "$R51_VD"
+
+# --- منع تكرار نفس البريد المؤكد لحساب آخر ---
+login "$DIR/n51f.jar" "744460303" "R49@Nurse"
+R51_DUP=$(code -b "$DIR/n51f.jar" -X POST $BASE/api/me/email -H "Content-Type: application/json" -d '{"email":"nurse51.takleefat@gmail.com"}')
+check "R51: رفض بريد مؤكد مملوك لحساب آخر → 409" "409" "$R51_DUP"
+
+# --- إعدادات الأقسام: تعطيل مسموح للأقسام العادية ومستحيل للأمان ---
+R51_PREF=$(curl -s -b "$DIR/n51e.jar" -X PATCH $BASE/api/me/email-settings -H "Content-Type: application/json" \
+  -d '{"preferences":{"assignments":false,"documents":false}}' | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+p=d.get('preferences',{})
+print('yes' if p.get('assignments') is False and p.get('documents') is False else 'no')" 2>/dev/null)
+check "R51: المستخدم يوقف أقسام الإشعارات بحرية" "yes" "$R51_PREF"
+R51_REENABLE=$(curl -s -b "$DIR/n51e.jar" -X PATCH $BASE/api/me/email-settings -H "Content-Type: application/json" \
+  -d '{"preferences":{"assignments":true,"documents":true}}' | python3 -c "
+import json,sys
+print(json.load(sys.stdin).get('preferences',{}).get('assignments'))" 2>/dev/null)
+check "R51: إعادة تفعيل القسم تعمل" "True" "$R51_REENABLE"
+
+# --- صلاحيات الإدارة ---
+R51_ADMIN_GET=$(code -b "$DIR/admin.jar" $BASE/api/admin/email)
+check "R51: لوحة إدارة البريد للإدارة → 200" "200" "$R51_ADMIN_GET"
+R51_FORBID=$(code -b "$DIR/n51e.jar" $BASE/api/admin/email)
+check "R51: لوحة البريد محظورة على غير الإدارة → 403" "403" "$R51_FORBID"
+R51_TEST_NC=$(code -b "$DIR/admin.jar" -X POST $BASE/api/admin/email/test -H "Content-Type: application/json" -d '{}')
+check "R51: البريد التجريبي بلا تهيئة GAS → 503 برسالة واضحة" "503" "$R51_TEST_NC"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"

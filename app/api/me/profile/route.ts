@@ -3,6 +3,8 @@ import { compare, hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireSession, handleApiError, jsonError } from '@/lib/api-helpers'
 import { updateProfileSchema, changePasswordSchema } from '@/lib/validations/user'
+import { sendSecurityAlert } from '@/lib/email/send'
+import { after } from 'next/server'
 
 /**
  * GET /api/me/profile — الملف الشخصي الكامل للمستخدم الحالي (جميع الأدوار)
@@ -67,6 +69,20 @@ export async function PATCH(req: NextRequest) {
 
       const hashed = await hash(parsed.data.newPassword, 12)
       await db.user.update({ where: { id: session.user.id }, data: { password: hashed } })
+
+      // الجولة 51: تنبيه أمان مقفول — يُرسل دائماً لمن أكّد بريده، ولا يؤخر ولا يعطل الاستجابة
+      try {
+        after(sendSecurityAlert(session.user.id, {
+          title: '🛡️ تم تغيير كلمة المرور',
+          subject: 'تم تغيير كلمة المرور الخاصة بحسابك',
+          lines: [
+            'تم تغيير كلمة المرور الخاصة بحسابك في منصة تكليفات للتو.',
+            'إذا كنت أنت من قام بهذا التغيير يمكنك تجاهل هذه الرسالة. إذا لم تكن أنت، يُرجى تغيير كلمة المرور فوراً والتواصل مع الإدارة.',
+          ],
+        }))
+      } catch {
+        // خارج سياق طلب نشط — البريد لا يعمل سيرفرياً هنا؛ تجاهل آمن
+      }
 
       return NextResponse.json({ message: 'تم تغيير كلمة المرور بنجاح' })
     }

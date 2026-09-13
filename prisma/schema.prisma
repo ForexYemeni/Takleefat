@@ -229,6 +229,21 @@ model User {
   applicationsReviewed Application[]      @relation("ApplicationReviewer")
   // أقسام العمل التي يعمل بها الكادر (رقود/طوارئ/عناية/مختبر...) — تعدد أقسام من كتالوج الإدارة
   workDepartments      WorkDepartment[]   @relation("NurseWorkDepartments")
+  // ---------- الجولة 51: البريد الإلكتروني — قناة إشعارات رسمية إضافية ----------
+  // الدخول يبقى هاتف + كلمة مرور حصراً — البريد للإشعارات والتنبيهات والأمان فقط
+  email                     String?
+  emailVerified             Boolean   @default(false)
+  /// رمز التحقق من 6 أرقام — يُخزن مؤقتاً حتى التأكيد ولا يُعاد أبداً في أي استجابة برمجية
+  emailVerificationCode     String?
+  /// صلاحية رمز التحقق — افتراضياً 15 دقيقة من الإرسال
+  emailVerificationExpires  DateTime?
+  /// آخر وقت إرسال رمز — للحد من طلب الرموز المتكرر (60 ثانية بين الطلبات)
+  emailVerificationSentAt   DateTime?
+  /// المفتاح الرئيس لإشعارات البريد — يُفعّل تلقائياً عند تأكيد البريد
+  emailNotificationEnabled  Boolean   @default(true)
+  /// تفضيلات أقسام الإشعارات JSON: {assignments,requests,updates,documents,admin,account,important}
+  /// أقسام الأمان (security) مقفلة دائماً ولا تُخزن هنا
+  emailPreferences          String?
   // تخصصات عمل الطبيب — تعدد تخصصات من كتالوج التخصصات الطبية (منظومة الأطباء)
   workSpecialties      DoctorSpecialty[]  @relation("DoctorWorkSpecialties")
   // شبكة الكوادر: الارتباط المهني + المفضلة + الاستدعاءات
@@ -643,6 +658,34 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+/// سجل إرسال البريد الإلكتروني — الجولة 51
+/// كل محاولة إرسال حقيقية تُسجَّل هنا (pending → sent/failed) لعرضها للإدارة
+/// وإعادة الإرسال عند الحاجة — الفشل لا يؤثر أبداً على العملية الأساسية
+model EmailLog {
+  id               String    @id @default(cuid())
+  /// معرف المستلم الداخلي — null للإرسال الإداري المباشر لعنوان خارجي
+  recipientUserId  String?
+  recipientEmail   String
+  /// نوع الإشعار (EMAIL_VERIFICATION / POST_CREATED / TEST / ...)
+  notificationType String
+  subject          String
+  /// pending أثناء المحاولة / sent نجح / failed فشل
+  status           String    @default("pending")
+  errorMessage     String?
+  /// معرف الكيان المرتبط (تكليف/تقديم/مستند...) إن وجد
+  relatedEntityId  String?
+  /// مفتاح منع التكرار — فريد على مستوى القاعدة يمنع الإرسال المزدوج نهائياً
+  idempotencyKey   String    @unique
+  /// حمولة الإرسال الكاملة (JSON نصي) لإعادة الإرسال الأمينة من الإدارة
+  payloadJson      String?
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_logs")
 }
 
 /// اشتراكات الإشعارات الفورية (Web Push)
