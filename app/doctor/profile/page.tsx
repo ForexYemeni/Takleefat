@@ -11,6 +11,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { AffiliationsManager } from '@/components/nurse/affiliations-manager'
 import { WorkDepartmentsManager } from '@/components/nurse/work-specialties-manager'
+import { DoctorDepartmentsAlert } from '@/components/shared/departments-completeness-alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -74,6 +75,9 @@ export default function NurseProfilePage() {
           بيانات حسابك في منصة تكليفات | Takleefat
         </p>
       </div>
+
+      {/* الجولة 50: تنبيه إكمال تخصصات العمل — يتحول لشريط نجاح فور إضافة أول تخصص */}
+      <DoctorDepartmentsAlert />
 
       <Card>
         <CardHeader>
@@ -170,7 +174,7 @@ export default function NurseProfilePage() {
 
       {/* تخصصات العمل — تعدد تخصصات من كتالوج الإدارة: رقود/طوارئ/عناية/مختبر...
           عند إنشاء تكليف في أحد التخصصات يصل الإشعار للطبيب مباشرة */}
-      <Card>
+      <Card id="departments-section" className="scroll-mt-24">
         <CardContent className="pt-6">
           <WorkDepartmentsManager />
         </CardContent>

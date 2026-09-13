@@ -4121,6 +4121,78 @@ check "R49: التقديم على تكليف غير متقاطع (14:00-16:00) �
 # --- تنظيف القسم 55 ---
 curl -s -b "$DIR/admin.jar" -X DELETE $BASE/api/admin/hospitals/$R49_HOSP_ID -o /dev/null
 
+# ============================================================
+# القسم 56 — الجولة 50: تنبيه إكمال أقسام العمل في الملف الشخصي
+#   تنبيه فاخر أعلى الملف الشخصي يشجّع الكادر/الطبيب على إكمال أقسام
+#   عمله/تخصصاته (أساس بوابة القسم في الجولة 49) + شريط نجاح بعد الإضافة
+# ============================================================
+echo "=========== 56) الجولة 50: تنبيه إكمال أقسام العمل في الملف الشخصي ==========="
+
+R50_COMP="components/shared/departments-completeness-alert.tsx"
+
+# --- فحوص ساكنة: المكوّن + التركيب في صفحتي الملف الشخصي ---
+check "R50: مكوّن تنبيه إكمال أقسام العمل موجود" "1" "$([ -f "$R50_COMP" ] && echo 1 || echo 0)"
+check "R50: عبارة التشجيع «أكمِل ملفك المهني» في المكوّن" "1" "$(grep -c 'أكمِل ملفك المهني' "$R50_COMP" | awk '{print ($1>=1)?1:0}')"
+check "R50: صيغة النجاح «مكتملة» بعد إضافة الأقسام" "1" "$(grep -c 'مكتملة' "$R50_COMP" | awk '{print ($1>=1)?1:0}')"
+check "R50: زر انتقال سلس (scrollIntoView) نحو بطاقة الأقسام" "1" "$(grep -c 'scrollIntoView' "$R50_COMP" | awk '{print ($1>=1)?1:0}')"
+check "R50: وميض التمييز dept-flash في CSS العام" "1" "$(grep -c 'dept-flash' app/globals.css | awk '{print ($1>=2)?1:0}')"
+check "R50: إمكانية وصول aria-live في التنبيه" "1" "$(grep -c 'aria-live' "$R50_COMP" | awk '{print ($1>=1)?1:0}')"
+check "R50: نسخة الكادر (NurseDepartmentsAlert) مستوردة ومعروضة في ملفه" "1" "$(grep -c 'NurseDepartmentsAlert' app/nurse/profile/page.tsx | awk '{print ($1>=2)?1:0}')"
+check "R50: نسخة الطبيب (DoctorDepartmentsAlert) مستوردة ومعروضة في ملفه" "1" "$(grep -c 'DoctorDepartmentsAlert' app/doctor/profile/page.tsx | awk '{print ($1>=2)?1:0}')"
+R50_ALERTRN=$(grep -n "DepartmentsAlert />" app/nurse/profile/page.tsx | head -1 | cut -d: -f1)
+R50_ACCRN=$(grep -n "بيانات الحساب" app/nurse/profile/page.tsx | head -1 | cut -d: -f1)
+check "R50: التنبيه أعلى صفحة ملف الكادر (قبل بطاقة بيانات الحساب)" "1" "$([ -n "$R50_ALERTRN" ] && [ -n "$R50_ACCRN" ] && [ "$R50_ALERTRN" -lt "$R50_ACCRN" ] && echo 1 || echo 0)"
+R50_ALERTDR=$(grep -n "DepartmentsAlert />" app/doctor/profile/page.tsx | head -1 | cut -d: -f1)
+R50_ACCDR=$(grep -n "بيانات الحساب" app/doctor/profile/page.tsx | head -1 | cut -d: -f1)
+check "R50: التنبيه أعلى صفحة ملف الطبيب (قبل بطاقة بيانات الحساب)" "1" "$([ -n "$R50_ALERTDR" ] && [ -n "$R50_ACCDR" ] && [ "$R50_ALERTDR" -lt "$R50_ACCDR" ] && echo 1 || echo 0)"
+R50_ANCHORS=$(( $(grep -c 'id="departments-section"' app/nurse/profile/page.tsx) + $(grep -c 'id="departments-section"' app/doctor/profile/page.tsx) ))
+check "R50: مرساة بطاقة الأقسام departments-section في الملفين" "2" "$R50_ANCHORS"
+
+# --- فحوص حية: حالة البيانات التي تحرّك التنبيه ---
+# 1) كادر «عام-49» بلا أي أقسام → حالة فارغة تُظهر التنبيه التشجيعي
+R49C_EMPTY=$(curl -s -b "$DIR/n49c.jar" $BASE/api/me/work-departments | python3 -c "
+import json,sys
+print(len(json.load(sys.stdin).get('departments',[])))" 2>/dev/null)
+check "R50: كادر بلا أقسام → حالة فارغة تُظهر التنبيه التشجيعي" "0" "$R49C_EMPTY"
+
+# 2) كادر العناية مصرّح بقسمه → شريط النجاح بدل التنبيه
+R49A_MINE=$(curl -s -b "$DIR/n49a.jar" $BASE/api/me/work-departments | python3 -c "
+import json,sys
+print(len(json.load(sys.stdin).get('departments',[])))" 2>/dev/null)
+check "R50: كادر مصرّح بقسمه → شريط النجاح (أقسام ≥ 1)" "yes" "$([ "$R49A_MINE" -ge 1 ] 2>/dev/null && echo yes || echo no)"
+
+# 3) طبيب بلا تخصصات (التسجيل الذاتي) → حالة فارغة تُظهر تنبيه الطبيب
+login "$DIR/docself.jar" "791110903" "Doctor@123"
+DOC_EMPTY=$(curl -s -b "$DIR/docself.jar" $BASE/api/me/work-specialties | python3 -c "
+import json,sys
+print(len(json.load(sys.stdin).get('specialties',[])))" 2>/dev/null)
+check "R50: طبيب بلا تخصصات → حالة فارغة تُظهر تنبيه الطبيب" "0" "$DOC_EMPTY"
+
+# 4) الطبيب المصرّح بتخصصه → شريط النجاح
+DOC_MINE=$(curl -s -b "$DIR/doctor.jar" $BASE/api/me/work-specialties | python3 -c "
+import json,sys
+print(len(json.load(sys.stdin).get('specialties',[])))" 2>/dev/null)
+check "R50: طبيب مصرّح بتخصصه → شريط النجاح (تخصصات ≥ 1)" "yes" "$([ "$DOC_MINE" -ge 1 ] 2>/dev/null && echo yes || echo no)"
+
+# 5) رحلة إكمال كاملة: كادر جديد بلا أقسام → يضيف قسمه → الحالة تتحول للنجاح
+REG50=$(curl -s -X POST $BASE/api/auth/register -H "Content-Type: application/json" \
+  -d '{"role":"NURSE","name":"كادر تنبيه-50","phone":"744460404","password":"R50@Nurse","specialty":"تمريض عام","qualification":"دبلوم ثلاث سنوات","yearsOfExperience":2,"gender":"FEMALE"}')
+N50_ID=$(echo "$REG50" | jget "['user']['id']")
+login "$DIR/n50d.jar" "744460404" "R50@Nurse"
+curl -s -b "$DIR/n50d.jar" -X POST $BASE/api/upload -F "file=@$DIR/test.png" -F "type=ID_CARD" > /dev/null
+curl -s -b "$DIR/admin.jar" -X PATCH $BASE/api/admin/users/$N50_ID -H "Content-Type: application/json" -d '{"status":"APPROVED"}' > /dev/null
+R50_EMPTY=$(curl -s -b "$DIR/n50d.jar" $BASE/api/me/work-departments | python3 -c "
+import json,sys
+print(len(json.load(sys.stdin).get('departments',[])))" 2>/dev/null)
+check "R50: كادر جديد تماماً → أقسامه فارغة (التنبيه ظاهر)" "0" "$R50_EMPTY"
+R50_PUT=$(code -b "$DIR/n50d.jar" -X PUT $BASE/api/me/work-departments -H "Content-Type: application/json" \
+  -d "{\"departmentIds\":[\"$R49_DEPT_A_ID\"]}")
+check "R50: الكادر يضيف قسمه من الملف الشخصي → 200 (التنبيه يتحول لنجاح)" "200" "$R50_PUT"
+R50_AFTER=$(curl -s -b "$DIR/n50d.jar" $BASE/api/me/work-departments | python3 -c "
+import json,sys
+print(len(json.load(sys.stdin).get('departments',[])))" 2>/dev/null)
+check "R50: بعد الإضافة → شريط النجاح (قسم واحد)" "1" "$R50_AFTER"
+
 echo ""
 echo "==========================================="
 echo "النتيجة: ✅ $PASS ناجح | ❌ $FAIL فاشل"
