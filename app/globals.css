@@ -230,3 +230,123 @@
 .dept-flash {
   animation: dept-flash 1.1s ease-out 2;
 }
+
+/* ============================================================
+   الجولة 52 — تجربة المصادقة الاحترافية (تسجيل الدخول / إنشاء حساب)
+   لوحة هوية داكنة: هالات متحركة + شبكة نقاط + خط نبض قلب ECG حي
+   ============================================================ */
+
+/* اللوحة التعريفية الداكنة — تدرجات كحلية/بنفسجية عميقة من هوية المنصة */
+.auth-panel {
+  background:
+    radial-gradient(1100px 750px at 88% -12%, oklch(0.45 0.17 285 / 0.5), transparent 62%),
+    radial-gradient(950px 700px at -8% 108%, oklch(0.5 0.19 262 / 0.45), transparent 58%),
+    linear-gradient(160deg, oklch(0.22 0.085 268) 0%, oklch(0.245 0.095 271) 46%, oklch(0.195 0.08 276) 100%);
+}
+
+/* هالات ضوئية عائمة */
+.auth-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  pointer-events: none;
+}
+.auth-orb-1 {
+  width: 22rem;
+  height: 22rem;
+  background: oklch(0.6 0.21 262 / 0.55);
+  top: -6rem;
+  inset-inline-start: -7rem;
+  animation: auth-float 11s ease-in-out infinite;
+}
+.auth-orb-2 {
+  width: 16rem;
+  height: 16rem;
+  background: oklch(0.62 0.23 293 / 0.45);
+  bottom: 6%;
+  inset-inline-end: -4.5rem;
+  animation: auth-float 14s ease-in-out infinite reverse;
+}
+.auth-orb-3 {
+  width: 12rem;
+  height: 12rem;
+  background: oklch(0.75 0.13 232 / 0.35);
+  top: 42%;
+  inset-inline-start: 48%;
+  animation: auth-float 9s ease-in-out 1.8s infinite;
+}
+@keyframes auth-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2rem, -2.5rem, 0) scale(1.1);
+  }
+}
+
+/* شبكة نقاط خافتة تتلاشى نحو الأطراف */
+.auth-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(oklch(1 0 0 / 0.13) 1px, transparent 1.4px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 42%, black 25%, transparent 74%);
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 42%, black 25%, transparent 74%);
+}
+
+/* خط نبض القلب — مسار خافت دائم + قطاع لامع يسافر عبره باستمرار */
+.ecg-base {
+  stroke: oklch(1 0 0 / 0.14);
+}
+.ecg-bright {
+  stroke: oklch(0.82 0.12 225);
+  stroke-dasharray: 150 1450;
+  filter: drop-shadow(0 0 6px oklch(0.78 0.115 232 / 0.85));
+  animation: ecg-travel 5.5s linear infinite;
+}
+@keyframes ecg-travel {
+  from {
+    stroke-dashoffset: 1600;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* توهج ناعم خلف منطقة النموذج */
+.auth-glow {
+  position: absolute;
+  width: 26rem;
+  height: 26rem;
+  top: -10rem;
+  inset-inline-end: -8rem;
+  background: radial-gradient(closest-side, oklch(0.546 0.215 262 / 0.14), transparent);
+  filter: blur(38px);
+  pointer-events: none;
+}
+
+/* دخول متدرج أنيق لعناصر الصفحة */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.auth-rise {
+  animation: auth-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* احترام تفضيل تقليل الحركة — نبض وتوهجات فقط، المحتوى ثابت */
+@media (prefers-reduced-motion: reduce) {
+  .auth-orb,
+  .ecg-bright,
+  .auth-rise {
+    animation: none !important;
+  }
+}

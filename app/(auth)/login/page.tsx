@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Eye, EyeOff, Loader2, LogIn, PhoneIcon, Lock } from 'lucide-react'
+import { Eye, EyeOff, Loader2, LogIn, PhoneIcon, Lock, ShieldCheck, FileCheck2, BellRing } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,9 +24,17 @@ const ROLE_HOME: Record<string, string> = {
   RECEIVER: '/receiver',
 }
 
+/** شارات الثقة أسفل النموذج */
+const TRUST_CHIPS = [
+  { icon: ShieldCheck, text: 'اعتماد إداري للحسابات' },
+  { icon: FileCheck2, text: 'بياناتك محمية' },
+  { icon: BellRing, text: 'إشعارات فورية' },
+]
+
 /**
  * نموذج تسجيل الدخول — يقرأ callbackUrl من معاملات الرابط
  * لذلك يجب لفّه داخل Suspense boundary أثناء التوليد الساكن.
+ * الجولة 52: نفس المنطق حرفياً — التصميم فقط ارتقى للوحة الاحترافية.
  */
 function LoginForm() {
   const router = useRouter()
@@ -98,84 +106,123 @@ function LoginForm() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2 text-center lg:text-start">
-        <h1 className="text-2xl font-extrabold">تسجيل الدخول</h1>
-        <p className="text-sm text-muted-foreground">
-          ادخل إلى منصة تكليفات | Takleefat باستخدام رقم هاتفك وكلمة المرور
-        </p>
+      {/* ---------- رأس الصفحة ---------- */}
+      <div className="auth-rise space-y-3 text-center lg:text-start">
+        <span className="brand-gradient mx-auto flex size-14 items-center justify-center rounded-2xl text-white shadow-lg shadow-primary/30 lg:mx-0">
+          <LogIn className="size-7" />
+        </span>
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-black sm:text-3xl">مرحباً بعودتك</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            سجّل دخولك إلى منصة تكليفات | Takleefat باستخدام رقم هاتفك وكلمة المرور
+            لإدارة تكليفاتك الطبية والمهنية
+          </p>
+        </div>
       </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* ---------- بطاقة النموذج ---------- */}
+      <div
+        className="auth-rise relative overflow-hidden rounded-3xl border bg-card p-6 shadow-xl shadow-primary/5 sm:p-8"
+        style={{ animationDelay: '70ms' }}
+      >
+        <span className="brand-gradient absolute inset-x-0 top-0 h-1" aria-hidden="true" />
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
-        <div className="space-y-2">
-          <Label htmlFor="phone">رقم الهاتف</Label>
-          <div className="relative">
-            <PhoneIcon className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="phone"
-              type="tel"
-              inputMode="numeric"
-              dir="ltr"
-              maxLength={9}
-              placeholder="7xxxxxxxx"
-              className="ps-10 text-start"
-              {...form.register('phone')}
-            />
-          </div>
-          {form.formState.errors.phone && (
-            <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+        <div className="space-y-6">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password">كلمة المرور</Label>
-          <div className="relative">
-            <Lock className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="••••••••"
-              className="ps-10 pe-10"
-              {...form.register('password')}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
+            <div className="space-y-2">
+              <Label htmlFor="phone">رقم الهاتف</Label>
+              <div className="relative">
+                <PhoneIcon className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  dir="ltr"
+                  maxLength={9}
+                  placeholder="7xxxxxxxx"
+                  className="h-11 rounded-xl ps-10 text-start"
+                  {...form.register('phone')}
+                />
+              </div>
+              {form.formState.errors.phone && (
+                <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">كلمة المرور</Label>
+              </div>
+              <div className="relative">
+                <Lock className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="h-11 rounded-xl ps-10 pe-10"
+                  {...form.register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {form.formState.errors.password && (
+                <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              className="brand-gradient h-11 w-full gap-2 rounded-xl text-base font-extrabold text-white shadow-lg shadow-primary/30 transition-all enabled:hover:scale-[1.02] enabled:active:scale-[0.99]"
+              disabled={form.formState.isSubmitting}
             >
-              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-          {form.formState.errors.password && (
-            <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
-          )}
+              {form.formState.isSubmitting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  جارٍ تسجيل الدخول...
+                </>
+              ) : (
+                <>
+                  <LogIn className="size-4" />
+                  تسجيل الدخول
+                </>
+              )}
+            </Button>
+          </form>
         </div>
+      </div>
 
-        <Button type="submit" className="w-full gap-2" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              جارٍ تسجيل الدخول...
-            </>
-          ) : (
-            <>
-              <LogIn className="size-4" />
-              تسجيل الدخول
-            </>
-          )}
-        </Button>
-      </form>
+      {/* ---------- شارات الثقة ---------- */}
+      <div
+        className="auth-rise flex flex-wrap items-center justify-center gap-2"
+        style={{ animationDelay: '140ms' }}
+      >
+        {TRUST_CHIPS.map((t) => (
+          <span
+            key={t.text}
+            className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-[11px] font-bold text-muted-foreground"
+          >
+            <t.icon className="size-3.5 text-primary" />
+            {t.text}
+          </span>
+        ))}
+      </div>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="auth-rise text-center text-sm text-muted-foreground" style={{ animationDelay: '200ms' }}>
         ليس لديك حساب؟{' '}
-        <Link href="/register" className="font-semibold text-primary hover:underline">
-          إنشاء حساب جديد
+        <Link href="/register" className="font-bold text-primary underline-offset-4 hover:underline">
+          أنشئ حساباً جديداً
         </Link>
       </p>
     </div>

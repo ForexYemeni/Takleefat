@@ -133,15 +133,15 @@ const PW_STRENGTH = [
   { label: 'قوية', text: 'text-emerald-600 dark:text-emerald-400', bar: 'bg-emerald-500' },
 ]
 
-/** رأس قسم مرقّم — يوحّد إيقاع الصفحة بصرياً */
+/** رأس قسم مرقّم — يوحّد إيقاع الصفحة بصرياً (الجولة 52: شارة متدرجة) */
 function SectionHead({ step, title, hint }: { step: number; title: string; hint?: string }) {
   return (
-    <div className="flex items-start gap-2.5">
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-extrabold text-primary">
+    <div className="flex items-start gap-3">
+      <span className="brand-gradient flex size-8 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold text-white shadow-md shadow-primary/25">
         {step}
       </span>
       <div className="min-w-0">
-        <h2 className="text-sm font-extrabold leading-tight">{title}</h2>
+        <h2 className="text-base font-extrabold leading-tight">{title}</h2>
         {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
       </div>
     </div>
@@ -211,11 +211,12 @@ export default function RegisterPage() {
       return next
     })
 
-  /** صنف غلاف الحقل: اهتزاز + أحمر عند وجود خطأ (مع مفتاح يعيد الحركة) */
-  const fieldWrap = (field: string) => ({
-    key: `${field}-${fieldErrors[field] ? shakeTick : 'ok'}`,
-    className: cn('space-y-2', fieldErrors[field] && 'field-error field-error-shake'),
-  })
+  /** صنف غلاف الحقل: اهتزاز + أحمر عند وجود خطأ */
+  const fieldWrap = (field: string) =>
+    cn('space-y-2', fieldErrors[field] && 'field-error field-error-shake')
+
+  /** مفتاح إعادة تركيب غلاف الحقل لإعادة تشغيل حركة الاهتزاز (React 19: key يُمرّر مباشرة لا عبر النشر) */
+  const fk = (field: string) => `${field}-${fieldErrors[field] ? shakeTick : 'ok'}`
 
   useEffect(() => {
     fetch('/api/departments/public')
@@ -380,12 +381,15 @@ export default function RegisterPage() {
   return (
     <div className="space-y-6">
       {/* ---------- رأس الصفحة ---------- */}
-      <div className="space-y-3 text-center lg:text-start">
-        <span className="brand-gradient mx-auto flex size-12 items-center justify-center rounded-2xl text-white shadow-lg shadow-primary/25 lg:mx-0">
-          <UserPlus className="size-6" />
+      <div className="auth-rise space-y-3 text-center lg:text-start">
+        <span className="relative mx-auto flex size-14 items-center justify-center lg:mx-0" aria-hidden="true">
+          <span className="brand-gradient absolute inset-0 flex items-center justify-center rounded-2xl text-white shadow-lg shadow-primary/30">
+            <UserPlus className="size-7" />
+          </span>
+          <span className="absolute inset-0 animate-ping rounded-2xl bg-primary/25 [animation-duration:2.4s]" />
         </span>
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-extrabold">إنشاء حساب جديد</h1>
+          <h1 className="text-2xl font-black sm:text-3xl">أنشئ حسابك المهني</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
             سجّل في منصة تكليفات | Takleefat — اختر نوع الحساب المناسب لك ثم أكمل البيانات،
             وسيصلك إشعار فوري بعد مراجعة الإدارة واعتماد حسابك
@@ -401,7 +405,10 @@ export default function RegisterPage() {
 
       <form onSubmit={onSubmit} className="space-y-7" noValidate>
         {/* ---------- ① اختيار نوع الحساب — بطاقات غنية ---------- */}
-        <section className="space-y-3">
+        <section
+          className="auth-rise space-y-4 rounded-3xl border bg-card/70 p-5 shadow-sm backdrop-blur-sm sm:p-6"
+          style={{ animationDelay: '60ms' }}
+        >
           <SectionHead step={1} title="اختر نوع الحساب" hint="نوع الحساب يحدد لوحتك وصلاحياتك داخل المنصة" />
 
           <div className="grid gap-2.5" role="radiogroup" aria-label="نوع الحساب">
@@ -415,8 +422,8 @@ export default function RegisterPage() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => setRole(r.id)}
-                  className={`group relative flex items-center gap-3 rounded-2xl border-2 p-3.5 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                    active ? `${r.selected} shadow-sm ring-2` : 'border-border bg-card hover:border-primary/40'
+                  className={`group relative flex items-center gap-3 rounded-2xl border-2 p-3.5 text-start transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                    active ? `${r.selected} shadow-md ring-2` : 'border-border bg-card hover:border-primary/40'
                   }`}
                 >
                   <span
@@ -480,11 +487,14 @@ export default function RegisterPage() {
         </section>
 
         {/* ---------- ② البيانات الأساسية ---------- */}
-        <section className="space-y-4">
+        <section
+          className="auth-rise space-y-4 rounded-3xl border bg-card/70 p-5 shadow-sm backdrop-blur-sm sm:p-6"
+          style={{ animationDelay: '120ms' }}
+        >
           <SectionHead step={2} title="البيانات الأساسية" hint="بيانات الدخول والتواصل — تأكد من صحتها" />
 
           {/* الاسم مع اللقب — حقل واحد: اسمين حصراً (الجولة 45) */}
-          <div id="reg-name-wrap" {...fieldWrap('name')}>
+          <div id="reg-name-wrap" key={fk('name')} className={fieldWrap('name')}>
             <Label htmlFor="name">الاسم واللقب — اسمين فقط *</Label>
             <Input
               id="name"
@@ -505,7 +515,7 @@ export default function RegisterPage() {
           </div>
 
           {/* الهاتف — 9 أرقام حصراً */}
-          <div id="reg-phone-wrap" {...fieldWrap('phone')}>
+          <div id="reg-phone-wrap" key={fk('phone')} className={fieldWrap('phone')}>
             <Label htmlFor="phone">رقم الهاتف *</Label>
             <div className="relative">
               <PhoneIcon className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -533,7 +543,10 @@ export default function RegisterPage() {
         </section>
 
         {/* ---------- ③ البيانات المهنية / الجهة الصحية ---------- */}
-        <section className="space-y-4">
+        <section
+          className="auth-rise space-y-4 rounded-3xl border bg-card/70 p-5 shadow-sm backdrop-blur-sm sm:p-6"
+          style={{ animationDelay: '180ms' }}
+        >
           {(role === 'NURSE' || role === 'DOCTOR') ? (
             <SectionHead
               step={3}
@@ -549,7 +562,7 @@ export default function RegisterPage() {
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* التخصص — إجباري من كتالوجات الإدارة (أقسام للكادر / تخصصات طبية للطبيب) */}
-                <div id="reg-specialty-wrap" {...fieldWrap('specialty')}>
+                <div id="reg-specialty-wrap" key={fk('specialty')} className={fieldWrap('specialty')}>
                   <Label htmlFor="specialty">{role === 'DOCTOR' ? 'التخصص الطبي *' : 'التخصص *'}</Label>
                   {(role === 'DOCTOR' ? specialties : departments).length === 0 ? (
                     <>
@@ -593,7 +606,7 @@ export default function RegisterPage() {
                   )}
                 </div>
                 {/* سنوات الخبرة — إجبارية */}
-                <div id="reg-yearsOfExperience-wrap" {...fieldWrap('yearsOfExperience')}>
+                <div id="reg-yearsOfExperience-wrap" key={fk('yearsOfExperience')} className={fieldWrap('yearsOfExperience')}>
                   <Label htmlFor="yearsOfExperience">سنوات الخبرة *</Label>
                   <Input
                     id="yearsOfExperience"
@@ -620,7 +633,7 @@ export default function RegisterPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* المؤهل العلمي — خيارات الدور (3 للكادر / 4 للطبيب) */}
-                <div id="reg-qualification-wrap" {...fieldWrap('qualification')}>
+                <div id="reg-qualification-wrap" key={fk('qualification')} className={fieldWrap('qualification')}>
                   <Label htmlFor="qualification">المؤهل العلمي *</Label>
                   <Select
                     value={qualification}
@@ -651,7 +664,7 @@ export default function RegisterPage() {
                   )}
                 </div>
                 {/* الجنس — إجباري */}
-                <div id="reg-gender-wrap" {...fieldWrap('gender')}>
+                <div id="reg-gender-wrap" key={fk('gender')} className={fieldWrap('gender')}>
                   <Label>الجنس *</Label>
                   <Select
                     value={gender}
@@ -822,10 +835,13 @@ export default function RegisterPage() {
         </section>
 
         {/* ---------- ④ كلمة المرور + مؤشر القوة ---------- */}
-        <section className="space-y-4">
+        <section
+          className="auth-rise space-y-4 rounded-3xl border bg-card/70 p-5 shadow-sm backdrop-blur-sm sm:p-6"
+          style={{ animationDelay: '240ms' }}
+        >
           <SectionHead step={4} title="أمان الحساب" hint="كلمة مرور قوية تحمي حسابك المهني" />
 
-          <div id="reg-password-wrap" {...fieldWrap('password')}>
+          <div id="reg-password-wrap" key={fk('password')} className={fieldWrap('password')}>
             <Label htmlFor="password">كلمة المرور *</Label>
             <div className="relative">
               <Lock className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -857,7 +873,7 @@ export default function RegisterPage() {
                   {[0, 1, 2, 3].map((i) => (
                     <span
                       key={i}
-                      className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
+                      className={`h-2 flex-1 rounded-full transition-all duration-500 ${
                         i < pwScore ? pw.bar : 'bg-secondary'
                       }`}
                     />
@@ -877,7 +893,13 @@ export default function RegisterPage() {
         </section>
 
         {/* ---------- زر الإنشاء ---------- */}
-        <Button type="submit" size="lg" className="w-full gap-2 text-base" disabled={submitting}>
+        <Button
+          type="submit"
+          size="lg"
+          className="auth-rise brand-gradient h-12 w-full gap-2 rounded-xl text-base font-extrabold text-white shadow-lg shadow-primary/30 transition-all enabled:hover:scale-[1.02] enabled:active:scale-[0.99]"
+          style={{ animationDelay: '300ms' }}
+          disabled={submitting}
+        >
           {submitting ? (
             <>
               <Loader2 className="size-5 animate-spin" />
@@ -893,7 +915,7 @@ export default function RegisterPage() {
       </form>
 
       {/* ---------- شارات الثقة ---------- */}
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      <div className="auth-rise flex flex-wrap items-center justify-center gap-2" style={{ animationDelay: '340ms' }}>
         {TRUST_CHIPS.map((t) => (
           <span
             key={t.text}
@@ -910,7 +932,7 @@ export default function RegisterPage() {
         قبل تفعيل الحساب — سواء كان حساب كادر تمريضي أو طبيب أو مستلم إداري.
       </p>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="auth-rise text-center text-sm text-muted-foreground" style={{ animationDelay: '400ms' }}>
         لديك حساب بالفعل؟{' '}
         <Link href="/login" className="font-semibold text-primary hover:underline">
           تسجيل الدخول
