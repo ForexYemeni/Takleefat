@@ -350,3 +350,92 @@
     animation: none !important;
   }
 }
+
+/* ============================================================
+   الجولة 53 — معالج التسجيل متعدد الخطوات (Wizard)
+   انتقالات اتجاهية + نبض الخطوة النشطة + رسم علامة النجاح
+   ============================================================ */
+
+/* دخول الخطوة — اتجاهي: المضيّ ققدماً يدخل من اليسار (RTL)، والرجوع من اليمين */
+@keyframes step-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(-26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes step-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.step-in-next {
+  animation: step-in-next 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.step-in-back {
+  animation: step-in-back 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* نبض هادئ حول دائرة الخطوة النشطة */
+@keyframes step-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.546 0.215 262 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 7px oklch(0.546 0.215 262 / 0);
+  }
+}
+.step-pulse {
+  animation: step-pulse 2.2s ease-in-out infinite;
+}
+
+/* شاشة النجاح — ظهور مرن + رسم علامة صح بالخط */
+@keyframes success-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.success-pop {
+  animation: success-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes draw-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.draw-check {
+  stroke-dasharray: 36;
+  stroke-dashoffset: 36;
+  animation: draw-check 0.6s ease-out 0.3s forwards;
+}
+
+/* احترام تفضيل تقليل الحركة — للأنماط الجديدة أيضاً */
+@media (prefers-reduced-motion: reduce) {
+  .step-in-next,
+  .step-in-back,
+  .step-pulse,
+  .success-pop {
+    animation: none !important;
+  }
+  .draw-check {
+    animation: none !important;
+    stroke-dashoffset: 0;
+  }
+}
