@@ -47,6 +47,19 @@ export function apiPut<T>(url: string, body: unknown): Promise<T> {
   })
 }
 
-export function apiDelete<T>(url: string): Promise<T> {
-  return apiFetcher<T>(url, { method: 'DELETE' })
+/**
+ * الجولة 57: body اختياري — يُستخدم مثلاً لتأكيد كلمة مرور الإدارة عند الحذف الحساس.
+ * الاستدعاءات القديمة apiDelete(url) تعمل كما هي دون تغيير.
+ */
+export function apiDelete<T>(url: string, body?: unknown): Promise<T> {
+  return apiFetcher<T>(
+    url,
+    body !== undefined
+      ? {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      : { method: 'DELETE' }
+  )
 }

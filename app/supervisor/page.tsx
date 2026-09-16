@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
-import { BadgeCheck, CheckCircle2, Inbox, ClipboardList, ShieldAlert, Users } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, Inbox, ClipboardList, Users } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
 import { formatDate, formatCurrency, POST_STATUS_LABELS } from '@/lib/utils'
 import { DashboardSkeleton } from '@/components/shared/empty-state'
@@ -12,8 +12,9 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PromoBanner } from '@/components/shared/promo-banner'
+// الجولة 57 — لافتة الحالة الموحدة الأنيقة
+import { AccountStatusBanner } from '@/components/shared/verification-checklist'
 
 interface ReceiverStats {
   myAssignments: number
@@ -150,34 +151,22 @@ export default function ReceiverOverviewPage() {
         />
       )}
 
-      {/* حالة الحساب */}
+      {/* حالة الحساب — لافتة موحدة أنيقة (الجولة 57) */}
       {status === 'PENDING' && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
-          <ShieldAlert className="size-4" />
-          <AlertTitle className="font-bold">حسابك بانتظار اعتماد الإدارة</AlertTitle>
-          <AlertDescription className="leading-relaxed">
-            يمكنك تسجيل الدخول ومتابعة حسابك فوراً — لكن إنشاء التكليفات غير متاح إلا بعد
-            اعتماد حسابك من إدارة المنصة. سيصلك إشعار فور الاعتماد.
-          </AlertDescription>
-        </Alert>
+        <AccountStatusBanner status="PENDING" featureLabel="إنشاء التكليفات" />
       )}
       {status === 'SUSPENDED' && (
-        <Alert variant="destructive" className="border-red-200 bg-red-50">
-          <ShieldAlert className="size-4" />
-          <AlertTitle className="font-bold">تم إيقاف حسابك مؤقتاً</AlertTitle>
-          <AlertDescription>
-            لا يمكنك إنشاء تكليفات حالياً — يرجى التواصل مع إدارة المنصة.
-          </AlertDescription>
-        </Alert>
+        <AccountStatusBanner
+          status="SUSPENDED"
+          suspendedDescription="لا يمكنك إنشاء تكليفات حالياً — يرجى التواصل مع إدارة المنصة."
+        />
       )}
+      {status === 'REJECTED' && <AccountStatusBanner status="REJECTED" />}
       {status === 'APPROVED' && (
-        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
-          <BadgeCheck className="size-4" />
-          <AlertTitle className="font-bold">حسابك معتمد</AlertTitle>
-          <AlertDescription>
-            يمكنك إنشاء التكليفات ومتابعة التكليفات الواردة إليك وتوثيق استلامها إلكترونياً.
-          </AlertDescription>
-        </Alert>
+        <AccountStatusBanner
+          status="APPROVED"
+          approvedDescription="يمكنك إنشاء التكليفات ومتابعة التكليفات الواردة إليك وتوثيق استلامها إلكترونياً."
+        />
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">

@@ -3,13 +3,11 @@
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
-  AlertCircle,
   BadgeCheck,
   CheckCircle2,
   ClipboardList,
   FileUp,
   Hourglass,
-  RotateCcw,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -23,8 +21,9 @@ import { ActiveAssignmentCard, type ActiveAssignmentData } from '@/components/sh
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PromoBanner } from '@/components/shared/promo-banner'
+// الجولة 57 — قائمة التحقق التفاعلية + لافتة الحالة الموحدة
+import { VerificationChecklist, AccountStatusBanner } from '@/components/shared/verification-checklist'
 
 interface NurseStats {
   myAssignments: number
@@ -32,6 +31,8 @@ interface NurseStats {
   completedAssignments: number
   pendingDocuments: number
   approvedDocuments: number
+  /** الجولة 57: لقائمة التحقق التفاعلية */
+  rejectedDocuments?: number
 }
 
 interface MyAssignment {
@@ -256,51 +257,32 @@ export default function NurseOverviewPage() {
           />
         ))}
 
-      {/* حالة الحساب */}
-      {status === 'PENDING' && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
-          <Hourglass className="size-4" />
-          <AlertTitle className="font-bold">حسابك قيد المراجعة</AlertTitle>
-          <AlertDescription className="leading-relaxed">
-            يمكنك تسجيل الدخول ومتابعة حسابك فوراً — لكن لن يكون التقديم على التكليفات متاحاً
-            إلا بعد رفع مستنداتك (الهوية وصورة المزاولة) واعتماد حسابك من الإدارة. ارفع
-            مستنداتك الآن لتسريع الاعتماد — سيصلك إشعار فور اعتماد الحساب.
-          </AlertDescription>
-        </Alert>
-      )}
-      {status === 'REJECTED' && (
-        <Alert variant="destructive" className="border-red-200 bg-red-50">
-          <AlertCircle className="size-4" />
-          <AlertTitle className="font-bold">لم يتم اعتماد حسابك</AlertTitle>
-          <AlertDescription className="space-y-3 leading-relaxed">
-            {session?.user && (
-              <p>
-                يرجى تحديث مستنداتك ثم إعادة تقديم الحساب للمراجعة. يمكنك التواصل مع إدارة
-                المنصة لمعرفة التفاصيل.
-              </p>
-            )}
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={resubmit}
-              disabled={resubmitting}
-              className="gap-2"
-            >
-              <RotateCcw className="size-4" />
-              {resubmitting ? 'جارٍ إعادة التقديم...' : 'إعادة التقديم للمراجعة'}
-            </Button>
-          </AlertDescription>
-        </Alert>
+      {/* حالة الحساب — الجولة 57: قائمة تحقق تفاعلية حية بدل التنبيه النصي الثابت */}
+      {(status === 'PENDING' || status === 'REJECTED') && (
+        <VerificationChecklist
+          status={status}
+          role="DOCTOR"
+          documents={{
+            uploaded:
+              (stats.data?.pendingDocuments ?? 0) +
+              (stats.data?.approvedDocuments ?? 0) +
+              (stats.data?.rejectedDocuments ?? 0),
+            pending: stats.data?.pendingDocuments ?? 0,
+            approved: stats.data?.approvedDocuments ?? 0,
+            rejected: stats.data?.rejectedDocuments ?? 0,
+          }}
+          documentsHref="/doctor/documents"
+          onResubmit={resubmit}
+          resubmitting={resubmitting}
+        />
       )}
       {status === 'APPROVED' && (
-        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
-          <BadgeCheck className="size-4" />
-          <AlertTitle className="font-bold">حسابك معتمد</AlertTitle>
-          <AlertDescription>
-            يمكنك استلام التكليفات المسندة إليك ومتابعتها من صفحة «تكليفاتي».
-          </AlertDescription>
-        </Alert>
+        <AccountStatusBanner
+          status="APPROVED"
+          approvedDescription="يمكنك التقديم على التكليفات المتاحة واستلام التكليفات المسندة إليك ومتابعتها من صفحة «تكليفاتي»."
+        />
       )}
+      {status === 'SUSPENDED' && <AccountStatusBanner status="SUSPENDED" />}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (

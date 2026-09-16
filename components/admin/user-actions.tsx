@@ -5,8 +5,10 @@ import {
   BadgeCheck,
   Ban,
   Eye,
+  EyeOff,
   IdCard,
   KeyRound,
+  Loader2,
   MoreHorizontal,
   Percent,
   PlayCircle,
@@ -16,6 +18,7 @@ import {
   UserX,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useSession } from 'next-auth/react'
 import { apiPatch, apiDelete } from '@/lib/api-client'
 import { USER_STATUS_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -77,6 +80,11 @@ export function UserActionsMenu({
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  // الجولة 57 — تأكيد الحذف بكلمة مرور الإدارة
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [showDeletePassword, setShowDeletePassword] = useState(false)
+  const { data: session } = useSession()
   // الجولة 32 — نِسَب الحصة وأذونات البيانات الكاملة (المستلم الإداري ومشرف الأطباء)
   const [percentOpen, setPercentOpen] = useState(false)
   const [percentValue, setPercentValue] = useState<string>('')
@@ -88,7 +96,6 @@ export function UserActionsMenu({
   const [confirmAction, setConfirmAction] = useState<
     | { kind: 'APPROVED' }
     | { kind: 'SUSPENDED' }
-    | { kind: 'DELETE' }
     | null
   >(null)
 
@@ -129,14 +136,21 @@ export function UserActionsMenu({
   }
 
   const deleteMutation = async () => {
+    if (!deletePassword.trim()) return
     setPending(true)
     try {
-      const res = await apiDelete<{ message: string }>(`/api/admin/users/${user.id}`)
+      const res = await apiDelete<{ message: string }>(`/api/admin/users/${user.id}`, {
+        password: deletePassword,
+      })
       toast.success(res.message)
-      setConfirmAction(null)
+      setDeleteOpen(false)
+      setDeletePassword('')
+      setShowDeletePassword(false)
       invalidate()
     } catch (e) {
       toast.error((e as Error).message)
+    } finally {
+      setPending(false)
     }
   }
 
@@ -193,8 +207,9 @@ export function UserActionsMenu({
 
   const [pending, setPending] = useState(false)
 
-  // سياسة الاعتماد: كادر تمريضي بلا مستندات مرفوعة لا يمكن اعتماده إطلاقاً
-  const documentsMissing = user.role === 'NURSE' && (user.documentsCount ?? 0) === 0
+  // سياسة الاعتماد (الجولة 34 + 57): كادر تمريضي أو طبيب بلا مستندات مرفوعة لا يمكن اعتماده إطلاقاً
+  const documentsMissing =
+    (user.role === 'NURSE' || user.role === 'DOCTOR') && (user.documentsCount ?? 0) === 0
 
   // الجولة 32 — حسابات المستلمين/المشرفين: نسبة الحصة + أذونات البيانات الكاملة
   const shareManaged = user.role === 'RECEIVER' || user.role === 'DOCTOR_SUPERVISOR'
@@ -341,7 +356,11 @@ export function UserActionsMenu({
             تعيين كلمة مرور جديدة
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => setConfirmAction({ kind: 'DELETE' })}
+            onClick={() => {
+              setDeletePassword('')
+              setShowDeletePassword(false)
+              setDeleteOpen(true)
+            }}
             className="gap-2 text-red-600 focus:text-red-600"
           >
             <Trash2 className="size-4" />
@@ -606,7 +625,7 @@ export function UserActionsMenu({
         description={
           user.status === 'SUSPENDED'
             ? `سيتمكن ${user.name} من تسجيل الدخول واستخدام المنصة مجدداً بعد إعادة التنشيط.`
-            : user.role === 'NURSE'
+            : user.role === 'NURSE' || user.role === 'DOCTOR'
               ? `بعد الاعتماد يستطيع ${user.name} تسجيل الدخول والتقديم على التكليفات فوراً — تم التحقق من وجود مستنداته المرفوعة.`
               : `بعد الاعتماد يستطيع ${user.name} تسجيل الدخول وإنشاء التكليفات فوراً.`
         }
@@ -633,17 +652,96 @@ export function UserActionsMenu({
         }}
       />
 
-      <ConfirmDialog
-        open={confirmAction?.kind === 'DELETE'}
-        onOpenChange={(v) => !v && setConfirmAction(null)}
-        tone="danger"
-        icon={Trash2}
-        title="حذف الحساب نهائياً"
-        description={`سيتم حذف حساب ${user.name} نهائياً مع جميع مستنداته وتقديماته وتكليفاته وإشعاراته. هذا الإجراء لا يمكن التراجع عنه!`}
-        confirmLabel="نعم، احذف نهائياً"
-        processing={pending}
-        onConfirm={deleteMutation}
-      />
+      {/* الجولة 57 — تأكيد الحذف بكلمة مرور الإدارة: بوابة هوية إلزامية
+          قبل أي حذف نهائي لحساب (مستلم إداري / مشرف أطباء / طبيب / كادر تمريضي)
+          — الخادم يرفض أي حذف بلا كلمة مرور صحيحة حتى لو تسرب الجلسة */}
+      <Dialog open={deleteOpen} onOpenChange={(v) => !pending && setDeleteOpen(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2.5">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-4 ring-red-500/10">
+                <Trash2 className="size-5" />
+              </span>
+              <span className="text-red-700">حذف الحساب نهائياً</span>
+            </DialogTitle>
+            <DialogDescription>
+              سيتم حذف حساب {user.name} نهائياً من منصة تكليفات — هذا الإجراء لا يمكن
+              التراجع عنه إطلاقاً.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* ما سيُحذف */}
+            <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5 text-xs leading-relaxed text-red-800">
+              <p className="font-extrabold">ما سيُحذف مع الحساب:</p>
+              <p className="mt-1">
+                المستندات المرفوعة • التقديمات • التكليفات المرتبطة • التكليفات المُعلنة •
+                الإشعارات — <span className="font-extrabold">لا استرجاع ولا عودة بعد التأكيد</span>.
+              </p>
+            </div>
+
+            {/* بوابة الهوية: كلمة مرور حساب الإدارة */}
+            <div className="space-y-2">
+              <Label htmlFor={`del-pwd-${user.id}`} className="font-bold">
+                كلمة مرور حساب الإدارة الخاص بك
+                {session?.user?.name ? ` — ${session.user.name}` : ''}
+              </Label>
+              <div className="relative">
+                <Input
+                  id={`del-pwd-${user.id}`}
+                  type={showDeletePassword ? 'text' : 'password'}
+                  dir="ltr"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && deletePassword.trim() && !pending) deleteMutation()
+                  }}
+                  className="pe-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowDeletePassword((v) => !v)}
+                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={showDeletePassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showDeletePassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal-600" />
+                بوابة أمان إضافية: لن يُنفَّذ الحذف إلا بعد التحقق من كلمة مرور حسابك الإداري
+                على الخادم — حماية من أي ضغطة خاطئة أو استخدام غير مصرح بجهازك.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={pending}>
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteMutation}
+              disabled={pending || !deletePassword.trim()}
+              className="gap-2"
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  جارٍ الحذف النهائي...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-4" />
+                  تأكيد الحذف النهائي
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

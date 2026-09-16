@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { hash } from 'bcryptjs'
+import { compare, hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema, trustedContactViewerSchema } from '@/lib/validations/user'
@@ -423,16 +423,40 @@ export async function PATCH(
 
 /**
  * DELETE /api/admin/users/[id] — حذف نهائي للحساب
+ * الجولة 57 — البلاغ الحرفي: «عند حذف مستلم اداري او مشرف اطباء او طبيب او
+ * كادر تمريضي يجب ان تظهر تاكيد بكلمة المرور الخاصة بحساب الادارة»:
+ * الحذف يتطلب إرسال { password } — كلمة مرور حساب الإدارة الجالس حالياً —
+ * وتُتحقق بمقارنة bcrypt قبل أي حذف. بلا كلمة مرور صحيحة لا حذف إطلاقاً.
  * يُحذف الحساب بكل بياناته المرتبطة (مستندات، تقديمات، تكليفات، إشعارات)
  * داخل معاملة واحدة. لا ينطبق على حسابات المديرين.
  */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireRole('ADMIN')
     const { id } = await params
+
+    // ---------- بوابة تأكيد الهوية: كلمة مرور حساب الإدارة إلزامية ----------
+    const body = (await req.json().catch(() => ({}))) as { password?: unknown } | null
+    const adminPassword =
+      body && typeof body === 'object' && typeof body.password === 'string' ? body.password : ''
+
+    if (!adminPassword.trim()) {
+      return jsonError('تأكيد كلمة مرور حساب الإدارة مطلوب لحذف الحساب — هذا الإجراء لا يمكن التراجع عنه', 422)
+    }
+
+    const admin = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { password: true },
+    })
+    if (!admin) return jsonError('حساب الإدارة غير موجود', 404)
+
+    const passwordValid = await compare(adminPassword, admin.password)
+    if (!passwordValid) {
+      return jsonError('كلمة مرور حساب الإدارة غير صحيحة — لم يتم حذف الحساب', 403)
+    }
 
     const target = await db.user.findUnique({
       where: { id },
