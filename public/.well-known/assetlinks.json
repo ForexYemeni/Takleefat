@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.takleefat.app",
+      "sha256_cert_fingerprints": [
+        "1A:07:5E:3D:C0:4C:A3:0C:59:A3:8A:28:13:95:DF:8B:94:BF:39:70:CC:35:DF:FC:47:83:0F:C9:19:A9:8E:42"
+      ]
+    }
+  }
+]

@@ -48,7 +48,7 @@ Thumbs.db
 
 # ---------- مجلدات بيئة العمل (غير جزء من المشروع) ----------
 .zscripts/
-download/
+/download/
 
 examples/
 tests/
@@ -59,7 +59,7 @@ agent-ctx/
 Caddyfile
 vercel-errors.log
 worklog.md
-download/
+/download/
 tool-results/
 scripts/e2e-tmp/
 db/
@@ -67,3 +67,8 @@ db/
 # ملفات تشخيص جلسات إعادة الإنتاج — محلية فقط
 scripts/repro-tmp/
 scripts/e2e-tmp/
+
+# أدوات بناء APK والمفاتيح — محلية فقط (الجولة 54)
+scripts/apk/
+scripts/android-build/
+scripts/android-sdk/
