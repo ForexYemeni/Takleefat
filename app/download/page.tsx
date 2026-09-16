@@ -98,7 +98,7 @@ export default function DownloadPage() {
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <Logo className="h-9 w-9" />
+            <Logo className="h-9 w-9" showText={false} />
             <div className="leading-tight">
               <p className="text-sm font-bold">تكليفات | Takleefat</p>
               <p className="text-xs text-muted-foreground">تطبيق أندرويد الرسمي</p>
