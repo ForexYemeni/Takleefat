@@ -72,3 +72,7 @@ scripts/e2e-tmp/
 scripts/apk/
 scripts/android-build/
 scripts/android-sdk/
+
+# سكربتات جلسة إعداد الأدوات — محلية فقط
+scripts/download-android-tools.sh
+scripts/init-fullstack-inspect.sh
