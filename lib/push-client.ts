@@ -45,8 +45,20 @@ export function isStandalone(): boolean {
   )
 }
 
+/** هل نعمل داخل تطبيق أندرويد الأصلي (APK)؟ — وجود جسر TakleefatBridge — الجولة 55 */
+export function isAndroidApp(): boolean {
+  if (typeof window === 'undefined') return false
+  return (
+    typeof (window as unknown as { TakleefatBridge?: unknown }).TakleefatBridge !== 'undefined'
+  )
+}
+
 export function isPushSupported(): boolean {
   if (typeof window === 'undefined') return false
+  // الجولة 55 — داخل تطبيق أندرويد الأصلي: الإشعارات تُدار أصلياً من التطبيق
+  // نفسه (خدمة تنبيهات نظامية بلا وسيط متصفح) — لذا يختفي كل واجهة Web Push
+  // ولا يُطلب أي اشتراك متصفح داخل التطبيق.
+  if (isAndroidApp()) return false
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 }
 

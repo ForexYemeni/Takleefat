@@ -222,6 +222,9 @@ model User {
   receivedAssignments  Assignment[]       @relation("ReceiverAssignments")
   createdAssignments   Assignment[]       @relation("AssignmentCreator")
   notifications        Notification[]
+  // ---------- الجولة 55: الإشعارات الأصلية لتطبيق أندرويد ----------
+  // أجهزة الهاتف المرتبطة بالحساب لاستقبال تنبيهات أصلية حتى مع إغلاق التطبيق
+  deviceRegistrations  DeviceRegistration[]
   assignmentLogs       AssignmentLog[]
   documentsReviewed    Document[]         @relation("DocumentReviewer")
   posts                Post[]
@@ -708,6 +711,34 @@ model PushSubscription {
   @@unique([userId, endpoint])
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+/// تسجيلات أجهزة أندرويد الأصلية — الجولة 55
+/// يربط جهاز الهاتف (تطبيق APK الأصلي) بحساب المستخدم لاستقبال إشعارات
+/// أصلية من التطبيق نفسه (بلا وسيط متصفح) عبر خدمة التنبيهات الأمامية
+/// التي تعمل حتى لو كان التطبيق مغلق تماماً — إضافي بحت ولا يمس أي نظام قائم
+model DeviceRegistration {
+  id       String @id @default(cuid())
+  /// معرف الجهاز الفريد — UUID يولّده التطبيق ويخزنه محلياً
+  deviceId String @unique
+  /// سر التحقق الخاص بالجهاز — يُنشأ على الجهاز ويُطابق عند كل استعلام
+  secret   String
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// موديل الجهاز (للتشخيص والإحصاء)
+  model      String?
+  /// إصدار تطبيق أندرويد المثبت
+  appVersion String?
+  platform   String  @default("android")
+  /// مؤشر التسليم — لا تُسلّم الإشعارات الأقدم منه (يُدار من مسار poll)
+  lastDeliveredAt DateTime @default(now())
+  /// غير مفعّل عند تسجيل الخروج أو فصل الجهاز
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("device_registrations")
 }
 
 /// الارتباط المهني — يربط الكادر التمريضي بجهة صحية مع تحديد طبيعة العلاقة
