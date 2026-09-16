@@ -29,7 +29,7 @@ const APK_URL = 'https://github.com/ForexYemeni/Takleefat/releases/latest/downlo
 const APK_FALLBACK = '/app/takleefat.apk'
 
 const APK_INFO = [
-  { label: 'الإصدار', value: '2.0.0' },
+  { label: 'الإصدار', value: '2.0.1' },
   { label: 'أندرويد', value: '8.0+' },
   { label: 'الحجم', value: '~1MB' },
   { label: 'السعر', value: 'مجاني' },
