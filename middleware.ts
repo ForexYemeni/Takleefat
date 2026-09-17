@@ -43,16 +43,18 @@ export async function middleware(req: NextRequest) {
     { prefix: '/supervisor', allowedRole: 'DOCTOR_SUPERVISOR' },
   ]
 
+  // الجولة 60 — الصلاحيات المركّبة:
+  // التوكن (JWT) لا يتحدّث تلقائياً بعد منح/سحب صلاحية أثناء الجلسة، لذلك
+  // لا يمكن لهنا الحكم النهائي بالاعتماد على token.role فقط وإلا مُنع صاحب
+  // الصلاحية الممنوحة حديثاً من لوحته. الحارس النهائي هو layout كل لوحة:
+  // يقرأ الجلسة الحية (الدور الأساسي + الصلاحيات المركّبة + الوضع النشط من
+  // القاعدة لحظياً) ويرفض ويحوّل من لا يملك الصلاحية.
+  // هنا نكتفي ببوابة الدخول: لا توكن → صفحة الدخول.
   for (const rule of rules) {
-    if (pathname.startsWith(rule.prefix)) {
-      if (!token) {
-        const loginUrl = new URL('/login', req.url)
-        loginUrl.searchParams.set('callbackUrl', pathname)
-        return NextResponse.redirect(loginUrl)
-      }
-      if (role !== rule.allowedRole) {
-        return NextResponse.redirect(new URL(ROLE_HOME[role ?? ''] ?? '/', req.url))
-      }
+    if (pathname.startsWith(rule.prefix) && !token) {
+      const loginUrl = new URL('/login', req.url)
+      loginUrl.searchParams.set('callbackUrl', pathname)
+      return NextResponse.redirect(loginUrl)
     }
   }
 

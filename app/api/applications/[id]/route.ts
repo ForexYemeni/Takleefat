@@ -36,8 +36,10 @@ export async function PATCH(
     })
     if (!application) return jsonError('التقديم غير موجود', 404)
 
+    // الجولة 60 — الوضع النشط: مراجعة التقديمات بوضع اللوحة المفتوحة
+    const role = session.user.activeRole ?? session.user.role
     if (
-      (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') &&
+      (role === 'RECEIVER' || role === 'DOCTOR_SUPERVISOR') &&
       application.post.receiverId !== session.user.id
     ) {
       throw new ApiError('يمكنك مراجعة تقديمات تكليفاتك فقط', 403)
@@ -46,9 +48,9 @@ export async function PATCH(
     // حماية الجمهور: مشرف الأطباء يراجع تقديمات تكليفات الأطباء حصراً — والمستلم تمريض حصراً
     const postAudienceRole = audienceRole(application.post.audience)
     if (
-      session.user.role !== 'ADMIN' &&
-      ((session.user.role === 'DOCTOR_SUPERVISOR' && postAudienceRole !== 'DOCTOR') ||
-        (session.user.role === 'RECEIVER' && postAudienceRole !== 'NURSE'))
+      role !== 'ADMIN' &&
+      ((role === 'DOCTOR_SUPERVISOR' && postAudienceRole !== 'DOCTOR') ||
+        (role === 'RECEIVER' && postAudienceRole !== 'NURSE'))
     ) {
       throw new ApiError('جمهور هذا التكليف لا يطابق دور حسابك', 403)
     }

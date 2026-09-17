@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { compare, hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema, trustedContactViewerSchema, changeRoleSchema } from '@/lib/validations/user'
+import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema, trustedContactViewerSchema, changeRoleSchema, changeExtraRolesSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 import { getSettings, effectiveSharePercent } from '@/lib/settings'
 import { USER_STATUS_LABELS, ROLE_LABELS } from '@/lib/utils'
@@ -38,6 +38,8 @@ export async function GET(
         commissionPercent: true,
         fullProfileAccess: true,
         trustedContactViewer: true,
+        // الجولة 60: الصلاحيات المركّبة — يقرأها حوار الإدارة لعرض الحالة الحالية
+        extraRoles: true,
         walletAddress: true,
         accountNumber: true,
         createdAt: true,
@@ -250,10 +252,17 @@ export async function PATCH(
         )
       }
 
+      // الجولة 60 — دمج الصلاحية المركّبة المطابقة للدور الجديد: لو كانت ممنوحة
+      // كصلاحية إضافية يصبح النقل إليها دمجاً لها في الدور الأساسي (تفادي الازدواج)
+      // — قائمة الصلاحيات الأخرى تبقى كما هي دون أي مساس.
+      const mergedExtraRoles = (Array.isArray(target.extraRoles) ? target.extraRoles : []).filter(
+        (r) => r !== newRole
+      )
+
       const updated = await db.user.update({
         where: { id },
-        data: { role: newRole },
-        select: { id: true, name: true, role: true },
+        data: { role: newRole, extraRoles: mergedExtraRoles },
+        select: { id: true, name: true, role: true, extraRoles: true },
       })
 
       // لوحة الدور الجديد — يصل الإشعار برابط مباشر إليها
@@ -272,15 +281,95 @@ export async function PATCH(
       })
 
       return NextResponse.json({
-        message: `تم نقل الحساب (${updated.name}) من ${ROLE_LABELS[target.role]} إلى ${ROLE_LABELS[newRole]} — الدور يسري فوراً وتصل الحساب رسالة بالتغيير`,
+        message: `تم نقل الحساب (${updated.name}) من ${ROLE_LABELS[target.role]} إلى ${ROLE_LABELS[newRole]} — الدور يسري فوراً وتصل الحساب رسالة بالتغيير${mergedExtraRoles.length < (target.extraRoles?.length ?? 0) ? ` (دمجت صلاحية ${ROLE_LABELS[newRole]} المركّبة في الدور الأساسي)` : ''}`,
         user: updated,
         transferredBy: session.user.name,
       })
     }
 
+    // ---------- الجولة 60: الصلاحيات المركّبة — منح/سحب أدوار إضافية بتأكيد كلمة مرور الإدارة ----------
+    // ⚠️ ترتيب حاسم: هذا الفرع يسبق فرع «إعادة تعيين كلمة المرور» لأن الطلب يحمل
+    // password (كلمة تأكيد الإدارة) وليست كلمة مرور جديدة للحساب — نفس درس حادثة
+    // الجولة 59 مع فرع النقل.
+    // التعيين بالاستبدال الكامل: الخادم يقارن القائمة المطلوبة بالحالية → رسالة
+    // توضح ما مُنح وما سُحب. الدور الأساسي يغطي نفسه (يُستبعد من القائمة تلقائياً)،
+    // والإدارة (ADMIN) مستثنى نهائياً من الصلاحيات الممنوحة، ولا يُحذف ولا يُعدل
+    // أي بيانات أخرى للحساب إطلاقاً — صلاحياته الأخرى تبقى كما هي.
+    if (body && typeof body === 'object' && 'extraRoles' in body) {
+      const parsed = changeExtraRolesSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'بيانات الصلاحيات غير صحيحة', 422)
+      }
+
+      const { extraRoles: desired, password: adminPassword } = parsed.data
+
+      // بوابة الهوية: كلمة مرور حساب الإدارة الجالس حالياً إلزامية قبل أي منح/سحب
+      const admin = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { password: true },
+      })
+      if (!admin) return jsonError('حساب الإدارة غير موجود', 404)
+
+      const passwordValid = await compare(adminPassword, admin.password)
+      if (!passwordValid) {
+        return jsonError('كلمة مرور حساب الإدارة غير صحيحة — لم يتم تغيير الصلاحيات', 403)
+      }
+
+      // التطبيع: إزالة التكرار + استبعاد الدور الأساسي (يغطيه أصلاً) — دون أي مساس بغيرها
+      const current = Array.isArray(target.extraRoles) ? target.extraRoles : []
+      const clean: string[] = Array.from(new Set(desired)).filter((r) => r !== target.role)
+      const granted = clean.filter((r) => !current.includes(r))
+      const revoked = current.filter((r) => !clean.includes(r))
+
+      if (granted.length === 0 && revoked.length === 0) {
+        return jsonError('لا يوجد تغيير — الصلاحيات المختارة مطابقة للحالية', 422)
+      }
+
+      const updated = await db.user.update({
+        where: { id },
+        data: { extraRoles: clean },
+        select: { id: true, name: true, role: true, extraRoles: true },
+      })
+
+      // لوحة الصلاحية الممنوحة الأخيرة — يصل الإشعار برابط مباشر إليها
+      const roleDashboards: Record<string, string> = {
+        NURSE: '/nurse',
+        DOCTOR: '/doctor',
+        RECEIVER: '/receiver',
+        DOCTOR_SUPERVISOR: '/supervisor',
+      }
+
+      const changesText = [
+        ...granted.map((r) => `منح صلاحية «${ROLE_LABELS[r]}»`),
+        ...revoked.map((r) => `سحب صلاحية «${ROLE_LABELS[r]}»`),
+      ].join(' و')
+
+      await notify(id, {
+        title: 'تغيّرت صلاحياتك في المنصة',
+        body: `قامت إدارة المنصة بـ${changesText}. يمكنك الآن فتح لوحة كل دور تملك صلاحيته من مبدّل اللوحات أعلى حسابك — ودورك الأساسي (${ROLE_LABELS[target.role]}) لم يتغير وكل بياناتك كما هي.`,
+        type: 'GENERIC',
+        link: granted.length > 0 ? roleDashboards[granted[granted.length - 1]] : roleDashboards[target.role],
+      })
+
+      return NextResponse.json({
+        message: `تم ${changesText} للحساب (${updated.name}) — يسري فوراً وتصل الحساب رسالة بالتغيير`,
+        user: updated,
+        granted,
+        revoked,
+        changedBy: session.user.name,
+      })
+    }
+
     // ---------- إعادة تعيين كلمة المرور ----------
-    // ملاحظة: يصل هذا الفرع بـ{ password } وحدها حصراً — أي طلب يحمل role سبقه الفرع أعلاه
-    if (body && typeof body === 'object' && 'password' in body && !('role' in body)) {
+    // ملاحظة: يصل هذا الفرع بـ{ password } وحدها حصراً — أي طلب يحمل role أو extraRoles
+    // سبقه فرع النقل أو فرع الصلاحيات المركّبة أعلاه
+    if (
+      body &&
+      typeof body === 'object' &&
+      'password' in body &&
+      !('role' in body) &&
+      !('extraRoles' in body)
+    ) {
       const parsed = resetPasswordSchema.safeParse(body)
       if (!parsed.success) {
         return jsonError(parsed.error.issues[0]?.message ?? 'كلمة المرور غير صحيحة', 422)

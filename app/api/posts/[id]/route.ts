@@ -65,7 +65,9 @@ export async function GET(
 
     if (!post) return jsonError('التكليف غير موجود', 404)
 
-    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+    // الجولة 60 — الوضع النشط: فرع الكادر يعمل بوضع لوحته الحالي
+    const operatingRole = session.user.activeRole ?? session.user.role
+    if (operatingRole === 'NURSE' || operatingRole === 'DOCTOR') {
       await escalateDueProgressivePosts()
       const me = await db.user.findUnique({
         where: { id: session.user.id },
@@ -75,7 +77,7 @@ export async function GET(
       const allowed = await canNurseSeePost(post, {
         nurseId: session.user.id,
         nurseGender: me?.gender ?? null,
-        role: session.user.role === 'DOCTOR' ? 'DOCTOR' : 'NURSE',
+        role: operatingRole === 'DOCTOR' ? 'DOCTOR' : 'NURSE',
       })
       if (!allowed) return jsonError('هذا التكليف غير متاح لك', 404)
 

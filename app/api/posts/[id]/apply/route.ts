@@ -43,9 +43,11 @@ export async function POST(
 
     // حماية مزدوجة: مطابقة الجمهور (تمريض/أطباء) + فلتر الجنس + خصوصية التوزيع
     // — حتى لو وصل عبر رابط مباشر أو API (منظومة الأطباء: لا تقديم متبادل بين الجماهير)
-    if (audienceRole(post.audience) !== session.user.role) {
+    // الجولة 60 — الوضع النشط: التقديم بوضع اللوحة المفتوحة (لوحة الكادر = وضع الكادر)
+    const operatingRole = session.user.activeRole ?? session.user.role
+    if (audienceRole(post.audience) !== operatingRole) {
       return jsonError(
-        session.user.role === 'DOCTOR'
+        operatingRole === 'DOCTOR'
           ? 'هذا التكليف مخصص للكادر التمريضي — لا يمكنك التقديم عليه بحساب الطبيب'
           : 'هذا التكليف مخصص للأطباء — لا يمكنك التقديم عليه بحسابك الحالي',
         403
@@ -55,7 +57,7 @@ export async function POST(
     const allowed = await canNurseSeePost(post, {
       nurseId: session.user.id,
       nurseGender: me?.gender ?? null,
-      role: session.user.role === 'DOCTOR' ? 'DOCTOR' : 'NURSE',
+      role: operatingRole === 'DOCTOR' ? 'DOCTOR' : 'NURSE',
     })
     if (!allowed) {
       return jsonError('هذا التكليف غير متاح للتقديم من حسابك (شروط الجنس أو جمهور التوزيع)', 403)
@@ -113,7 +115,7 @@ export async function POST(
       title: 'تقديم جديد على تكليفك',
       body: `${session.user.name} قدّم على التكليف (${post.title}) — راجع السيرة الذاتية واعتمد أو ارفض`,
       type: 'APPLICATION_SUBMITTED',
-      link: session.user.role === 'DOCTOR' ? '/supervisor/assignments' : '/receiver/assignments',
+      link: operatingRole === 'DOCTOR' ? '/supervisor/assignments' : '/receiver/assignments',
     })
 
     // الجولة الخامسة عشرة: الإدارة ترى كل التقديمات الجديدة أيضاً

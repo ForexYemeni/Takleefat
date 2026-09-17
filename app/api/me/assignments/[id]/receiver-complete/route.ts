@@ -92,9 +92,10 @@ export async function POST(
     if (!assignment) return jsonError('التكليف غير موجود', 404)
 
     // الجولة 39 — نطاق الوصول: صاحب التكليف، أو مشرف الأطباء لطبيب من جهته الصحية
+    // الجولة 60 — الوضع النشط: صلاحية المشرف تعمل من لوحة المشرف المفتوحة
     const isOwner = assignment.receiverId === session.user.id
     let hasAccess = isOwner
-    if (!hasAccess && session.user.role === 'DOCTOR_SUPERVISOR') {
+    if (!hasAccess && (session.user.activeRole ?? session.user.role) === 'DOCTOR_SUPERVISOR') {
       const org = await resolveReceiverOrg(session.user.id)
       hasAccess =
         !!org &&

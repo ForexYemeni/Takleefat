@@ -33,6 +33,9 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const hospitalId = req.nextUrl.searchParams.get('hospitalId')
+    // الجولة 60 — الوضع النشط: الفرع حسب اللوحة المفتوحة (صاحب صلاحية مركّبة
+    // يرى ارتباطاته ككادر من لوحة الكادر وكمسؤول من لوحة المستلم/المشرف)
+    const role = session.user.activeRole ?? session.user.role
     const status = req.nextUrl.searchParams.get('status')
     const nurseId = req.nextUrl.searchParams.get('nurseId')
 
@@ -46,9 +49,9 @@ export async function GET(req: NextRequest) {
 
     // الجولة 44: مسؤول الجهة يدير كل جهاته المعتمدة (التاريخية + المعتمدة من الإدارة)
     let selectedOrg: Awaited<ReturnType<typeof resolveReceiverOrg>> = null
-    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+    if (role === 'NURSE' || role === 'DOCTOR') {
       where = { ...where, nurseId: session.user.id }
-    } else if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
+    } else if (role === 'RECEIVER' || role === 'DOCTOR_SUPERVISOR') {
       // الجولة 34: المشرف أيضاً محصور بجهته — كان يصل لكل الارتباطات (ثغرة أُغلقت)
       const orgs = await resolveReceiverOrgs(session.user.id)
       if (orgs.length === 0) return NextResponse.json({ affiliations: [], org: null })
@@ -77,7 +80,7 @@ export async function GET(req: NextRequest) {
     // الجولة 36: «الموثوق جداً» يرى كل الأرقام
     const trusted = await isTrustedViewer(session.user.id)
     let revealed: Set<string> = new Set()
-    if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
+    if (role === 'RECEIVER' || role === 'DOCTOR_SUPERVISOR') {
       revealed = await revealedStaffIds(
         session.user.id,
         affiliations.map((a) => a.nurse.id),
@@ -87,14 +90,14 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       affiliations: affiliations.map((a) => {
-        if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+        if (role === 'NURSE' || role === 'DOCTOR') {
           return a
         }
         return {
           ...a,
           nurse: {
             ...a.nurse,
-            ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
+            ...phoneView(role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
           },
         }
       }),
@@ -108,6 +111,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole('NURSE', 'RECEIVER', 'ADMIN', 'DOCTOR', 'DOCTOR_SUPERVISOR')
+    // الجولة 60 — الوضع النشط: طلب/إضافة الارتباط بوضع اللوحة المفتوحة
+    const role = session.user.activeRole ?? session.user.role
     const parsed = affiliationCreateSchema.safeParse(await req.json())
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
@@ -115,10 +120,10 @@ export async function POST(req: NextRequest) {
 
     const { note, workYears, newOrg } = parsed.data
     // الكادر يطلب لنفسه — المستلم/الإدارة يحددان الكادر
-    const targetNurseId = session.user.role === 'NURSE' || session.user.role === 'DOCTOR' ? session.user.id : parsed.data.nurseId
+    const targetNurseId = role === 'NURSE' || role === 'DOCTOR' ? session.user.id : parsed.data.nurseId
     if (!targetNurseId) return jsonError('معرّف الكادر مطلوب', 422)
     // الحالة الفعلية المطلوبة: المستلم/الإدارة يضبطونها — الكادر يطلب نوع العمل فقط (الجولة الثامنة)
-    const requestedStatus = parsed.data.status ?? (session.user.role === 'NURSE' || session.user.role === 'DOCTOR' ? 'PENDING' : 'WORKING')
+    const requestedStatus = parsed.data.status ?? (role === 'NURSE' || role === 'DOCTOR' ? 'PENDING' : 'WORKING')
 
     // ---------- جهة صحية جديدة؟ (الجولة الثامنة) تُرفع للإدارة بانتظار الاعتماد ----------
     let hospitalId = parsed.data.hospitalId
@@ -165,7 +170,7 @@ export async function POST(req: NextRequest) {
     // الحماية أولاً: الكادر يطلب فقط — الحالات المحمية محرّمة عليه نهائياً (قبل فحص التكرار)
     let finalStatus: string = requestedStatus
     let finalRequestedStatus: string | null = null
-    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+    if (role === 'NURSE' || role === 'DOCTOR') {
       if (!(NURSE_ALLOWED_STATUSES as readonly string[]).includes(requestedStatus)) {
         throw new ApiError(
           'لا يمكنك تعيين حالة الاعتماد أو المقابلة بنفسك — طلبك يُسجل «قيد المراجعة» وتُعتمده الجهة المختصة',
@@ -192,8 +197,8 @@ export async function POST(req: NextRequest) {
     // الأطباء يعتمد الأطباء — في جهته الصحية حصراً وبلا شرط مستندات:
     // «لاضافتهم للجهة الصحية فقط» — أما الاعتماد المهني (كطبيب/ككادر طبي)
     // فمن حساب الإدارة حصراً بعد رفع المستندات والموافقة عليها.
-    if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
-      const isSupervisor = session.user.role === 'DOCTOR_SUPERVISOR'
+    if (role === 'RECEIVER' || role === 'DOCTOR_SUPERVISOR') {
+      const isSupervisor = role === 'DOCTOR_SUPERVISOR'
       // الجولة 44: المسؤول يضيف لكل جهاته المعتمدة — التاريخية والمعتمدة من الإدارة
       const orgs = await resolveReceiverOrgs(session.user.id)
       if (!orgs.some((o) => o.id === hospitalId)) {
@@ -223,7 +228,7 @@ export async function POST(req: NextRequest) {
 
     // بوابة المستندات للاعتماد المهني — من الإدارة حصراً (الجولة 39: اعتماد الجهة
     // من المستلم/المشرف بلا بوابة مستندات)
-    if (session.user.role === 'ADMIN' && (DOCUMENT_GATED_STATUSES as readonly string[]).includes(finalStatus)) {
+    if (role === 'ADMIN' && (DOCUMENT_GATED_STATUSES as readonly string[]).includes(finalStatus)) {
       const documentsCount = await db.document.count({ where: { userId: targetNurseId } })
       if (documentsCount === 0) {
         return jsonError(
@@ -242,14 +247,14 @@ export async function POST(req: NextRequest) {
         workYears: workYears ?? null,
         note: note?.trim() || null,
         requestedById: session.user.id,
-        reviewedById: session.user.role === 'NURSE' ? null : session.user.id,
-        reviewedAt: session.user.role === 'NURSE' ? null : new Date(),
+        reviewedById: role === 'NURSE' ? null : session.user.id,
+        reviewedAt: role === 'NURSE' ? null : new Date(),
       },
       include: { hospital: { select: { name: true } } },
     })
 
     // الإشعارات
-    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+    if (role === 'NURSE' || role === 'DOCTOR') {
       const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
       await Promise.all(
         admins.map((a) =>

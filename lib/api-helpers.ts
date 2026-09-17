@@ -25,12 +25,19 @@ export async function requireSession(): Promise<Session> {
 /**
  * يتطلب صلاحية دور محدد (أو أكثر)
  * الأدوار الخمسة: ADMIN | NURSE | RECEIVER | DOCTOR | DOCTOR_SUPERVISOR
+ *
+ * الجولة 60 — الصلاحيات المركّبة: التحقق يتم على «الوضع النشط» (activeRole)
+ * وليس الدور الأساسي حصراً — الوضع النشط يثبّته layout اللوحة عند دخولها
+ * (الجلسة تضمن أنه ضمن الصلاحيات الفعالة: أساسي أو مركّب ممنوح).
+ * الحسابات العادية (بلا صلاحيات مركّبة): activeRole = الدور الأساسي
+ * → السلوك مطابق تماماً لما كان عليه قبل هذه الجولة.
  */
 export async function requireRole(
   ...roles: Array<'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'>
 ) {
   const session = await requireSession()
-  if (!roles.includes(session.user.role)) {
+  const operating = session.user.activeRole ?? session.user.role
+  if (!roles.includes(operating)) {
     throw new ApiError('ليست لديك صلاحية للوصول إلى هذا المورد', 403)
   }
   return session

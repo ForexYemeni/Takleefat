@@ -1,14 +1,8 @@
-import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { DashboardShell } from '@/components/shared/dashboard-shell'
+import { requirePanelAccess } from '@/lib/panel-access'
 
-export default async function ReceiverLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user || session.user.role !== 'DOCTOR_SUPERVISOR') {
-    redirect('/login?callbackUrl=/supervisor')
-  }
+export default async function SupervisorLayout({ children }: { children: React.ReactNode }) {
+  const session = await requirePanelAccess('DOCTOR_SUPERVISOR')
 
   return (
     <DashboardShell role="DOCTOR_SUPERVISOR" userName={session.user.name}>

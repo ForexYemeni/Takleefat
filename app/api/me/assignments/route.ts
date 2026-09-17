@@ -56,15 +56,16 @@ export async function GET() {
     // ولم يُشعَر أصحابها بعد — يُرسَل الإشعار للطرفين مرة واحدة لكل تكليف
     await notifyAssignmentStarts()
     // الكادر والطبيب يرَون تكليفاتهم كطرف منفّذ — المستلم والمشرف كطرف مسانِد
-    const isWorker =
-      session.user.role === 'NURSE' || session.user.role === 'DOCTOR'
+    // الجولة 60 — الوضع النشط: المنظر حسب اللوحة المفتوحة
+    const role = session.user.activeRole ?? session.user.role
+    const isWorker = role === 'NURSE' || role === 'DOCTOR'
     const trusted = await isTrustedViewer(session.user.id)
 
     // الجولة 39: نطاق المشرف — تكليفاته + تكليفات أطباء جهته الصحية
     let where: Prisma.AssignmentWhereInput
     if (isWorker) {
       where = { nurseId: session.user.id }
-    } else if (session.user.role === 'DOCTOR_SUPERVISOR') {
+    } else if (role === 'DOCTOR_SUPERVISOR') {
       // الجولة 44: أطباء جهاته بكل جهاته المعتمدة
       const orgs = await resolveReceiverOrgs(session.user.id)
       const orgIds = orgs.map((o) => o.id)

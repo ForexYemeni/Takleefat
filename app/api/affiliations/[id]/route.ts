@@ -78,10 +78,12 @@ export async function PATCH(
     }
     const { status, note } = parsed.data
 
-    const { affiliation, error } = await loadWithAccess(id, session.user.role, session.user.id)
+    // الجولة 60 — الوضع النشط: مراجعة الارتباطات بوضع اللوحة المفتوحة
+    const role = session.user.activeRole ?? session.user.role
+    const { affiliation, error } = await loadWithAccess(id, role, session.user.id)
     if (error || !affiliation) return error!
 
-    if (session.user.role === 'RECEIVER' || session.user.role === 'DOCTOR_SUPERVISOR') {
+    if (role === 'RECEIVER' || role === 'DOCTOR_SUPERVISOR') {
       // الجولة 43 — تحويل حالة العضو بعد القبول: نفس الخيارات المهنية الخمس
       // (معتمد/يعمل حالياً/يعمل سابقاً/تحت الإستدعاء/تمت مقابلته) — والحالات
       // الإدارية الباقية محرّمة على مسؤول الجهة في كل الأحوال

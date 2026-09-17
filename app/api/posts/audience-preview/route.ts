@@ -20,10 +20,12 @@ export async function GET(req: NextRequest) {
     const distribution = req.nextUrl.searchParams.get('distribution')
     const audienceParam = req.nextUrl.searchParams.get('audience')
     // مشرف الأطباء: جمهور أطباء حصراً — المستلم: تمريض حصراً — الإدارة: تختار
+    // الجولة 60: حسب الوضع النشط (صاحب الصلاحية المركّبة يختار بلوحته المفتوحة)
+    const operatingRole = session.user.activeRole ?? session.user.role
     const audience: Audience =
-      session.user.role === 'DOCTOR_SUPERVISOR'
+      operatingRole === 'DOCTOR_SUPERVISOR'
         ? 'DOCTOR'
-        : session.user.role === 'RECEIVER'
+        : operatingRole === 'RECEIVER'
           ? 'NURSE'
           : audienceParam === 'DOCTOR'
             ? 'DOCTOR'

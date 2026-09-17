@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
     const search = req.nextUrl.searchParams.get('search')
-    const audience = favoritesAudience(session.user.role)
+    const audience = favoritesAudience(session.user.activeRole ?? session.user.role)
 
     // قائمته الخاصة حصراً — بحسب جمهور حسابه (كادر تمريضي للمستلم / أطباء للمشرف)
     // ثم تُرتب بالمطابقة الذكية (المفضلة أولاً بطبيعتها)
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
-    const audience = favoritesAudience(session.user.role)
+    const audience = favoritesAudience(session.user.activeRole ?? session.user.role)
     const labels = AUDIENCE_LABELS[audience]
 
     const parsed = favoriteSchema.safeParse(await req.json())
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
-    const labels = AUDIENCE_LABELS[favoritesAudience(session.user.role)]
+    const labels = AUDIENCE_LABELS[favoritesAudience(session.user.activeRole ?? session.user.role)]
     const nurseId = req.nextUrl.searchParams.get('nurseId')
     if (!nurseId) throw new ApiError('معرّف الكادر مطلوب', 400)
 
@@ -175,7 +175,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
-    const labels = AUDIENCE_LABELS[favoritesAudience(session.user.role)]
+    const labels = AUDIENCE_LABELS[favoritesAudience(session.user.activeRole ?? session.user.role)]
     const nurseId = req.nextUrl.searchParams.get('nurseId')
     if (!nurseId) throw new ApiError('معرّف الكادر مطلوب', 400)
 

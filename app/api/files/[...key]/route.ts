@@ -47,8 +47,9 @@ export async function GET(
 
     if (session.user.role !== 'ADMIN' && ownerId !== session.user.id) {
       // المستلم الإداري يمكنه عرض مستندات كادر قدّم على تكليفاته (أو اعتُبد تقديمه)
+      // الجولة 60 — الوضع النشط: صلاحية المستلم تعمل من لوحة المستلم المفتوحة
       let allowed = false
-      if (session.user.role === 'RECEIVER' && ownerId) {
+      if ((session.user.activeRole ?? session.user.role) === 'RECEIVER' && ownerId) {
         const related = await db.application.findFirst({
           where: {
             nurseId: ownerId,

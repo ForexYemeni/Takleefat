@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
 
-    const isSupervisor = session.user.role === 'DOCTOR_SUPERVISOR'
+    // الجولة 60 — الوضع النشط: شبكة الكوادر/الأطباء حسب اللوحة المفتوحة
+    const isSupervisor = (session.user.activeRole ?? session.user.role) === 'DOCTOR_SUPERVISOR'
     const audienceRole = isSupervisor ? 'DOCTOR' : 'NURSE'
 
     const search = req.nextUrl.searchParams.get('search')?.trim()

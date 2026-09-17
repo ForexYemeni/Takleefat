@@ -242,6 +242,27 @@ export const changeRoleSchema = z.object({
 
 export type ChangeRoleInput = z.infer<typeof changeRoleSchema>
 
+// ---------- الجولة 60: الصلاحيات المركّبة — منح/سحب أدوار إضافية بتأكيد كلمة مرور الإدارة ----------
+
+/**
+ * التعيين يتم بالاستبدال الكامل للقائمة (idempotent) — الإدارة ترسل القائمة
+ * المطلوبة النهائية، والخادم يقارنها بالقائمة الحالية ليحدد ما مُنح وما سُحب.
+ * ADMIN مستثنى نهائياً (TRANSFERABLE_ROLES لا تتضمنه) — لا يمكن منحه أبداً.
+ */
+export const changeExtraRolesSchema = z.object({
+  extraRoles: z
+    .array(z.enum(TRANSFERABLE_ROLES, { error: 'إحدى الصلاحيات غير صحيحة' }), {
+      error: 'قائمة الصلاحيات غير صحيحة',
+    })
+    .max(3, 'الحد الأقصى ثلاث صلاحيات مركّبة'),
+  // كلمة مرور حساب الإدارة الجالس حالياً — بوابة هوية إلزامية قبل أي منح/سحب
+  password: z
+    .string({ error: 'تأكيد كلمة مرور حساب الإدارة مطلوب' })
+    .min(1, 'أدخل كلمة مرور حساب الإدارة'),
+})
+
+export type ChangeExtraRolesInput = z.infer<typeof changeExtraRolesSchema>
+
 // ---------- الملف الشخصي الذاتي (جميع الأدوار) ----------
 
 export const updateProfileSchema = z.object({

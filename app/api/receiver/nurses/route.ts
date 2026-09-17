@@ -25,11 +25,13 @@ export async function GET(req: NextRequest) {
 
     // دور الجمهور: مشرف الأطباء يبحث في شبكة الأطباء — غيره في شبكة الكادر التمريضي
     // الإدارة تختار الجمهور بمعامل audience=DOCTOR (نافذة إنشاء تكليف الأطباء)
+    // الجولة 60 — الوضع النشط: البحث حسب اللوحة المفتوحة
     const audienceParam = sp.get('audience')
+    const operatingRole = session.user.activeRole ?? session.user.role
     const audienceRoleValue: 'NURSE' | 'DOCTOR' =
-      session.user.role === 'DOCTOR_SUPERVISOR'
+      operatingRole === 'DOCTOR_SUPERVISOR'
         ? 'DOCTOR'
-        : session.user.role === 'ADMIN' && audienceParam === 'DOCTOR'
+        : operatingRole === 'ADMIN' && audienceParam === 'DOCTOR'
           ? 'DOCTOR'
           : 'NURSE'
 

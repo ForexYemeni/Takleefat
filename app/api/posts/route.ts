@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
       statusWhere.status = status as 'OPEN' | 'ASSIGNED' | 'COMPLETED' | 'CANCELLED'
     }
 
-    const role = session.user.role
+    // الجولة 60 — الوضع النشط: الكادر يعمل بوضع لوحته الحالي (نفس السلوك للدور الواحد)
+    const role = session.user.activeRole ?? session.user.role
     if (role === 'NURSE' || role === 'DOCTOR') {
       // ترقية النشر التدريجي المستحق + جلب التكليفات المرشحة ثم فلترة الجمهور والخصوصية والجنس
       await escalateDueProgressivePosts()
@@ -131,11 +132,13 @@ export async function POST(req: NextRequest) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }
 
-    // فرض الجمهور حسب الدور — المستلم تمريض حصراً والمشرف أطباء حصراً (منظومة الأطباء)
+    // فرض الجمهور حسب الوضع النشط — المستلم تمريض حصراً والمشرف أطباء حصراً (منظومة الأطباء)
+    // الجولة 60: صاحب صلاحية مركّبة ينشئ من لوحة المستلم جمهور كادر ومن لوحة المشرف جمهور أطباء
+    const operatingRole = session.user.activeRole ?? session.user.role
     const audience: Audience =
-      session.user.role === 'DOCTOR_SUPERVISOR'
+      operatingRole === 'DOCTOR_SUPERVISOR'
         ? 'DOCTOR'
-        : session.user.role === 'RECEIVER'
+        : operatingRole === 'RECEIVER'
           ? 'NURSE'
           : parsed.data.audience === 'DOCTOR'
             ? 'DOCTOR'

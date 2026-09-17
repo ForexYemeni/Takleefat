@@ -8,6 +8,10 @@ declare module 'next-auth' {
       phone: string
       role: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
       status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
+      /** الجولة 60: الصلاحيات المركّبة الممنوحة فوق الدور الأساسي (فارغة غالباً) */
+      extraRoles: string[]
+      /** الوضع النشط الموثوق للعمل — دائماً ضمن الصلاحيات الفعالة (أساسي + مركّبة) */
+      activeRole: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
     } & DefaultSession['user']
   }
 

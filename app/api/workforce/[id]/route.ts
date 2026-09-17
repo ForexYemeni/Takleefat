@@ -38,12 +38,14 @@ export async function GET(
     }
 
     // ---------- مطابقة الجمهور (الجولة 46): المستلم → كادر | المشرف → طبيب ----------
+    // الجولة 60: المطابقة على الوضع النشط (صاحب الصلاحية المركّبة يتصفح بحسب لوحته)
     if (session.user.role !== 'ADMIN') {
+      const operatingRole = session.user.activeRole ?? session.user.role
       const permittedAudience =
-        session.user.role === 'DOCTOR_SUPERVISOR' ? 'DOCTOR' : 'NURSE'
+        operatingRole === 'DOCTOR_SUPERVISOR' ? 'DOCTOR' : 'NURSE'
       if (target.role !== permittedAudience) {
         return jsonError(
-          session.user.role === 'DOCTOR_SUPERVISOR'
+          operatingRole === 'DOCTOR_SUPERVISOR'
             ? 'يمكنك عرض السير الذاتية للأطباء حصراً'
             : 'يمكنك عرض السير الذاتية للكادر التمريضي حصراً',
           403

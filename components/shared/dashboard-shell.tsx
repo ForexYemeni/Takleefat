@@ -31,6 +31,8 @@ import {
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
+import { ROLE_THEME } from '@/lib/role-theme'
+import { ROLE_DASHBOARD } from '@/lib/roles'
 import { Logo } from '@/components/shared/logo'
 import { SmartBottomNav } from '@/components/shared/smart-bottom-nav'
 import { NotificationBell } from '@/components/shared/notification-bell'
@@ -155,6 +157,16 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
   const navItems = NAV_CONFIG[role].items
   const roleLabel = NAV_CONFIG[role].roleLabel
 
+  // الجولة 60 — مبدّل اللوحات للصلاحيات المركّبة:
+  // كل لوحة يملكها الحساب (الدور الأساسي + الصلاحيات الممنوحة) عدا الحالية —
+  // الدخول للوحة يثبّت الوضع النشط تلقائياً (من requirePanelAccess في الـlayout)
+  const sessionRoles = session?.user
+    ? Array.from(new Set<string>([session.user.role as string, ...(session.user.extraRoles ?? [])]))
+    : []
+  const otherPanels = sessionRoles.filter(
+    (r) => r !== role && r in ROLE_THEME
+  ) as DashboardRole[]
+
   useEffect(() => {
     // الجولة السابعة عشرة: طلب الصلاحية بأول تفاعل + تداوي صامت للاشتراكات —
     // يغطي الأجهزة التي تبقى جلستها صالحة ولا تمرّ بشاشة الدخول مجدداً
@@ -211,6 +223,31 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
           {roleLabel}
         </p>
         {renderNavLinks(onNavigate)}
+        {/* الجولة 60 — مبدّل اللوحات: يظهر حصراً لمن يملك صلاحيات مركّبة ممنوحة */}
+        {otherPanels.length > 0 && (
+          <div className="mt-3" role="navigation" aria-label="اللوحات المتاحة بصلاحياتك">
+            <p className="mb-1.5 px-6 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">
+              لوحات صلاحياتك الأخرى
+            </p>
+            <nav className="flex flex-col gap-1 px-3">
+              {otherPanels.map((r) => (
+                <Link
+                  key={r}
+                  href={ROLE_DASHBOARD[r]}
+                  onClick={onNavigate}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: ROLE_THEME[r].accent }}
+                    aria-hidden
+                  />
+                  لوحة {ROLE_THEME[r].label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        )}
         {/* زر تثبيت التطبيق — PWA: يظهر فقط في المتصفحات الداعمة ويختفي بعد التثبيت */}
         <div className="mt-3 space-y-2 px-3">
           <InstallAppButton className="w-full" />

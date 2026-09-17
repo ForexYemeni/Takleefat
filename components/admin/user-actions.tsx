@@ -10,6 +10,7 @@ import {
   EyeOff,
   IdCard,
   KeyRound,
+  Layers,
   Loader2,
   MoreHorizontal,
   Percent,
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSession } from 'next-auth/react'
-import { apiPatch, apiDelete } from '@/lib/api-client'
+import { apiPatch, apiDelete, apiFetcher } from '@/lib/api-client'
 import { USER_STATUS_LABELS, ROLE_LABELS } from '@/lib/utils'
 import { ROLE_THEME, type RoleKey } from '@/lib/role-theme'
 import { Button } from '@/components/ui/button'
@@ -110,6 +111,13 @@ export function UserActionsMenu({
   const [roleTarget, setRoleTarget] = useState<string | null>(null)
   const [rolePassword, setRolePassword] = useState('')
   const [showRolePassword, setShowRolePassword] = useState(false)
+  // الجولة 60 — الصلاحيات المركّبة: منح/سحب أدوار إضافية فوق الدور الأساسي
+  const [capsOpen, setCapsOpen] = useState(false)
+  const [capsLoading, setCapsLoading] = useState(false)
+  const [capsExtras, setCapsExtras] = useState<string[]>([]) // الحالية من القاعدة عند فتح الحوار
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]) // المختارة في الحوار
+  const [capsPassword, setCapsPassword] = useState('')
+  const [showCapsPassword, setShowCapsPassword] = useState(false)
   const [confirmAction, setConfirmAction] = useState<
     | { kind: 'APPROVED' }
     | { kind: 'SUSPENDED' }
@@ -192,6 +200,52 @@ export function UserActionsMenu({
       setPending(false)
     }
   }
+
+  /** الجولة 60 — فتح حوار الصلاحيات المركّبة: جلب الحالة الموثوقة من القاعدة أولاً */
+  const openCapsDialog = async () => {
+    setCapsOpen(true)
+    setCapsLoading(true)
+    setCapsPassword('')
+    setShowCapsPassword(false)
+    try {
+      const res = await apiFetcher<{ user: { role?: string; extraRoles?: string[] } }>(
+        `/api/admin/users/${user.id}`
+      )
+      const current = Array.isArray(res.user?.extraRoles) ? res.user.extraRoles : []
+      setCapsExtras(current)
+      setSelectedExtras(current)
+    } catch (e) {
+      toast.error((e as Error).message)
+      setCapsOpen(false)
+    } finally {
+      setCapsLoading(false)
+    }
+  }
+
+  /** الجولة 60 — حفظ الصلاحيات المركّبة (استبدال كامل + بوابة كلمة مرور الإدارة على الخادم) */
+  const capsMutation = async () => {
+    if (!capsPassword.trim()) return
+    setPending(true)
+    try {
+      const res = await apiPatch<{ message: string }>(`/api/admin/users/${user.id}`, {
+        extraRoles: selectedExtras,
+        password: capsPassword,
+      })
+      toast.success(res.message)
+      setCapsOpen(false)
+      setCapsPassword('')
+      setShowCapsPassword(false)
+      invalidate()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  /** هل تغيّر اختيار الحوار عن الحالة الحالية من القاعدة؟ */
+  const capsChanged =
+    [...selectedExtras].sort().join(',') !== [...capsExtras].sort().join(',')
 
   /** حفظ نسبة الحصة — فارغ = العودة للتلقائي (نصف نسبة الإدارة) */
   const percentMutation = async () => {
@@ -408,6 +462,16 @@ export function UserActionsMenu({
                 {user.role && ROLE_LABELS[user.role]
                   ? `الدور الحالي: ${ROLE_LABELS[user.role]}`
                   : 'تغيير دور الحساب بالكامل — بتأكيد كلمة المرور'}
+              </span>
+            </span>
+          </DropdownMenuItem>
+          {/* الجولة 60 — الصلاحيات المركّبة: أدوار إضافية فوق الدور الأساسي دون تغييره */}
+          <DropdownMenuItem onClick={openCapsDialog} className="gap-2">
+            <Layers className="size-4" />
+            <span className="flex flex-col">
+              <span>الصلاحيات المركّبة</span>
+              <span className="text-[10px] font-normal text-muted-foreground">
+                أدوار إضافية فوق دوره الأساسي — يفتح أكثر من لوحة
               </span>
             </span>
           </DropdownMenuItem>
@@ -845,6 +909,164 @@ export function UserActionsMenu({
                 <>
                   <UserCog className="size-4" />
                   تأكيد النقل
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* الجولة 60 — الصلاحيات المركّبة: منح/سحب أدوار إضافية فوق الدور الأساسي
+          — الدور الأساسي يبقى كما هو، والحساب يفتح لوحة كل صلاحية ممنوحة له،
+          ببوابة تأكيد بكلمة مرور الإدارة مثل النقل والحذف */}
+      <Dialog open={capsOpen} onOpenChange={(v) => !pending && setCapsOpen(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2.5">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-4 ring-primary/10">
+                <Layers className="size-5" />
+              </span>
+              الصلاحيات المركّبة
+            </DialogTitle>
+            <DialogDescription>
+              منح {user.name} صلاحية فتح لوحات أدوار إضافية فوق دوره الأساسي — دوره
+              الأساسي وكل بياناته لا تتغير إطلاقاً، ويمكن سحب أي صلاحية في أي وقت.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* الدور الأساسي — ثابت ولا يُمس */}
+            <div className="flex items-center justify-between rounded-xl border bg-secondary/40 p-3">
+              <span className="flex items-center gap-2 text-xs font-bold">
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: currentTheme?.accent ?? 'hsl(var(--muted-foreground))' }}
+                  aria-hidden
+                />
+                الدور الأساسي: {currentRoleLabel}
+              </span>
+              <span className="rounded-md bg-background px-2 py-1 text-[10px] font-bold text-muted-foreground shadow-sm">
+                يبقى كما هو — لا يتغير
+              </span>
+            </div>
+
+            {/* مفاتيح الصلاحيات — كل دور بلونه (الدور الأساسي مستبعد) */}
+            <div
+              className="space-y-2"
+              role="group"
+              aria-label="الصلاحيات الإضافية الممنوحة"
+            >
+              {capsLoading && (
+                <div className="flex items-center justify-center gap-2 rounded-xl border bg-secondary/40 p-4 text-xs text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  جارٍ جلب الصلاحيات الحالية...
+                </div>
+              )}
+              {!capsLoading &&
+                ROLE_CHOICES.filter((r) => r.key !== user.role).map((r) => {
+                  const enabled = selectedExtras.includes(r.key)
+                  const theme = ROLE_THEME[r.key]
+                  return (
+                    <div
+                      key={r.key}
+                      className="flex items-center justify-between gap-3 rounded-xl border p-3 transition-colors"
+                      style={enabled ? { backgroundColor: theme.accentSoft, borderColor: 'transparent' } : undefined}
+                    >
+                      <span className="flex items-start gap-2.5">
+                        <span
+                          className="mt-0.5 size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: theme.accent }}
+                          aria-hidden
+                        />
+                        <span className="flex flex-col">
+                          <span className="text-sm font-bold">{theme.label}</span>
+                          <span className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                            {r.hint}
+                          </span>
+                        </span>
+                      </span>
+                      <Switch
+                        checked={enabled}
+                        disabled={pending}
+                        onCheckedChange={(v) =>
+                          setSelectedExtras((prev) =>
+                            v ? [...prev, r.key] : prev.filter((k) => k !== r.key)
+                          )
+                        }
+                        aria-label={`${enabled ? 'سحب' : 'منح'} صلاحية ${theme.label}`}
+                      />
+                    </div>
+                  )
+                })}
+            </div>
+
+            {/* ماذا يحدث؟ — شفافية كاملة قبل الحفظ */}
+            <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3.5 text-xs leading-relaxed text-teal-900">
+              <p className="font-extrabold">ماذا يحدث للصلاحيات الممنوحة؟</p>
+              <p className="mt-1">
+                يظهر له مبدّل لوحات في حسابه فيفتح لوحة كل صلاحية ويعمل بكل قدراتها
+                (استدعاء الأطباء، إدارة الكوادر، التصفح والتقديم...) • الدور الأساسي
+                وكل البيانات والتكليفات تبقى كما هي • سحب الصلاحية يغلق اللوحة فوراً
+                • يصل صاحب الحساب إشعاراً بكل منح أو سحب.
+              </p>
+            </div>
+
+            {/* بوابة الهوية: كلمة مرور حساب الإدارة — إلزامية قبل أي منح/سحب */}
+            <div className="space-y-2">
+              <Label htmlFor={`caps-pwd-${user.id}`} className="font-bold">
+                كلمة مرور حساب الإدارة الخاص بك
+                {session?.user?.name ? ` — ${session.user.name}` : ''}
+              </Label>
+              <div className="relative">
+                <Input
+                  id={`caps-pwd-${user.id}`}
+                  type={showCapsPassword ? 'text' : 'password'}
+                  dir="ltr"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  value={capsPassword}
+                  onChange={(e) => setCapsPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && capsChanged && capsPassword.trim() && !pending)
+                      capsMutation()
+                  }}
+                  className="pe-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCapsPassword((v) => !v)}
+                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={showCapsPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showCapsPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal-600" />
+                بوابة أمان إضافية: لن يُنفَّذ المنح أو السحب إلا بعد التحقق من كلمة مرور
+                حسابك الإداري على الخادم — حماية من أي ضغطة خاطئة أو استخدام غير مصرح.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCapsOpen(false)} disabled={pending}>
+              إلغاء
+            </Button>
+            <Button
+              onClick={capsMutation}
+              disabled={pending || capsLoading || !capsChanged || !capsPassword.trim()}
+              className="gap-2"
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  جارٍ حفظ الصلاحيات...
+                </>
+              ) : (
+                <>
+                  <Layers className="size-4" />
+                  حفظ الصلاحيات
                 </>
               )}
             </Button>

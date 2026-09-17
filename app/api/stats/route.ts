@@ -10,8 +10,10 @@ export async function GET() {
   try {
     const session = await requireRole('ADMIN', 'NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR')
     const userId = session.user.id
+    // الجولة 60 — الوضع النشط: الفروع حسب اللوحة المفتوحة وليس الدور الأساسي حصراً
+    const role = session.user.activeRole ?? session.user.role
 
-    if (session.user.role === 'ADMIN') {
+    if (role === 'ADMIN') {
       const [
         totalNurses,
         pendingNurses,
@@ -69,7 +71,7 @@ export async function GET() {
       })
     }
 
-    if (session.user.role === 'NURSE' || session.user.role === 'DOCTOR') {
+    if (role === 'NURSE' || role === 'DOCTOR') {
       const [
         myAssignments,
         activeAssignments,
@@ -94,7 +96,7 @@ export async function GET() {
       ])
 
       return NextResponse.json({
-        role: session.user.role,
+        role,
         myAssignments,
         activeAssignments,
         completedAssignments,
@@ -127,7 +129,7 @@ export async function GET() {
     ])
 
     return NextResponse.json({
-      role: session.user.role,
+      role,
       myAssignments,
       pendingReceipt,
       completedAssignments,

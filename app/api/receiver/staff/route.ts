@@ -28,7 +28,8 @@ import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privac
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
-    const isSupervisor = session.user.role === 'DOCTOR_SUPERVISOR'
+    // الجولة 60 — الوضع النشط: إنشاء الكوادر/الأطباء حسب اللوحة المفتوحة
+    const isSupervisor = (session.user.activeRole ?? session.user.role) === 'DOCTOR_SUPERVISOR'
 
     // مشرف الأطباء: مؤهلات الأطباء الخاصة — المستلم: مؤهلات الكادر
     const parsed = (isSupervisor ? createDoctorSchema : receiverCreateNurseSchema).safeParse(

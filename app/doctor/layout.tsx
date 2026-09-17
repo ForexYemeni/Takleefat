@@ -1,14 +1,8 @@
-import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { DashboardShell } from '@/components/shared/dashboard-shell'
+import { requirePanelAccess } from '@/lib/panel-access'
 
-export default async function NurseLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user || session.user.role !== 'DOCTOR') {
-    redirect('/login?callbackUrl=/doctor')
-  }
+export default async function DoctorLayout({ children }: { children: React.ReactNode }) {
+  const session = await requirePanelAccess('DOCTOR')
 
   return (
     <DashboardShell role="DOCTOR" userName={session.user.name}>

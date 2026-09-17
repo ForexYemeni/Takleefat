@@ -92,12 +92,21 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user && token.id) {
-        // جلب أحدث حالة للمستخدم من قاعدة البيانات (اعتماد الحساب / تغيير الدور)
+        // جلب أحدث حالة للمستخدم من قاعدة البيانات (اعتماد الحساب / تغيير الدور /
+        // منح أو سحب الصلاحيات المركّبة — الجولة 60) — كل شيء يسري فوراً دون إعادة دخول
         // خطأ اتصال عابر → null آمن، أما الحساب المحذوف → fresh=null فعلاً
         const fresh = await db.user
           .findUnique({
             where: { id: token.id as string },
-            select: { id: true, name: true, phone: true, role: true, status: true },
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              role: true,
+              status: true,
+              extraRoles: true,
+              activeRole: true,
+            },
           })
           .catch(() => null)
 
@@ -107,6 +116,20 @@ export const authOptions: NextAuthOptions = {
           session.user.phone = fresh.phone
           session.user.role = fresh.role
           session.user.status = fresh.status
+
+          // ---------- الجولة 60: الصلاحيات المركّبة ----------
+          // extraRoles منقّاة (أدوار لوحات معروفة فقط — الإدارة مستثناة) وتُستثنى
+          // القيمة المطابقة للدور الأساسي. activeRole موثوق: إن خرج عن الصلاحيات
+          // الفعالة (مثال: سُحبت صلاحيته وهو داخلها) يرجع للدور الأساسي فوراً.
+          const { effectiveRoles, operatingRole } = await import('@/lib/roles')
+          const profile = {
+            role: fresh.role as string,
+            extraRoles: Array.isArray(fresh.extraRoles) ? fresh.extraRoles : [],
+            activeRole: fresh.activeRole,
+          }
+          const effective = effectiveRoles(profile)
+          session.user.extraRoles = effective.filter((r) => r !== profile.role)
+          session.user.activeRole = operatingRole(profile)
         } else {
           // الحساب حُذف من القاعدة — جلسة غير صالحة (تُرفض 401 في كل المسارات)
           session.user.id = ''
