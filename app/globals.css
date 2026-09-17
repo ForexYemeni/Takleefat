@@ -439,3 +439,185 @@
     stroke-dashoffset: 0;
   }
 }
+
+/* ============================================================
+   الجولة 58 — نظام التجربة الذكي الموحد
+   Smart Bottom Navigation + Role Color Identity + Liquid Glass
+   ============================================================
+   قاعدة ذهبية: المعلومة أهم من المؤثر — إذا تعارض الجمال
+   مع الوضوح انتصر الوضوح دائماً. الزجاج مقتصد في العناصر
+   التي تستفيد منه فقط: التنقل السفلي، اللوحات العائمة،
+   بطاقات التكليف المهمة، النوافذ، لوحات الحالة.
+   ============================================================ */
+
+/* ---------- 1) الهوية اللونية حسب الدور — تُفعَّل بـ data-role على الغلاف ----------
+   الخلفيات لا تتغير أبداً — هذه ألوان تمييز فقط (CTA/تنقل نشط/شارات/تقدم/تركيز) */
+[data-role='NURSE'] {
+  --role-accent: #0d9488;
+  --role-accent-strong: #0f766e;
+  --role-accent-glow: #14b8a6;
+  --role-accent-soft: rgba(20, 184, 166, 0.12);
+}
+[data-role='DOCTOR'] {
+  --role-accent: #059669;
+  --role-accent-strong: #047857;
+  --role-accent-glow: #10b981;
+  --role-accent-soft: rgba(16, 185, 129, 0.12);
+}
+[data-role='RECEIVER'] {
+  --role-accent: #b45309;
+  --role-accent-strong: #92400e;
+  --role-accent-glow: #f59e0b;
+  --role-accent-soft: rgba(245, 158, 11, 0.14);
+}
+[data-role='DOCTOR_SUPERVISOR'] {
+  --role-accent: #4f46e5;
+  --role-accent-strong: #4338ca;
+  --role-accent-glow: #6366f1;
+  --role-accent-soft: rgba(99, 102, 241, 0.12);
+}
+[data-role='ADMIN'] {
+  --role-accent: #0891b2;
+  --role-accent-strong: #0e7490;
+  --role-accent-glow: #22d3ee;
+  --role-accent-soft: rgba(34, 211, 238, 0.13);
+}
+
+/* ---------- 2) Liquid Glass — زجاج سائل مقتصد ---------- */
+.liquid-glass {
+  position: relative;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.62) 100%);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 12px 40px -14px rgba(14, 27, 78, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+/* انعكاس ضوئي علوي رفيع — عمق الزجاج دون تغطية المحتوى */
+.liquid-glass::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  inset-inline: 14%;
+  height: 1px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  pointer-events: none;
+}
+.dark .liquid-glass {
+  background: linear-gradient(150deg, rgba(38, 50, 96, 0.62) 0%, rgba(28, 38, 78, 0.55) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 14px 44px -14px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+.dark .liquid-glass::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+}
+/* نسخة هادئة للوحات داخل الصفحة — أقل ضبابية وأخف ظلاً */
+.liquid-glass-soft {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.5));
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 8px 28px -14px rgba(14, 27, 78, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.dark .liquid-glass-soft {
+  background: linear-gradient(150deg, rgba(38, 50, 96, 0.5), rgba(28, 38, 78, 0.42));
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 28px -14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ---------- 3) حركات شريط التنقل الذكي ---------- */
+@keyframes nav-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.nav-rise {
+  animation: nav-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes nav-badge-pop {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.nav-badge {
+  animation: nav-badge-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* نبض هادئ حول الزر المركزي — يوحي بالحيوية دون مبالغة */
+@keyframes center-pulse {
+  0%,
+  100% {
+    box-shadow: 0 6px 20px -6px var(--role-accent-glow, rgba(20, 184, 166, 0.55)), 0 0 0 0 var(--role-accent-soft, rgba(20, 184, 166, 0.3));
+  }
+  50% {
+    box-shadow: 0 6px 22px -6px var(--role-accent-glow, rgba(20, 184, 166, 0.55)), 0 0 0 8px transparent;
+  }
+}
+.center-action-pulse {
+  animation: center-pulse 2.8s ease-in-out infinite;
+}
+
+/* ---------- 4) شريط CTA الثابت لصفحة التكليف (فوق شريط التنقل) ---------- */
+@keyframes cta-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.cta-rise {
+  animation: cta-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+/* نقطة حالة نابضة — «متاح الآن» و«قيد المراجعة» */
+@keyframes status-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--role-accent-soft, rgba(20, 184, 166, 0.45));
+  }
+  60% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+.status-dot-pulse {
+  animation: status-dot-pulse 1.9s ease-in-out infinite;
+}
+
+/* نبض خط ECG بلون الدور داخل بطاقة البطل — خافت جداً */
+.assignment-ecg-bright {
+  stroke: var(--role-accent-glow, #14b8a6);
+  stroke-dasharray: 130 1350;
+  filter: drop-shadow(0 0 5px var(--role-accent-glow, #14b8a6));
+  animation: ecg-travel 6s linear infinite;
+}
+
+/* احترام تفضيل تقليل الحركة — للجولة 58 بالكامل */
+@media (prefers-reduced-motion: reduce) {
+  .nav-rise,
+  .nav-badge,
+  .center-action-pulse,
+  .cta-rise,
+  .status-dot-pulse,
+  .assignment-ecg-bright {
+    animation: none !important;
+  }
+}

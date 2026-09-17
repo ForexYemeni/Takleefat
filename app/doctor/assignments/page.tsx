@@ -477,7 +477,10 @@ function AvailablePosts({
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="font-bold">{post.title}</p>
+                      {/* الجولة 58: العنوان يفتح صفحة التكليف بالتجربة الجديدة */}
+                      <Link href={`/doctor/assignments/${post.id}`} className="font-bold hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-[var(--role-accent)]">
+                        {post.title}
+                      </Link>
                       <p className="text-sm text-muted-foreground">
                         {post.facility}
                         {post.department ? ` — ${post.department}` : ''}

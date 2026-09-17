@@ -32,6 +32,7 @@ import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/shared/logo'
+import { SmartBottomNav } from '@/components/shared/smart-bottom-nav'
 import { NotificationBell } from '@/components/shared/notification-bell'
 import { NotificationRealtime } from '@/components/shared/notification-realtime'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
@@ -184,9 +185,11 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
             className={cn(
               'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
               active
-                ? 'bg-primary text-primary-foreground shadow-sm'
+                ? 'text-white shadow-sm'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}
+            // الجولة 58: لون التنقل النشط يتبع هوية الدور — والمسار الجانبي كله بهوية تكليفات الثابتة
+            style={active ? { backgroundColor: 'var(--role-accent, var(--primary))' } : undefined}
           >
             <item.icon className="size-4.5 shrink-0" />
             {item.label}
@@ -240,7 +243,8 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
   )
 
   return (
-    <div className="flex min-h-screen">
+    // الجولة 58: data-role يفعّل الهوية اللونية حسب الدور (--role-accent) على كامل اللوحة
+    <div className="flex min-h-screen" data-role={role}>
       {/* الشريط الجانبي — شاشات كبيرة */}
       <aside className="fixed inset-y-0 end-0 z-40 hidden w-64 border-e bg-sidebar lg:block">
         {renderSidebarContent()}
@@ -261,7 +265,10 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
                 </SheetTrigger>
                 <SheetContent side="right" className="w-72 p-0">
                   <SheetTitle className="sr-only">قائمة التنقل</SheetTitle>
-                  {renderSidebarContent(() => setMobileOpen(false))}
+                  {/* الجولة 58: القائمة المنزلقة تُعرض في Portal خارج الغلاف — نعيد إعلان متغيرات لون الدور داخلها */}
+                  <div data-role={role} className="h-full">
+                    {renderSidebarContent(() => setMobileOpen(false))}
+                  </div>
                 </SheetContent>
               </Sheet>
               <p className="text-sm font-bold lg:hidden">تكليفات</p>
@@ -319,19 +326,23 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-6">
+        {/* الجولة 58: مسافة سفلية إضافية على الجوال حتى لا يغطي شريط التنقل العائم المحتوى */}
+        <main className="flex-1 p-4 pb-32 md:p-6 lg:pb-6">
           <div className="mx-auto w-full max-w-6xl">
             <PushBanner />
             {children}
           </div>
         </main>
 
-        <footer className="mt-auto border-t py-3">
+        <footer className="mt-auto border-t pb-20 py-3 lg:pb-3">
           <p className="px-4 text-center text-xs text-muted-foreground">
             تكليفات | Takleefat — منصة احترافية لإدارة التكليفات الطبية والتمريضية
           </p>
         </footer>
       </div>
+
+      {/* شريط التنقل الذكي العائم — جوال فقط، الشاشات الكبيرة تعتمد الشريط الجانبي */}
+      <SmartBottomNav role={role} />
     </div>
   )
 }

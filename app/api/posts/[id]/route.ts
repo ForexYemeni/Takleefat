@@ -15,6 +15,8 @@ import type { Gender } from '@prisma/client'
  * - ADMIN: التفاصيل الكاملة
  * الجولة 34: أرقام المتقدمين والكادر المُسند تُقنّع للمالك — تُفتح بتكليف
  * مسدد النسبة بين الطرفين (lib/phone-privacy) — الإدارة ترى دائماً.
+ * الجولة 58: للكادر/الطبيب — myAssignment (تكليفه هو فقط إن وُجد) + settings
+ * لتجربة صفحة التكليف الجيل الجديد، مع سدّ بيانات الكوادر الآخرين من الاستجابة.
  */
 export async function GET(
   _req: NextRequest,
@@ -51,6 +53,10 @@ export async function GET(
             value: true,
             adminFee: true,
             paymentStatus: true,
+            // الجولة 58: حقول التايم لاين والجدول لتجربة صفحة التكليف
+            createdAt: true,
+            receivedAt: true,
+            startDate: true,
             nurse: { select: { id: true, name: true, phone: true } },
           },
         },
@@ -73,9 +79,28 @@ export async function GET(
       })
       if (!allowed) return jsonError('هذا التكليف غير متاح لك', 404)
 
-      const { applications, ...rest } = post
+      const { applications, assignments, ...rest } = post
       const mine = applications.find((a) => a.nurse.id === session.user.id) ?? null
-      return NextResponse.json({ post: rest, myApplication: mine })
+      // الجولة 58: تكليف الكادر المرتبط بهذا التكليف (هو حصراً) — لمصير التايم لاين
+      // وبدون بيانات الكوادر الآخرين إطلاقاً (كانت تسرب ضمن الاستجابة السابقة)
+      const mineAssignment = assignments.find((a) => a.nurse.id === session.user.id) ?? null
+      const settings = await getSettings()
+      return NextResponse.json({
+        post: rest,
+        myApplication: mine,
+        myAssignment: mineAssignment
+          ? {
+              id: mineAssignment.id,
+              status: mineAssignment.status,
+              receivedAt: mineAssignment.receivedAt,
+              createdAt: mineAssignment.createdAt,
+              startDate: mineAssignment.startDate,
+              value: mineAssignment.value,
+              paymentStatus: mineAssignment.paymentStatus,
+            }
+          : null,
+        settings,
+      })
     }
 
     if (
