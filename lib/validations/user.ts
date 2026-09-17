@@ -222,6 +222,26 @@ export const resetPasswordSchema = z.object({
   password: adminPasswordSchema,
 })
 
+// ---------- الجولة 59: نقل الحساب إلى دور آخر — بتأكيد كلمة مرور الإدارة ----------
+
+/**
+ * الأدوار القابلة للنقل من حساب الإدارة — كل الأدوار عدا ADMIN:
+ * حسابات المديرين تُدار خارج المنصة (متغيرات البيئة) ولا تُنشأ ولا تُعدَّل من هنا.
+ */
+export const TRANSFERABLE_ROLES = ['NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR'] as const
+
+export type TransferableRole = (typeof TRANSFERABLE_ROLES)[number]
+
+export const changeRoleSchema = z.object({
+  role: z.enum(TRANSFERABLE_ROLES, { error: 'الدور الجديد غير صحيح' }),
+  // كلمة مرور حساب الإدارة الجالس حالياً — بوابة هوية إلزامية قبل أي نقل
+  password: z
+    .string({ error: 'تأكيد كلمة مرور حساب الإدارة مطلوب' })
+    .min(1, 'أدخل كلمة مرور حساب الإدارة'),
+})
+
+export type ChangeRoleInput = z.infer<typeof changeRoleSchema>
+
 // ---------- الملف الشخصي الذاتي (جميع الأدوار) ----------
 
 export const updateProfileSchema = z.object({

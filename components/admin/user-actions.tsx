@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import {
+  ArrowLeft,
   BadgeCheck,
   Ban,
+  Check,
   Eye,
   EyeOff,
   IdCard,
@@ -15,12 +17,14 @@ import {
   PhoneCall,
   ShieldCheck,
   Trash2,
+  UserCog,
   UserX,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSession } from 'next-auth/react'
 import { apiPatch, apiDelete } from '@/lib/api-client'
-import { USER_STATUS_LABELS } from '@/lib/utils'
+import { USER_STATUS_LABELS, ROLE_LABELS } from '@/lib/utils'
+import { ROLE_THEME, type RoleKey } from '@/lib/role-theme'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,10 +48,18 @@ import {
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 
 /**
- * قائمة إجراءات الحساب — تُستخدم في صفحتي الكادر التمريضي والمستلمين الإداريين:
- * عرض / اعتماد / رفض (بسبب) / إيقاف / تنشيط / تغيير كلمة المرور / حذف نهائي
+ * قائمة إجراءات الحساب — تُستخدم في صفحات الكادر التمريضي والأطباء والمستلمين الإداريين والمشرفين:
+ * عرض / اعتماد / رفض (بسبب) / إيقاف / تنشيط / نقل إلى دور آخر / تغيير كلمة المرور / حذف نهائي
  * مع بطاقات تأكيد احترافية بدل نوافذ المتصفح.
  */
+
+/** الجولة 59 — خيارات نقل الدور مع وصف مختصر لكل دور (بلون دوره من هوية المنصة) */
+const ROLE_CHOICES: { key: RoleKey; hint: string }[] = [
+  { key: 'NURSE', hint: 'يتصفح التكليفات المُعلنة ويتقدم عليها وينفّذها' },
+  { key: 'DOCTOR', hint: 'منظومة الأطباء — تكليفات طبية حسب التخصص' },
+  { key: 'RECEIVER', hint: 'يُعلن التكليفات ويستلمها ويدير كوادر جهته' },
+  { key: 'DOCTOR_SUPERVISOR', hint: 'يشرف على أطباء جهته الصحية ويديرهم' },
+]
 
 interface ActionUser {
   id: string
@@ -93,6 +105,11 @@ export function UserActionsMenu({
   // الجولة 36 — إذن «موثوق جداً» لرؤية بيانات الاتصال
   const [trustedOpen, setTrustedOpen] = useState(false)
   const [trustedValue, setTrustedValue] = useState(false)
+  // الجولة 59 — نقل الحساب إلى دور آخر بتأكيد كلمة مرور الإدارة
+  const [roleOpen, setRoleOpen] = useState(false)
+  const [roleTarget, setRoleTarget] = useState<string | null>(null)
+  const [rolePassword, setRolePassword] = useState('')
+  const [showRolePassword, setShowRolePassword] = useState(false)
   const [confirmAction, setConfirmAction] = useState<
     | { kind: 'APPROVED' }
     | { kind: 'SUSPENDED' }
@@ -146,6 +163,28 @@ export function UserActionsMenu({
       setDeleteOpen(false)
       setDeletePassword('')
       setShowDeletePassword(false)
+      invalidate()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  /** الجولة 59 — نقل الحساب إلى دور آخر: بوابة كلمة مرور الإدارة إلزامية على الخادم */
+  const roleMutation = async () => {
+    if (!roleTarget || !rolePassword.trim()) return
+    setPending(true)
+    try {
+      const res = await apiPatch<{ message: string }>(`/api/admin/users/${user.id}`, {
+        role: roleTarget,
+        password: rolePassword,
+      })
+      toast.success(res.message)
+      setRoleOpen(false)
+      setRoleTarget(null)
+      setRolePassword('')
+      setShowRolePassword(false)
       invalidate()
     } catch (e) {
       toast.error((e as Error).message)
@@ -213,6 +252,14 @@ export function UserActionsMenu({
 
   // الجولة 32 — حسابات المستلمين/المشرفين: نسبة الحصة + أذونات البيانات الكاملة
   const shareManaged = user.role === 'RECEIVER' || user.role === 'DOCTOR_SUPERVISOR'
+
+  // الجولة 59 — بيانات شريط النقل: الدور الحالي والدور المختار بألوانهما من هوية المنصة
+  const currentRoleLabel =
+    user.role && ROLE_LABELS[user.role] ? ROLE_LABELS[user.role] : 'الدور الحالي'
+  const currentTheme =
+    user.role && user.role in ROLE_THEME ? ROLE_THEME[user.role as RoleKey] : null
+  const targetTheme =
+    roleTarget && roleTarget in ROLE_THEME ? ROLE_THEME[roleTarget as RoleKey] : null
 
   return (
     <>
@@ -345,6 +392,25 @@ export function UserActionsMenu({
               </a>
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            onClick={() => {
+              setRoleTarget(null)
+              setRolePassword('')
+              setShowRolePassword(false)
+              setRoleOpen(true)
+            }}
+            className="gap-2"
+          >
+            <UserCog className="size-4" />
+            <span className="flex flex-col">
+              <span>نقل الحساب إلى دور آخر</span>
+              <span className="text-[10px] font-normal text-muted-foreground">
+                {user.role && ROLE_LABELS[user.role]
+                  ? `الدور الحالي: ${ROLE_LABELS[user.role]}`
+                  : 'تغيير دور الحساب بالكامل — بتأكيد كلمة المرور'}
+              </span>
+            </span>
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
               setNewPassword('')
@@ -611,6 +677,176 @@ export function UserActionsMenu({
             >
               <PhoneCall className="size-4" />
               {trustedValue ? 'تصنيف موثوق جداً' : 'سحب التصنيف'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* الجولة 59 — نقل الحساب إلى دور آخر: من أي دور إلى أي دور بالاتجاهين
+          (كادر ↔ مستلم ↔ مشرف ↔ طبيب) مع بوابة تأكيد بكلمة مرور الإدارة —
+          نفس نمط الحذف النهائي، لكن النقل قابل للعكس وكل البيانات تبقى محفوظة */}
+      <Dialog open={roleOpen} onOpenChange={(v) => !pending && setRoleOpen(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2.5">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-4 ring-primary/10">
+                <UserCog className="size-5" />
+              </span>
+              نقل الحساب إلى دور آخر
+            </DialogTitle>
+            <DialogDescription>
+              نقل حساب {user.name} إلى أي دور في المنصة — كل بياناته ومستنداته
+              وتكليفاته السابقة تبقى محفوظة كاملة، والنقل قابل للعكس في أي وقت.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* شريط النقل: الدور الحالي ← الدور الجديد (بلون كل دور من هوية المنصة) */}
+            <div className="flex items-center justify-center gap-3 rounded-xl border bg-secondary/40 p-3">
+              <span className="flex items-center gap-2 rounded-lg bg-background px-3 py-2 text-xs font-bold shadow-sm">
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: currentTheme?.accent ?? 'hsl(var(--muted-foreground))' }}
+                  aria-hidden
+                />
+                {currentRoleLabel}
+              </span>
+              <ArrowLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold shadow-sm transition-colors"
+                style={
+                  roleTarget && targetTheme
+                    ? { backgroundColor: targetTheme.accentSoft, color: targetTheme.accentStrong }
+                    : { backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--muted-foreground))' }
+                }
+              >
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: targetTheme?.accent ?? 'hsl(var(--muted-foreground))',
+                  }}
+                  aria-hidden
+                />
+                {roleTarget && ROLE_LABELS[roleTarget] ? ROLE_LABELS[roleTarget] : 'اختر الدور الجديد'}
+              </span>
+            </div>
+
+            {/* بطاقات اختيار الدور الجديد — كل دور بلونه من الهوية اللونية */}
+            <div
+              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              role="radiogroup"
+              aria-label="اختيار الدور الجديد"
+            >
+              {ROLE_CHOICES.filter((r) => r.key !== user.role).map((r) => {
+                const selected = roleTarget === r.key
+                const theme = ROLE_THEME[r.key]
+                return (
+                  <button
+                    key={r.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setRoleTarget(r.key)}
+                    className="flex items-start gap-2.5 rounded-xl border p-3 text-start transition-all hover:bg-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={
+                      selected
+                        ? {
+                            boxShadow: `inset 0 0 0 2px ${theme.accent}`,
+                            backgroundColor: theme.accentSoft,
+                            borderColor: 'transparent',
+                          }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors"
+                      style={
+                        selected
+                          ? { backgroundColor: theme.accent, borderColor: theme.accent }
+                          : { borderColor: 'hsl(var(--border))' }
+                      }
+                    >
+                      {selected && <Check className="size-3 text-white" />}
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="text-sm font-bold">{theme.label}</span>
+                      <span className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                        {r.hint}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* ما يحدث بعد النقل — شفافية كاملة قبل التأكيد */}
+            <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3.5 text-xs leading-relaxed text-teal-900">
+              <p className="font-extrabold">ماذا يحدث بعد النقل؟</p>
+              <p className="mt-1">
+                الدور الجديد يسري فوراً عند تحديث صفحته أو تسجيل دخوله • كل بياناته
+                ومستنداته وتكليفاته السابقة تبقى محفوظة كاملة • يمكن نقله مجدداً إلى
+                أي دور في أي وقت • يصل صاحب الحساب إشعار بالتغيير فوراً.
+              </p>
+            </div>
+
+            {/* بوابة الهوية: كلمة مرور حساب الإدارة — إلزامية قبل أي نقل */}
+            <div className="space-y-2">
+              <Label htmlFor={`role-pwd-${user.id}`} className="font-bold">
+                كلمة مرور حساب الإدارة الخاص بك
+                {session?.user?.name ? ` — ${session.user.name}` : ''}
+              </Label>
+              <div className="relative">
+                <Input
+                  id={`role-pwd-${user.id}`}
+                  type={showRolePassword ? 'text' : 'password'}
+                  dir="ltr"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  value={rolePassword}
+                  onChange={(e) => setRolePassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && roleTarget && rolePassword.trim() && !pending)
+                      roleMutation()
+                  }}
+                  className="pe-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowRolePassword((v) => !v)}
+                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={showRolePassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showRolePassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal-600" />
+                بوابة أمان إضافية: لن يُنفَّذ النقل إلا بعد التحقق من كلمة مرور حسابك
+                الإداري على الخادم — حماية من أي ضغطة خاطئة أو استخدام غير مصرح بجهازك.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleOpen(false)} disabled={pending}>
+              إلغاء
+            </Button>
+            <Button
+              onClick={roleMutation}
+              disabled={pending || !roleTarget || !rolePassword.trim()}
+              className="gap-2"
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  جارٍ نقل الحساب...
+                </>
+              ) : (
+                <>
+                  <UserCog className="size-4" />
+                  تأكيد النقل
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

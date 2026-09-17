@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { compare, hash } from 'bcryptjs'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema, trustedContactViewerSchema } from '@/lib/validations/user'
+import { reviewUserSchema, resetPasswordSchema, commissionPercentSchema, fullProfileAccessSchema, trustedContactViewerSchema, changeRoleSchema } from '@/lib/validations/user'
 import { notify } from '@/lib/notifications'
 import { getSettings, effectiveSharePercent } from '@/lib/settings'
-import { USER_STATUS_LABELS } from '@/lib/utils'
+import { USER_STATUS_LABELS, ROLE_LABELS } from '@/lib/utils'
 
 /**
  * GET /api/admin/users/[id] — الملف التفصيلي الكامل للحساب (قبل الاعتماد وبعده)
@@ -343,6 +343,70 @@ export async function PATCH(
           ? `صُنف الحساب (${updated.name}) «موثوق جداً» — يرى بيانات اتصال أي كادر/طبيب`
           : `سُحب إذن «موثوق جداً» من الحساب (${updated.name}) — عادت الأرقام مقفلة حسب القاعدة`,
         user: updated,
+      })
+    }
+
+    // ---------- الجولة 59: نقل الحساب إلى دور آخر — بتأكيد كلمة مرور الإدارة ----------
+    // البلاغ الحرفي: «اتمكن من نقل اي كادر تمريضي الى مستلم اداري او مشرف اطباء
+    // او طبيب و العكس للجميع شرط تاكيد بكلمة المرور»:
+    // النقل من أي دور إلى أي دور (NURSE ↔ RECEIVER ↔ DOCTOR ↔ DOCTOR_SUPERVISOR
+    // بكل الاتجاهات) ولا يُنفّذ إلا بعد التحقق من كلمة مرور حساب الإدارة الجالس
+    // حالياً بمقارنة bcrypt — نفس بوابة الهوية المطبقة على الحذف النهائي.
+    // كل بيانات الحساب وتكليفاته السابقة تبقى كما هي دون أي حذف، والدور الجديد
+    // يسري فوراً لأن الجلسة تجلب الدور الأحدث من قاعدة البيانات عند كل تحقق،
+    // والنقل قابل للعكس في أي وقت.
+    if (body && typeof body === 'object' && 'role' in body) {
+      const parsed = changeRoleSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'بيانات النقل غير صحيحة', 422)
+      }
+
+      const { role: newRole, password: adminPassword } = parsed.data
+
+      // بوابة الهوية: كلمة مرور حساب الإدارة الجالس حالياً إلزامية قبل أي نقل
+      const admin = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { password: true },
+      })
+      if (!admin) return jsonError('حساب الإدارة غير موجود', 404)
+
+      const passwordValid = await compare(adminPassword, admin.password)
+      if (!passwordValid) {
+        return jsonError('كلمة مرور حساب الإدارة غير صحيحة — لم يتم نقل الحساب', 403)
+      }
+
+      if (target.role === newRole) {
+        return jsonError(
+          `الحساب بالفعل (${ROLE_LABELS[newRole]}) — اختر دوراً مختلفاً عن الدور الحالي`,
+          422
+        )
+      }
+
+      const updated = await db.user.update({
+        where: { id },
+        data: { role: newRole },
+        select: { id: true, name: true, role: true },
+      })
+
+      // لوحة الدور الجديد — يصل الإشعار برابط مباشر إليها
+      const roleDashboards: Record<string, string> = {
+        NURSE: '/nurse',
+        DOCTOR: '/doctor',
+        RECEIVER: '/receiver',
+        DOCTOR_SUPERVISOR: '/supervisor',
+      }
+
+      await notify(id, {
+        title: 'تم نقل حسابك إلى دور جديد',
+        body: `قامت إدارة المنصة بنقل حسابك من دور «${ROLE_LABELS[target.role]}» إلى دور «${ROLE_LABELS[newRole]}». سيظهر لك الدور الجديد فور تحديث الصفحة — وكل بياناتك وتكليفاتك السابقة محفوظة كما هي.`,
+        type: 'GENERIC',
+        link: roleDashboards[newRole],
+      })
+
+      return NextResponse.json({
+        message: `تم نقل الحساب (${updated.name}) من ${ROLE_LABELS[target.role]} إلى ${ROLE_LABELS[newRole]} — الدور يسري فوراً وتصل الحساب رسالة بالتغيير`,
+        user: updated,
+        transferredBy: session.user.name,
       })
     }
 

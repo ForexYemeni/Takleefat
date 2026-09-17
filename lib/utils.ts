@@ -57,6 +57,8 @@ export const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'مدير النظام',
   NURSE: 'الكادر التمريضي',
   RECEIVER: 'المستلم الإداري',
+  DOCTOR: 'الطبيب',
+  DOCTOR_SUPERVISOR: 'مشرف الأطباء',
 }
 
 export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
