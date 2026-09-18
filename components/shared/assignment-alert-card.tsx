@@ -56,17 +56,24 @@ export function AssignmentAlertCard({
 }: AssignmentAlertCardProps) {
   const t = TONE_STYLES[tone]
   return (
-    <div className={`flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center ${t.wrap}`}>
-      <span className={`rounded-xl p-2.5 ${t.icon}`}>
+    <div
+      className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm transition-shadow duration-300 hover:shadow-md sm:flex-row sm:items-center ${t.wrap}`}
+    >
+      <span className={`shrink-0 rounded-2xl p-3 shadow-sm ${t.icon}`}>
         <t.Icon className="size-5" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{eyebrow}</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+          {eyebrow}
+        </p>
         <p className="mt-0.5 truncate text-base font-extrabold">{title}</p>
         {subtitle && <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</p>}
-        {chips && <div className="mt-2 flex flex-wrap items-center gap-1.5">{chips}</div>}
+        {chips && <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{chips}</div>}
       </div>
-      <Button asChild className="shrink-0 gap-2">
+      <Button
+        asChild
+        className="shrink-0 gap-2 shadow-md shadow-primary/20 transition-all hover:shadow-lg hover:shadow-primary/25"
+      >
         <Link href={href}>
           {ctaLabel}
         </Link>

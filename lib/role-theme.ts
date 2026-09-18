@@ -41,12 +41,12 @@ export const ROLE_THEME: Record<RoleKey, RoleTheme> = {
     accentSoft: 'rgba(16, 185, 129, 0.12)',
     label: 'الطبيب',
   },
-  // المستلم الإداري — كهرماني/ذهبي (عمليات وإدارة ومرجعية)
+  // المستلم الإداري — أزرق ملكي طبي (هوية تكليفات: عمليات وثقة واحترافية)
   RECEIVER: {
-    accent: '#B45309',
-    accentStrong: '#92400E',
-    accentGlow: '#F59E0B',
-    accentSoft: 'rgba(245, 158, 11, 0.14)',
+    accent: '#2563EB',
+    accentStrong: '#1D4ED8',
+    accentGlow: '#3B82F6',
+    accentSoft: 'rgba(37, 99, 235, 0.10)',
     label: 'المستلم الإداري',
   },
   // مشرف الأطباء — نيلي (إشراف ورقابة ومتابعة)

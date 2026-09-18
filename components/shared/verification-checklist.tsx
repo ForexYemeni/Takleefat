@@ -412,18 +412,18 @@ export function AccountStatusBanner({
         aria-hidden
         className="pointer-events-none absolute -left-10 -top-14 size-40 rounded-full bg-current opacity-[0.04]"
       />
-      <div className="relative flex items-start gap-3.5">
+      <div className="relative flex items-start gap-4">
         <span
           className={cn(
-            'flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-lg',
+            'flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg',
             tone.iconBg,
             tone.pulse && 'animate-pulse'
           )}
         >
-          <Icon className="size-5" />
+          <Icon className="size-5.5" />
         </span>
-        <div className="min-w-0">
-          <p className="font-extrabold leading-snug">{tone.title}</p>
+        <div className="min-w-0 pt-0.5">
+          <p className="text-[0.95rem] font-extrabold leading-snug">{tone.title}</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
         </div>
       </div>

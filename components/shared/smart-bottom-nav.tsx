@@ -336,7 +336,7 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
         style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <nav className="nav-rise mx-auto w-full max-w-md px-4" aria-label="التنقل الرئيسي">
-          <div className="liquid-glass flex items-end justify-around gap-1 rounded-3xl px-2 pt-1.5 pb-1.5">
+          <div className="liquid-glass flex items-end justify-around gap-1 rounded-3xl px-2.5 pt-2 pb-2">
             {sideStart.map(tabButton)}
             <div className="w-16 shrink-0">{centerButton()}</div>
             {sideEnd.map(tabButton)}

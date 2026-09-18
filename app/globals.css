@@ -465,10 +465,10 @@
   --role-accent-soft: rgba(16, 185, 129, 0.12);
 }
 [data-role='RECEIVER'] {
-  --role-accent: #b45309;
-  --role-accent-strong: #92400e;
-  --role-accent-glow: #f59e0b;
-  --role-accent-soft: rgba(245, 158, 11, 0.14);
+  --role-accent: #2563eb;
+  --role-accent-strong: #1d4ed8;
+  --role-accent-glow: #3b82f6;
+  --role-accent-soft: rgba(37, 99, 235, 0.1);
 }
 [data-role='DOCTOR_SUPERVISOR'] {
   --role-accent: #4f46e5;

@@ -260,8 +260,8 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
       </div>
       <div className="border-t p-4">
         <div className="flex items-center gap-3">
-          <Avatar className="size-9">
-            <AvatarFallback className="bg-teal-100 text-sm font-bold text-teal-800">
+          <Avatar className="size-9 ring-2 ring-background">
+            <AvatarFallback className="bg-primary/10 text-sm font-bold text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -293,10 +293,10 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
 
       {/* المحتوى */}
       <div className="flex min-h-screen w-full flex-col lg:pe-64">
-        {/* الشريط العلوي */}
-        <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-md">
-          <div className="flex h-14 items-center justify-between gap-3 px-4">
-            <div className="flex items-center gap-2">
+        {/* الشريط العلوي — زجاج طبي فاخر رقيق */}
+        <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 shadow-[0_1px_2px_-1px_rgba(14,27,78,0.07)] backdrop-blur-xl">
+          <div className="flex h-16 items-center justify-between gap-3 px-4">
+            <div className="flex items-center gap-1.5">
               {/* قائمة الجوال */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
@@ -312,7 +312,9 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
                   </div>
                 </SheetContent>
               </Sheet>
-              <p className="text-sm font-bold lg:hidden">تكليفات</p>
+              <Link href="/" aria-label="تكليفات | Takleefat" className="lg:hidden">
+                <Logo size="sm" />
+              </Link>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -333,8 +335,8 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="gap-2 px-2" aria-label="قائمة المستخدم">
-                    <Avatar className="size-8">
-                      <AvatarFallback className="bg-teal-100 text-xs font-bold text-teal-800">
+                    <Avatar className="size-8 ring-2 ring-background">
+                      <AvatarFallback className="bg-primary/10 text-xs font-bold text-primary">
                         {initials}
                       </AvatarFallback>
                     </Avatar>

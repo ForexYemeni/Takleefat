@@ -73,30 +73,40 @@ export default function ReceiverOverviewPage() {
       title: 'إجمالي التكليفات الواردة',
       value: data?.myAssignments ?? 0,
       icon: ClipboardList,
-      color: 'bg-teal-50 text-teal-700',
+      color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300',
+      accent: 'from-blue-500/60 via-blue-400/20',
     },
     {
       title: 'بانتظار استلامك',
       value: data?.pendingReceipt ?? 0,
       icon: Inbox,
-      color: 'bg-amber-50 text-amber-700',
+      color: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300',
+      accent: 'from-cyan-500/60 via-cyan-400/20',
     },
     {
       title: 'تكليفات مكتملة',
       value: data?.completedAssignments ?? 0,
       icon: CheckCircle2,
-      color: 'bg-emerald-50 text-emerald-700',
+      color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+      accent: 'from-emerald-500/60 via-emerald-400/20',
     },
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {/* هالة خلفية طبية خافتة جداً — زخرفة فقط بلا أي محتوى */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 -z-10 h-56 overflow-hidden">
+        <div className="absolute -top-24 start-1/4 size-72 rounded-full bg-gradient-to-b from-blue-500/[0.07] to-transparent blur-3xl" />
+        <div className="absolute -top-10 end-0 size-56 rounded-full bg-gradient-to-b from-cyan-400/[0.06] to-transparent blur-3xl" />
+      </div>
+
       {/* الجولة 44: بانر العرض بدون رسوم إدارة */}
       <PromoBanner />
       <div>
-        <h1 className="text-2xl font-extrabold">نظرة عامة</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          ملخص التكليفات الواردة إليك في منصة تكليفات | Takleefat
+        <h1 className="text-[1.65rem] font-black leading-tight tracking-tight sm:text-3xl">نظرة عامة</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          ملخص التكليفات الواردة إليك في منصة{' '}
+          <span className="whitespace-nowrap">تكليفات | Takleefat</span>
         </p>
       </div>
 
@@ -171,14 +181,28 @@ export default function ReceiverOverviewPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         {cards.map((card) => (
-          <Card key={card.title} className="h-full">
+          <Card
+            key={card.title}
+            className="group relative h-full overflow-hidden border-border/70 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-border hover:shadow-md"
+          >
+            {/* خيط ضوئي علوي رفيع بلون البطاقة — لمسة طبية فاخرة */}
+            <span
+              aria-hidden
+              className={`absolute inset-x-6 top-0 h-px bg-gradient-to-l ${card.accent} to-transparent opacity-70`}
+            />
             <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
-                  <p className="mt-1 text-3xl font-extrabold">{card.value}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold leading-snug text-muted-foreground">
+                    {card.title}
+                  </p>
+                  <p className="mt-2 text-4xl font-black tracking-tight tabular-nums">
+                    {card.value}
+                  </p>
                 </div>
-                <span className={`rounded-xl p-2.5 ${card.color}`}>
+                <span
+                  className={`shrink-0 rounded-2xl p-3 shadow-sm ring-1 ring-black/[0.04] transition-transform duration-300 group-hover:scale-105 dark:ring-white/[0.06] ${card.color}`}
+                >
                   <card.icon className="size-5" />
                 </span>
               </div>
@@ -187,7 +211,7 @@ export default function ReceiverOverviewPage() {
         ))}
       </div>
 
-      <Card className="bg-secondary/50">
+      <Card className="relative overflow-hidden border-primary/15 bg-gradient-to-bl from-primary/[0.05] via-card to-card shadow-sm transition-shadow hover:shadow-md">
         <CardContent className="flex flex-col items-start justify-between gap-4 p-6 sm:flex-row sm:items-center">
           <div>
             <p className="flex items-center gap-2 font-bold">
@@ -198,7 +222,10 @@ export default function ReceiverOverviewPage() {
               راجع التكليفات الجديدة وأكد استلامها إلكترونياً لتوثيق الإجراء.
             </p>
           </div>
-          <Button asChild className="gap-2">
+          <Button
+            asChild
+            className="gap-2 shadow-md shadow-primary/25 transition-all hover:shadow-lg hover:shadow-primary/30"
+          >
             <Link href="/receiver/assignments">
               <Inbox className="size-4" />
               عرض التكليفات الواردة

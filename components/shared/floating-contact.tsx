@@ -36,10 +36,16 @@ function waMeLink(phone: string, message: string): string {
 }
 
 /** إزاحة يسار الشاشة داخل لوحات التحكم — الشريط الجانبي (16rem) على يسار الشاشات الكبيرة
- *  الأسفل يحترم منطقة الأمان في أجهزة iPhone (وضع PWA المثبت viewportFit: cover) */
+ *  الأسفل: على الجوال يرتفع الزر فوق شريط التنقل العائم كي لا يغطيه أبداً،
+ *  وعلى الشاشات الكبيرة يعود لقرب الحافة (الشريط الجانبي يخفي التنقل السفلي).
+ *  يحترم منطقة الأمان في أجهزة iPhone (وضع PWA المثبت viewportFit: cover) */
 function positionClass(pathname: string): string {
-  const bottom = 'bottom-[calc(1.25rem+env(safe-area-inset-bottom))]'
-  if (pathname.startsWith('/nurse') || pathname.startsWith('/receiver')) {
+  const dashboardsWithNav = ['/nurse', '/receiver', '/doctor', '/supervisor']
+  const isDashboard = dashboardsWithNav.some((p) => pathname.startsWith(p))
+  const bottom = isDashboard
+    ? 'bottom-[calc(5.75rem+env(safe-area-inset-bottom))] lg:bottom-5'
+    : 'bottom-[calc(1.25rem+env(safe-area-inset-bottom))]'
+  if (isDashboard) {
     return `${bottom} left-5 lg:left-[calc(16rem+1.25rem)]`
   }
   return `${bottom} left-5`
