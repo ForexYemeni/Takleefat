@@ -5,14 +5,12 @@ import {
   BadgeCheck,
   Briefcase,
   CalendarClock,
-  Clock,
   FileText,
   GraduationCap,
   IdCard,
   Lock,
   MessageCircle,
   Phone as PhoneIcon,
-  ShieldCheck,
   Stethoscope,
   UserRound,
   XCircle,
@@ -26,13 +24,14 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
 import { FavoriteStar } from '@/components/shared/favorite-star'
 import { StaffPhone } from '@/components/shared/staff-phone'
+import { StaffAvatar } from '@/components/shared/staff-avatar'
+import { DocumentAccessPanel, type DocumentAccessState } from '@/components/shared/document-access-panel'
 import { useContactLockHint } from '@/lib/contact-hint'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import {
   APPLICATION_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
   GENDER_LABELS,
-  cn,
   formatDate,
   whatsappLink,
 } from '@/lib/utils'
@@ -87,6 +86,8 @@ export interface ApplicantData {
     /** أقسام العمل المصرّح بها — ممرض طوارئ/رقود/عناية/مختبر... */
     workDepartments?: string[]
     documents: ApplicantDocument[]
+    /** الجولة 61: رابط صورة البروفايل — تظهر في التقديمات (اختيار صاحبها) */
+    profilePhotoUrl?: string | null
     /** الجولة 44: المستندات مخفية عن هذا المشاهد — تظهر حالة «تم التحقق» بدلها */
     documentsHidden?: boolean
     /** الجولة 45: حالات المستندات (نوع + حالة) — تُعرض شاراتها عند الإخفاء */
@@ -95,6 +96,8 @@ export interface ApplicantData {
     documentsVerified?: boolean
     /** الجولة 44: عدد المستندات المعتمدة من الإدارة */
     approvedDocuments?: number
+    /** الجولة 61: حالة طلب رؤية المستندات لهذا المتقدم — للواجهة */
+    documentAccess?: DocumentAccessState | null
     ratings?: ApplicantRatings
     /** السجل المهني — الجهات التي عمل بها مع سنوات العمل (الجولة الثامنة) */
     affiliations?: Array<{
@@ -135,9 +138,13 @@ export function ApplicantCV({
       {/* رأس السيرة الذاتية */}
       <div className="flex items-start justify-between gap-3 rounded-2xl border bg-gradient-to-bl from-teal-50 to-transparent p-4">
         <div className="flex items-center gap-3">
-          <span className="flex size-12 items-center justify-center rounded-full bg-teal-100 text-lg font-extrabold text-teal-800">
-            {nurse.name.slice(0, 1)}
-          </span>
+          {/* الجولة 61: صورة البروفايل إن اختارها الكادر — وإلا الصورة الرمزية كالسابق */}
+          <StaffAvatar
+            name={nurse.name}
+            photoUrl={nurse.profilePhotoUrl}
+            className="size-12 rounded-full text-lg"
+            fallbackClassName="bg-teal-100 text-teal-800"
+          />
           <div>
             <p className="text-lg font-extrabold">{nurse.name}</p>
             <p className="text-xs text-muted-foreground">
@@ -340,57 +347,19 @@ export function ApplicantCV({
 
       {/* المستندات — صور البطاقة والمزاولة */}
       {nurse.documentsHidden ? (
-        // الجولة 44 + 45: المستندات مخفية عن هذا المشاهد — حالة «تم التحقق»
-        // + شارات حالة كل مستند: معتمدة / مرفوضة / قيد المراجعة (البلاغ الحرفي)
+        // الجولة 61 — السياسة الجديدة: مستندات المتقدم مخفية — تظهر لوحة
+        // الخصوصية مع شارات الجاهزية وزر «طلب رؤية المستندات من الإدارة»
+        // (تُلغي لوحة الجولة 44-45 الثابتة — قرار صاحب المنصة للشفافية)
         <div className="space-y-2">
           <p className="text-sm font-bold">المستندات الرسمية</p>
-          <div className="flex items-start gap-3 rounded-2xl border-2 border-emerald-200 bg-gradient-to-bl from-emerald-50 to-transparent p-4 dark:border-emerald-900 dark:from-emerald-950/20">
-            <span className="shrink-0 rounded-xl bg-emerald-100 p-2.5 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-              <ShieldCheck className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-emerald-800 dark:text-emerald-200">
-                {nurse.documentsVerified ? 'تم التحقق من مستندات الكادر' : 'مستندات الكادر محفوظة وخاصة'}
-                {nurse.documentsVerified && (
-                  <Badge className="gap-1 bg-emerald-500 text-white">
-                    <BadgeCheck className="size-3" />
-                    مستندات معتمدة من الإدارة
-                  </Badge>
-                )}
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                محتوى المستندات الرسمية (البطاقة والمزاولة) مخفي حفاظاً على خصوصية الكادر —
-                لا يُعرض إلا إذا كان الكادر من كوادر جهتك الصحية، أما حالتها المراجعية فمعروضة أدناه.
-              </p>
-              {(nurse.documentStatuses?.length ?? 0) > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {nurse.documentStatuses!.map((ds) => (
-                    <span
-                      key={ds.type}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-extrabold',
-                        ds.status === 'APPROVED'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
-                          : ds.status === 'REJECTED'
-                            ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                      )}
-                    >
-                      {ds.status === 'APPROVED' ? (
-                        <BadgeCheck className="size-3" />
-                      ) : ds.status === 'REJECTED' ? (
-                        <XCircle className="size-3" />
-                      ) : (
-                        <Clock className="size-3" />
-                      )}
-                      {DOCUMENT_TYPE_LABELS[ds.type] ?? ds.type}:{' '}
-                      {ds.status === 'APPROVED' ? 'معتمدة' : ds.status === 'REJECTED' ? 'مرفوضة' : 'قيد المراجعة'}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <DocumentAccessPanel
+            targetId={nurse.id}
+            targetName={nurse.name}
+            access={nurse.documentAccess}
+            documentsVerified={nurse.documentsVerified}
+            approvedDocuments={nurse.approvedDocuments}
+            documentStatuses={nurse.documentStatuses}
+          />
         </div>
       ) : (
         <div className="space-y-2">

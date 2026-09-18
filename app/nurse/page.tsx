@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button'
 import { PromoBanner } from '@/components/shared/promo-banner'
 // الجولة 57 — قائمة التحقق التفاعلية + لافتة الحالة الموحدة
 import { VerificationChecklist, AccountStatusBanner } from '@/components/shared/verification-checklist'
+// الجولة 61 — بطاقة الخصوصية وإكمال الملف (صورة البروفايل + إخفاء المستندات للشفافية)
+import { ProfileNoticeCard } from '@/components/shared/profile-notice-card'
 
 interface NurseStats {
   myAssignments: number
@@ -185,6 +187,10 @@ export default function NurseOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* الجولة 61: بطاقة الخصوصية وإكمال الملف — تنبيه الصورة الإجبارية للذكور
+          + بلاغ الشفافية (إخفاء المستندات عن المستلمين ومشرفي الأطباء بإذن الإدارة) */}
+      <ProfileNoticeCard profilePath="/nurse/profile" />
+
       {/* الجولة 49 — البلاغ الحرفي: «اضف في أعلى صفحة نظرة عامة الوقت التنازلي
           لانتهاء التكليف بشكل احترافي جداً» — بطاقة التكليف الساري بعدّ تنازلي
           مجزأ فاخر هي أول ما يراه الكادر في نظرة عامة */}

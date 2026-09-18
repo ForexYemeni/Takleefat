@@ -26,6 +26,8 @@ export async function GET() {
         qualification: true,
         yearsOfExperience: true,
         gender: true,
+        // الجولة 61: صورة البروفايل — معرف الـBLOB لعرض الصورة وإدارتها في الملف الشخصي
+        profilePhotoBlobId: true,
         createdAt: true,
         _count: {
           select: {

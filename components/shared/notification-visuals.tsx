@@ -3,6 +3,8 @@ import {
   BellRing,
   ClipboardList,
   FileCheck2,
+  KeyRound,
+  ShieldCheck,
   UserCheck,
   UserX,
   Wallet,
@@ -26,6 +28,11 @@ const TYPE_STYLE: Record<string, { icon: React.ComponentType<{ className?: strin
   APPLICATION_SUBMITTED: { icon: BellRing, tint: 'bg-teal-500/10 text-teal-600' },
   APPLICATION_APPROVED: { icon: Wallet, tint: 'bg-emerald-500/10 text-emerald-600' },
   APPLICATION_REJECTED: { icon: UserX, tint: 'bg-red-500/10 text-red-600' },
+  // ---------- الجولة 61: خصوصية المستندات ----------
+  DOCUMENT_ACCESS_REQUESTED: { icon: KeyRound, tint: 'bg-amber-500/10 text-amber-600' },
+  DOCUMENT_ACCESS_DECIDED: { icon: ShieldCheck, tint: 'bg-emerald-500/10 text-emerald-600' },
+  DOCUMENT_ACCESS_GRANTED: { icon: ShieldCheck, tint: 'bg-emerald-500/10 text-emerald-600' },
+  DOCUMENT_ACCESS_REVOKED: { icon: UserX, tint: 'bg-red-500/10 text-red-600' },
 }
 
 export function notificationVisuals(type: string): {

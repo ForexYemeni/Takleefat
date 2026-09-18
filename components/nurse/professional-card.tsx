@@ -16,6 +16,8 @@ export interface ProfessionalCardProps {
   qualification: string | null
   yearsOfExperience: number | null
   gender?: string | null
+  /** الجولة 61: صورة البروفايل — يختارها الكادر من ملفه وتُقدَّم عامة */
+  photoUrl?: string | null
   /** أقسام العمل المصرّح بها (ممرض طوارئ/رقود/عناية...) — صف شرائح فاخر */
   departments?: string[]
   ratingAverage: number | null
@@ -34,6 +36,7 @@ export function ProfessionalCard({
   qualification,
   yearsOfExperience,
   gender,
+  photoUrl,
   departments,
   ratingAverage,
   ratingCount,
@@ -47,18 +50,29 @@ export function ProfessionalCard({
       {/* رأس البطاقة — التدرج الرسمي للمنصة */}
       <div className="relative bg-gradient-to-bl from-[#2563EB] to-[#8B5CF6] p-5 text-white">
         <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <BadgeCheck className="size-5 shrink-0" />
-              <span className="text-xs font-bold tracking-wide opacity-90">
-                كادر موثّق من منصة تكليفات
-              </span>
+          <div className="flex items-start gap-3.5">
+            {/* الجولة 61: صورة البروفايل — إن لم توجد تُعرض البطاقة بدونها كالسابق */}
+            {photoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoUrl}
+                alt={`صورة ${name}`}
+                className="size-16 shrink-0 rounded-2xl border-2 border-white/50 object-cover shadow-md"
+              />
+            )}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <BadgeCheck className="size-5 shrink-0" />
+                <span className="text-xs font-bold tracking-wide opacity-90">
+                  كادر موثّق من منصة تكليفات
+                </span>
+              </div>
+              <h2 className="text-2xl font-extrabold leading-snug">{name}</h2>
+              <p className="text-sm font-bold opacity-90">
+                {specialty || 'كادر تمريضي معتمد'}
+                {gender && GENDER_LABELS[gender] ? ` — ${GENDER_LABELS[gender]}` : ''}
+              </p>
             </div>
-            <h2 className="text-2xl font-extrabold leading-snug">{name}</h2>
-            <p className="text-sm font-bold opacity-90">
-              {specialty || 'كادر تمريضي معتمد'}
-              {gender && GENDER_LABELS[gender] ? ` — ${GENDER_LABELS[gender]}` : ''}
-            </p>
           </div>
           {qrSvg && (
             <div className="shrink-0 rounded-2xl bg-white p-2 shadow-md" aria-label="رمز التحقق QR">

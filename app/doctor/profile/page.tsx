@@ -15,6 +15,7 @@ import { DoctorDepartmentsAlert } from '@/components/shared/departments-complete
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmailAccountCard } from '@/components/shared/email-account-card'
+import { ProfilePhotoManager } from '@/components/shared/profile-photo-manager'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -79,6 +80,9 @@ export default function NurseProfilePage() {
 
       {/* الجولة 50: تنبيه إكمال تخصصات العمل — يتحول لشريط نجاح فور إضافة أول تخصص */}
       <DoctorDepartmentsAlert />
+
+      {/* الجولة 61: إدارة صورة البروفايل — إجبارية للذكور واختيارية للإناث */}
+      <ProfilePhotoManager />
 
       <Card>
         <CardHeader>

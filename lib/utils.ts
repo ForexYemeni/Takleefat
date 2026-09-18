@@ -181,6 +181,19 @@ export function formatCurrency(amount: number | null | undefined): string {
   return `${new Intl.NumberFormat('ar-YE-u-nu-latn', { maximumFractionDigits: 0 }).format(amount)} ريال`
 }
 
+/**
+ * هل صورة البروفايل إجبارية لهذا الحساب؟ — الجولة 61
+ * إجبارية للكادر الذكور (NURSE/DOCTOR + gender MALE) — واختيارية لغيرهم
+ * (الإناث لمن ترغب، وغير المحدد يُعامل كاختيارية حتى يستكمل بياناته).
+ * دالة نقطة بلا اعتماديات — تعمل في الخادم والعميل (قرار صاحب المنصة).
+ */
+export function isProfilePhotoRequired(
+  role: string | null | undefined,
+  gender: string | null | undefined
+): boolean {
+  return (role === 'NURSE' || role === 'DOCTOR') && gender === 'MALE'
+}
+
 export function timeAgo(date: string | Date): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
   if (seconds < 60) return 'الآن'

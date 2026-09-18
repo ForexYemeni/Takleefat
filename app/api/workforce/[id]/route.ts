@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
-import { resolveReceiverOrgs } from '@/lib/network'
+import { latestDocumentAccessRequest, logDocumentAccess, profilePhotoUrl } from '@/lib/document-access'
 
 /**
  * GET /api/workforce/[id] — السيرة الذاتية الكاملة لكادر تمريضي أو طبيب
@@ -15,11 +15,14 @@ import { resolveReceiverOrgs } from '@/lib/network'
  *    المستلم → كادر تمريضي | مشرف الأطباء → أطباء.
  *  - الإدارة: ترى كل شيء دائماً.
  *
- * بوابة المستندات (الجولة 45 + 46):
+ * بوابة المستندات (الجولة 61 — السياسة المعتمدة من صاحب المنصة):
  *  - الإدارة: ترى المستندات دائماً.
- *  - المستلم/المشرف: محتوى المستندات يظهر فقط إذا كان الكادر مرتبطاً بجهة
- *    من جهات المشاهد (ارتباط غير معلق = كوادر جهته) — وإلا فالمحتوى مخفي
- *    مع documentStatuses (نوع + حالة) لعرض شارات: معتمدة/مرفوضة/قيد المراجعة.
+ *  - المستلم/المشرف: محتوى المستندات مخفي نهائياً — يُفتح حصراً بمنح إداري
+ *    صريح قائم (طلب رؤية بسبب معلن أقرّته الإدارة) — وتُسجَّل كل مشاهدة،
+ *    ويبقى العَلم بجاهزية المستندات (شارات معتمدة/مرفوضة/قيد المراجعة)
+ *    والصورة البروفايلية (باختيار صاحبها) معروضاً للشفافية.
+ *    (تحل هذه القاعدة محل بوابة «نفس الجهة» للجولتين 45-46 — سجل المنح
+ *    هو المصدر الوحيد للفتح، والسحب الإداري يسري فوراً.)
  */
 export async function GET(
   _req: NextRequest,
@@ -67,6 +70,8 @@ export async function GET(
           qualification: true,
           yearsOfExperience: true,
           createdAt: true,
+          // الجولة 61: صورة البروفايل — يظهر رابطها لكل المشاهدات (اختيار صاحبها)
+          profilePhotoBlobId: true,
           // أقسام عمل الكادر (ممرض طوارئ/رقود/عناية/مختبر...)
           workDepartments: {
             select: { department: { select: { id: true, name: true } } },
@@ -137,27 +142,32 @@ export async function GET(
       revealed = paid.has(user.id)
     }
 
-    // الجولة 45 — بوابة المستندات: محتوى المستندات لغير الإدارة يظهر فقط
-    // إذا كان الكادر مرتبطاً بجهة من جهات المشاهد (ارتباط غير معلق) —
-    // وإلا: مستندات مخفية + شارات الحالة (معتمدة/مرفوضة/قيد المراجعة)
+    // الجولة 61 — سياسة المستندات الجديدة (بطلب صريح من صاحب المنصة):
+    // مستندات الكادر مخفية عن المستلمين الإداريين ومشرفي الأطباء نهائياً —
+    // تُفتح حصراً بمنح إداري صريح قائم (طلب رسمي بسبب معلن أقرّته الإدارة)،
+    // وكل فتح لمحتوى المستندات بمنح يُسجَّل في سجل المشاهدات (شفافية كاملة).
+    // (تحل هذه القاعدة محل بوابة «نفس الجهة» للجولتين 45-46.)
     let canSeeDocuments = session.user.role === 'ADMIN'
+    const accessRequest = canSeeDocuments
+      ? null
+      : await latestDocumentAccessRequest(session.user.id, id)
     if (!canSeeDocuments) {
-      const [viewerOrgs, staffOrgIds] = await Promise.all([
-        resolveReceiverOrgs(session.user.id),
-        db.nurseAffiliation.findMany({
-          where: { nurseId: id, status: { not: 'PENDING' } },
-          select: { hospitalId: true },
-        }),
-      ])
-      const viewerOrgIds = new Set(viewerOrgs.map((o) => o.id))
-      canSeeDocuments = staffOrgIds.some((a) => viewerOrgIds.has(a.hospitalId))
+      canSeeDocuments = accessRequest?.status === 'APPROVED'
+      if (canSeeDocuments && accessRequest) {
+        await logDocumentAccess(accessRequest.id, session.user.id, id)
+      }
     }
     const visibleDocs = canSeeDocuments ? documents : []
     const approvedDocsCount = documents.filter((d) => d.status === 'APPROVED').length
 
+    // الجولة 61: فصل معرف صورة البروفايل عن بقية بيانات الملف — يُرسل رابطاً فقط
+    const { profilePhotoBlobId, ...profileData } = user
+
     return NextResponse.json({
       profile: {
-        ...user,
+        ...profileData,
+        // الجولة 61: رابط صورة البروفايل — يُقدَّم عامة من مسار الملفات (اختيار صاحبها)
+        profilePhotoUrl: profilePhotoUrl(profilePhotoBlobId),
         ...phoneView(session.user.role, user.phone, revealed, trusted),
         workDepartments: user.workDepartments.map((w) => w.department.name),
         workSpecialties: user.workSpecialties.map((w) => w.specialty.name),
@@ -180,12 +190,19 @@ export async function GET(
           })),
         },
       },
-      // الجولة 45: المستندات مخفية عن غير نفس الجهة — مع شارات الحالة لكل مستند
+      // الجولة 61: المستندات تُفتح بمنح إداري صريح حصراً — مع حالة الطلب للواجهة
       documents: visibleDocs,
       documentsHidden: !canSeeDocuments,
       documentsVerified: approvedDocsCount > 0,
       approvedDocuments: approvedDocsCount,
       documentStatuses: documents.map((d) => ({ type: d.type, status: d.status })),
+      documentAccess: {
+        status: accessRequest?.status ?? 'NONE',
+        reviewNote: accessRequest?.reviewNote ?? null,
+        requestedAt: accessRequest?.createdAt ?? null,
+        decidedAt: accessRequest?.reviewedAt ?? null,
+        canRequest: !canSeeDocuments && accessRequest?.status !== 'PENDING',
+      },
     })
   } catch (error) {
     return handleApiError(error)

@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privacy'
+import { profilePhotoUrl } from '@/lib/document-access'
 
 /**
  * GET /api/posts/[id]/applications — تقديمات التكليف المُعلن
  * للمستلم الإداري المالك (وللإدارة) — تشمل السيرة الذاتية الاحترافية:
- * البيانات، بيانات التواصل، المستندات كاملة لكل متقدم.
+ * البيانات وبيانات التواصل وصورة البروفايل لكل متقدم.
  * الجولة 34: أرقام المتقدمين تُقنّع للمالك — تُفتح بتكليف مسدد النسبة
  * بين الطرفين (lib/phone-privacy) — الإدارة ترى الأرقام دائماً.
- * الجولة 46 — البلاغ الحرفي: «عند التقديم على تكليف لأي كان كادر تمريضي
- * او طبيب يجب ان تظهر المستندات بشكل طبيعي جداً» — مستندات كل متقدم
- * تُرسل كاملة مع بقية السيرة (مثل كوادر الجهة) — الإخفاء بقي حصراً
- * لسياق تصفّح «كل الكوادر في المنصة» (/api/workforce).
+ * الجولة 61 — السياسة المعتمدة من صاحب المنصة (تُلغي منح الجولة 46):
+ * «بدلاً من رؤية المستلم الإداري أو مشرف الأطباء لجميع المستندات عند
+ * التقديم على تكليفات» — مستندات المتقدمين مخفية عن المستلم/المشرف
+ * نهائياً، وتُفتح لكل متقدم حصراً بمنح إداري صريح (طلب بسبب معلن
+ * أقرّته الإدارة)، مع بقاء شارات جاهزية المستندات وصورة البروفايل
+ * (باختيار صاحبها) معروضة للشفافية وسرعة الفرز.
  */
 export async function GET(
   _req: NextRequest,
@@ -49,6 +52,8 @@ export async function GET(
             qualification: true,
             yearsOfExperience: true,
             createdAt: true,
+            // الجولة 61: صورة البروفايل — تظهر في التقديمات (اختيار صاحبها)
+            profilePhotoBlobId: true,
             documents: {
               select: {
                 id: true,
@@ -117,7 +122,7 @@ export async function GET(
           ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
           : null
       }
-      const { ratingsReceived, affiliations, workDepartments, ...nurse } = a.nurse
+      const { ratingsReceived, affiliations, workDepartments, profilePhotoBlobId, ...nurse } = a.nurse
       return {
         ...a,
         nurse: {
@@ -125,6 +130,7 @@ export async function GET(
           affiliations,
           workDepartments: workDepartments.map((w) => w.department.name),
           isFavorite: favSet.has(a.nurse.id),
+          profilePhotoUrl: profilePhotoUrl(a.nurse.profilePhotoBlobId),
           ratings: {
             average,
             count,
@@ -159,14 +165,18 @@ export async function GET(
       )
     }
 
-    // ---------- الجولة 46 — البلاغ الحرفي:
-    // «عند التقديم على تكليف لأي كان كادر تمريضي او طبيب يجب ان تظهر
-    // المستندات بشكل طبيعي جداً ... كوادر جهتي اتمكن من رؤية المستندات عادي جداً»:
-    // كل من قدّم على تكليفِك يُراجَع سيرته ومستنداته بشكل طبيعي — مثل كوادر
-    // الجهة تماماً: فالمستلم/المشرف يختار الكادر من بينهم ويحتاج رؤية
-    // المستندات كاملة قبل الاعتماد (الإدارة ترى كل شيء دائماً).
-    // الإخفاء بقي حصراً لسياق تصفّح «كل الكوادر في المنصة» (workforce).
+    // ---------- الجولة 61 — السياسة المعتمدة من صاحب المنصة:
+    // «بدلاً من رؤية المستلم الإداري أو مشرف الأطباء لجميع المستندات عند
+    // التقديم على تكليفات» — مستندات المتقدمين مخفية نهائياً عن المستلم/المشرف
+    // وتُفتح لكل متقدم حصراً بمنح إداري صريح قائم (طلب بسبب معلن)،
+    // مع بقاء شارات جاهزية المستندات (معتمدة/مرفوضة/قيد المراجعة)
+    // وصورة البروفايل (باختيار صاحبها) معروضة للشفافية وسرعة الفرز.
+    // الإدارة ترى المستندات دائماً كما كان.
     const verifiedMap = new Map<string, number>()
+    const accessByTarget = new Map<
+      string,
+      { status: string; reviewNote: string | null; canRequest: boolean }
+    >()
     if (session.user.role !== 'ADMIN') {
       const applicantIds = applicationsWithRatings.map((a) => a.nurse.id)
       if (applicantIds.length > 0) {
@@ -176,22 +186,47 @@ export async function GET(
           _count: { _all: true },
         })
         for (const v of verifiedRows) verifiedMap.set(v.userId, v._count._all)
+
+        // أحدث طلب رؤية لكل متقدم — حالة الواجهة (NONE/PENDING/APPROVED/REJECTED/REVOKED)
+        const accessRows = await db.documentAccessRequest.findMany({
+          where: { requesterId: session.user.id, targetId: { in: applicantIds } },
+          orderBy: { createdAt: 'desc' },
+          select: { targetId: true, status: true, reviewNote: true, createdAt: true },
+        })
+        for (const row of accessRows) {
+          if (!accessByTarget.has(row.targetId)) {
+            accessByTarget.set(row.targetId, {
+              status: row.status,
+              reviewNote: row.reviewNote,
+              canRequest: row.status !== 'PENDING' && row.status !== 'APPROVED',
+            })
+          }
+        }
       }
     }
 
     return NextResponse.json({
       applications: applicationsWithRatings.map((a) => {
+        const granted =
+          session.user.role === 'ADMIN' || accessByTarget.get(a.nurse.id)?.status === 'APPROVED'
+        const access = accessByTarget.get(a.nurse.id) ?? {
+          status: 'NONE',
+          reviewNote: null,
+          canRequest: true,
+        }
         return {
           ...a,
           applicationId: a.id,
           nurse: {
             ...a.nurse,
             ...phoneView(session.user.role, a.nurse.phone, revealed.has(a.nurse.id), trusted),
-            // الجولة 46: المستندات تُعرض بشكل طبيعي مع بقية السيرة —
-            // مع شارات حالة المراجعة (معتمدة/مرفوضة/قيد المراجعة) لكل مستند
-            documentsHidden: false,
+            // الجولة 61: المستندات تُرسل محتوياً فقط بمنح إداري صريح — وإلا فهي مخفية
+            documents: granted ? a.nurse.documents : [],
+            documentsHidden: !granted,
             documentsVerified: (verifiedMap.get(a.nurse.id) ?? 0) > 0,
             approvedDocuments: verifiedMap.get(a.nurse.id) ?? 0,
+            // حالة طلب الرؤية لهذا المتقدم — لواجهة طلب الرؤية
+            documentAccess: session.user.role === 'ADMIN' ? null : access,
           },
         }
       }),

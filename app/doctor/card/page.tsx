@@ -26,6 +26,8 @@ interface MyProfile {
   qualification: string | null
   yearsOfExperience: number | null
   gender: string | null
+  /** الجولة 61: صورة البروفايل — يختارها الطبيب وتظهر في البطاقة */
+  profilePhotoBlobId: string | null
   createdAt: string
 }
 
@@ -117,6 +119,10 @@ export default function NurseCardPage() {
           qualification: profile.qualification,
           yearsOfExperience: profile.yearsOfExperience,
           gender: profile.gender,
+          // الجولة 61: صورة البروفايل في البطاقة — تُقدَّم عامة (اختيار صاحبها)
+          photoUrl: profile.profilePhotoBlobId
+            ? `/api/files/blob/${profile.profilePhotoBlobId}`
+            : null,
           departments: statsData.workDepartments?.map((w) => w.name),
           ratingAverage: statsData.stats.ratingAverage,
           ratingCount: statsData.stats.ratingCount,

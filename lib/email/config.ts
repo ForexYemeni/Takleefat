@@ -93,6 +93,11 @@ const TYPE_CATEGORY_MAP: Record<NotificationType, EmailCategory> = {
   ASSIGNMENT_CANCELLED: 'updates',
   DOCUMENT_UPLOADED: 'documents',
   DOCUMENT_REVIEWED: 'documents',
+  // الجولة 61: خصوصية المستندات — طلبات الرؤية والقرارات تصنف ضمن المستندات
+  DOCUMENT_ACCESS_REQUESTED: 'documents',
+  DOCUMENT_ACCESS_DECIDED: 'documents',
+  DOCUMENT_ACCESS_GRANTED: 'documents',
+  DOCUMENT_ACCESS_REVOKED: 'documents',
   FAVORITE_ADDED: 'admin',
   GENERIC: 'admin',
   ACCOUNT_APPROVED: 'account',

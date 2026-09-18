@@ -666,6 +666,19 @@ export async function DELETE(
       // سجلات الأحداث التي أنشأها الحساب على أي تكليف — تُحذف كي لا تعيق حذف الحساب
       await tx.assignmentLog.deleteMany({ where: { userId: id } })
 
+      // الجولة 61: طلبات وسجلات رؤية المستندات المرتبطة بالحساب — تنظيف قبل الحذف
+      // (ملاحظة الإدارة على طلبات مراجعها تُفرَّغ أولاً كي لا تعيق الحذف)
+      await tx.documentAccessRequest.updateMany({
+        where: { reviewedById: id },
+        data: { reviewedById: null },
+      })
+      await tx.documentAccessLog.deleteMany({
+        where: { OR: [{ viewerId: id }, { targetId: id }] },
+      })
+      await tx.documentAccessRequest.deleteMany({
+        where: { OR: [{ requesterId: id }, { targetId: id }] },
+      })
+
       // بيانات الحساب نفسها (تُحذف بقية الارتباطات بالتتابع/التعاقب)
       await tx.notification.deleteMany({ where: { userId: id } })
       await tx.application.deleteMany({ where: { nurseId: id } })

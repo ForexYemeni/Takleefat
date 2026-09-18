@@ -30,6 +30,7 @@ interface CardData {
     qualification: string | null
     yearsOfExperience: number | null
     gender: string | null
+    profilePhotoBlobId: string | null
     createdAt: Date
   }
   departments: string[]
@@ -51,6 +52,8 @@ async function getApprovedNurseCard(id: string): Promise<CardData | null> {
       gender: true,
       role: true,
       status: true,
+      // الجولة 61: صورة البروفايل — يختارها الكادر لتظهر في البطاقة العامة
+      profilePhotoBlobId: true,
       createdAt: true,
       // أقسام العمل المصرّح بها — تظهر في البطاقة المهنية العامة
       workDepartments: {
@@ -122,6 +125,10 @@ export default async function PublicNurseCardPage({
     qualification: data.nurse.qualification,
     yearsOfExperience: data.nurse.yearsOfExperience,
     gender: data.nurse.gender,
+    // الجولة 61: صورة البروفايل العامة — تُقدَّم من مسار الملفات (اختيار صاحبها)
+    photoUrl: data.nurse.profilePhotoBlobId
+      ? `/api/files/blob/${data.nurse.profilePhotoBlobId}`
+      : null,
     departments: data.departments,
     ratingAverage: data.ratingAverage,
     ratingCount: data.ratingCount,

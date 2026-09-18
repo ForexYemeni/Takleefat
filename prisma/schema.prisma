@@ -180,6 +180,11 @@ enum NotificationType {
   INVITATION_EXPIRED
   AFFILIATION_UPDATED
   FAVORITE_ADDED
+  // ---------- الجولة 61: خصوصية المستندات (إضافي بحت — قيم جديدة فقط) ----------
+  DOCUMENT_ACCESS_REQUESTED
+  DOCUMENT_ACCESS_DECIDED
+  DOCUMENT_ACCESS_GRANTED
+  DOCUMENT_ACCESS_REVOKED
   GENERIC
 }
 
@@ -219,6 +224,17 @@ model User {
   /// يُثبَّت تلقائياً عند دخول أي لوحة يملك صلاحيتها (أساسية أو مركّبة) ويتحقق
   /// في كل جلسة: إن لم يعد ضمن الصلاحيات الفعالة يُتجاهل ويعود للدور الأساسي (تراجع آمن).
   activeRole           String?
+  // ---------- الجولة 61: صورة البروفايل (الأيقونة) — إضافي بحت ولا يمس أي بيانات سابقة ----------
+  /// صورة أيقونة يختارها الكادر من ملفه الشخصي — تظهر للمستلمين الإداريين
+  /// ومشرفي الأطباء والإدارة وفي البطاقة المهنية العامة والتقديمات.
+  /// null = بلا صورة (تظهر الصورة الرمزية بالحرف الأول كما كان تماماً).
+  /// إجبارية للكادر الذكور (NURSE/DOCTOR + gender MALE) واختيارية للإناث —
+  /// يُفرض ذلك في الواجهات ومسار الرفع دون أي مساس بالبيانات القائمة.
+  profilePhotoBlobId String?
+  /// الجولة 61: طلبات رؤية المستندات — يطلبها المستلم/المشرف بسبب معلن وتقررها الإدارة وتسحبها متى شاءت
+  documentAccessRequested DocumentAccessRequest[] @relation("DocAccessRequester")
+  documentAccessReceived  DocumentAccessRequest[] @relation("DocAccessTarget")
+  documentAccessReviewed  DocumentAccessRequest[] @relation("DocAccessReviewer")
   // الجهة الصحية (المستشفى) — يُدخلها المستلم الإداري عند التسجيل
   hospitalName      String?
   // الجولة 44: الجهات الصحية المرتبطة بالمسؤول (المستلم/المشرف) — الجهة
@@ -823,4 +839,59 @@ model NurseInvitation {
   @@index([receiverId])
   @@index([status])
   @@map("nurse_invitations")
+}
+
+// ============================================================
+// الجولة 61 — خصوصية المستندات: طلب رسمي بإذن الإدارة
+// (جداول جديدة كلياً — إضافي بحت ولا يمس أي جدول أو بيانات قائمة)
+// ============================================================
+
+/// حالة طلب رؤية مستندات الكادر
+enum DocumentAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+/// طلب رؤية مستندات كادر تمريضي/طبيب — يقدّمه المستلم الإداري أو مشرف
+/// الأطباء مع بيان السبب، وتقبل الإدارة أو ترفض (مع ملاحظة اختيارية)،
+/// ولها الحق في سحب المنح في أي وقت (يصبح الطلب REVOKED).
+/// APPROVED = الصلاحية قائمة حتى تسحبها الإدارة — لا مدة انتهاء.
+model DocumentAccessRequest {
+  id           String               @id @default(cuid())
+  requesterId  String
+  targetId     String
+  /// سبب الطلب — إجباري (10 أحرف على الأقل) ويظهر للإدارة عند القرار
+  reason       String
+  status       DocumentAccessStatus @default(PENDING)
+  /// ملاحظة الإدارة عند القبول/الرفض/السحب
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  requester User  @relation("DocAccessRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target    User  @relation("DocAccessTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  reviewer  User? @relation("DocAccessReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([requesterId, status])
+  @@index([targetId, status])
+  @@index([status])
+  @@map("document_access_requests")
+}
+
+/// سجل مشاهدات المستندات — شفافية كاملة: كل فتح لمحتوى مستندات كادر
+/// بمنح إداري يُسجَّل (من شاهد ومتى) — لكل مشاهدة سطر مستقل.
+model DocumentAccessLog {
+  id        String   @id @default(cuid())
+  requestId String
+  viewerId  String
+  targetId  String
+  createdAt DateTime @default(now())
+
+  @@index([targetId])
+  @@index([viewerId])
+  @@map("document_access_logs")
 }
