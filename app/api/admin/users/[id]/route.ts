@@ -35,6 +35,14 @@ export async function GET(
         yearsOfExperience: true,
         hospitalName: true,
         rejectNote: true,
+        // الجولة 63 — إضافي بحت لحوار مراجعة الكادر: الجنس وصورة البروفايل وجهة الانتماء
+        gender: true,
+        profilePhotoBlobId: true,
+        affiliations: {
+          take: 1,
+          orderBy: { createdAt: 'desc' as const },
+          select: { hospital: { select: { name: true, status: true } } },
+        },
         commissionPercent: true,
         fullProfileAccess: true,
         trustedContactViewer: true,

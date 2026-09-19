@@ -79,3 +79,6 @@ scripts/init-fullstack-inspect.sh
 
 # لقطات التحقق البصري — محلية فقط (الجولة 62)
 .shots/
+
+# أعمال موقوفة بقرار المستخدم — محلية فقط
+scripts/suspended/

@@ -54,6 +54,14 @@ export async function GET(req: NextRequest) {
           yearsOfExperience: true,
           hospitalName: true,
           rejectNote: true,
+          // الجولة 63 — إضافي بحت للعرض في بطاقات/جدول الكادر:
+          /// الجنس (فلترة + عرض) وصورة البروفايل (الأفاتار) وآخر تحديث
+          gender: true,
+          profilePhotoBlobId: true,
+          updatedAt: true,
+          /// حالات المستندات (النوع + الحالة فقط — بلا ملفات) لعرض ملخص النواقص
+          /// في القائمة مباشرة دون فتح الملف — أعمدة الطلب من شاشة الكادر التمريضي
+          documents: { select: { type: true, status: true } },
           // نِسَب الحصة والأذونات — للمستلمين ومشرفي الأطباء (الجولة 32)
           commissionPercent: true,
           fullProfileAccess: true,

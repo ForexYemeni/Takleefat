@@ -99,6 +99,8 @@ const TYPE_CATEGORY_MAP: Record<NotificationType, EmailCategory> = {
   DOCUMENT_ACCESS_GRANTED: 'documents',
   DOCUMENT_ACCESS_REVOKED: 'documents',
   FAVORITE_ADDED: 'admin',
+  // الجولة 63: تواصل الإدارة عبر واتساب — يصنف ضمن الإشعارات الإدارية
+  ADMIN_WHATSAPP: 'admin',
   GENERIC: 'admin',
   ACCOUNT_APPROVED: 'account',
   ACCOUNT_REJECTED: 'account',

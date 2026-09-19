@@ -185,6 +185,10 @@ enum NotificationType {
   DOCUMENT_ACCESS_DECIDED
   DOCUMENT_ACCESS_GRANTED
   DOCUMENT_ACCESS_REVOKED
+  // ---------- الجولة 63: سجل التواصل الإداري عبر واتساب (إضافي بحت — قيمة جديدة فقط) ----------
+  /// تسجيل رسالة واتساب أرسلتها الإدارة لكادر من شاشة الكادر التمريضي —
+  /// يظهر للكادر إشعاراً داخلياً وللإدارة في «سجل التواصل» بملف الكادر.
+  ADMIN_WHATSAPP
   GENERIC
 }
 
