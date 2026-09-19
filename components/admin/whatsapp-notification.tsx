@@ -167,7 +167,7 @@ export function WhatsAppNotificationModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto grid-cols-1">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="flex size-9 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/20 dark:bg-emerald-950 dark:text-emerald-300">
@@ -260,7 +260,7 @@ export function WhatsAppNotificationModal({
             </div>
             {preview ? (
               <div className="rounded-2xl border border-emerald-200/70 bg-[#e7ffdb] p-3 dark:border-emerald-900 dark:bg-emerald-950/60">
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{message}</p>
+                <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-[13px] leading-relaxed text-foreground">{message}</p>
                 <p className="mt-1 text-end text-[10px] text-muted-foreground">معاينة كما ستظهر في واتساب</p>
               </div>
             ) : (

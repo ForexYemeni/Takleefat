@@ -129,7 +129,7 @@ export default function DoctorDocumentsPage() {
                   <p className="font-bold">{doc.title}</p>
                   <StatusBadge status={doc.status} labels={DOCUMENT_STATUS_LABELS} />
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 [overflow-wrap:anywhere] text-xs text-muted-foreground">
                   {doc.fileName} • {formatFileSize(doc.fileSize)} • {formatDateTime(doc.createdAt)}
                 </p>
                 {doc.reviewNote && (

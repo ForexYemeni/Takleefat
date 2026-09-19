@@ -34,11 +34,12 @@ export function DocumentViewer({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      {/* grid-cols-1: يمنع تمدد العمود لأسماء ملفات طويلة غير قابلة للكسر */}
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto grid-cols-1">
         <DialogHeader>
           <DialogTitle>{document.title}</DialogTitle>
           <DialogDescription className="flex items-center justify-between gap-2">
-            <span className="truncate">{document.fileName}</span>
+            <span className="min-w-0 truncate" title={document.fileName}>{document.fileName}</span>
             <a
               href={document.fileUrl}
               target="_blank"

@@ -739,7 +739,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
 
       {/* ═══════════ حوار مراجعة الملف ═══════════ */}
       <Dialog open={!!detailsUser} onOpenChange={(open) => !open && setDetailsUser(null)}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto grid-cols-1">
           <DialogHeader>
             <DialogTitle>{isDoctor ? 'مراجعة ملف الطبيب' : 'مراجعة ملف الكادر التمريضي'}</DialogTitle>
             <DialogDescription>
