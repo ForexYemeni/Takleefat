@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { hrUpdateSchema } from '@/lib/validations/forsah'
+import { hrUpdateSchema, hrDeleteSchema } from '@/lib/validations/forsah'
 import { requireForsahPermission } from '@/lib/forsah/server'
 import { FORSAH_PERMISSIONS } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { notify } from '@/lib/notifications'
+import { rateLimit } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 
 /**
@@ -121,6 +122,91 @@ export async function PATCH(
     })
 
     return NextResponse.json({ message, hr: fresh })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+/**
+ * DELETE /api/admin/hr/[id] — حذف نهائي لحساب موارد بشرية (الجولة 68)
+ * ============================================================
+ * تأكيد إلزامي بكلمة مرور الإدارة المنفّذة (عملية لا رجعة فيها).
+ * حفاظاً على السجلات بلا أي فقدان بيانات (قاعدة ADDITIVE):
+ * - الفرص/دعوات المقابلة/الاختيارات التي أنشأها HR تُسند إلى حساب الإدارة المنفّذ
+ *   (إعادة إسناد ملكية — تبقى قابلة للإدارة من الإدارة).
+ * - تقديماته الشخصية وسجلات مشاهداته تُحذف معه (cascade القائم في السكيما).
+ * - سجل التدقيق يبقى محفوظاً (actorId SetNull — التاريخ لا يُحذف أبداً).
+ * - العملية كلها داخل معاملة واحدة: إما تكتمل كلها أو لا شيء.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireRole('ADMIN')
+    await requireForsahPermission(session, 'opportunity.manage')
+    const { id } = await params
+
+    if (!rateLimit(`forsah:hr-delete:${session.user.id}`, 5, 60 * 60 * 1000)) {
+      return jsonError('محاولات كثيرة — انتقل دقيقة وأعد المحاولة', 429)
+    }
+
+    const parsed = hrDeleteSchema.safeParse(await req.json().catch(() => ({})))
+    if (!parsed.success) {
+      return jsonError(parsed.error.issues[0]?.message ?? 'كلمة مرور الإدارة مطلوبة', 422)
+    }
+
+    const hr = await db.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, role: true, hospitalName: true },
+    })
+    if (!hr || hr.role !== 'HR') return jsonError('حساب الموارد البشرية غير موجود', 404)
+
+    // التأكيد بكلمة مرور الإدارة المنفّذة — حصراً
+    const admin = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { password: true, name: true },
+    })
+    if (!admin?.password) {
+      return jsonError('حسابك بلا كلمة مرور محلية — عيّن كلمة مرور أولاً لتأكيد عمليات الحذف', 403)
+    }
+    const ok = await bcrypt.compare(parsed.data.password, admin.password)
+    if (!ok) return jsonError('كلمة مرور الإدارة غير صحيحة — أُلغي الحذف', 403)
+
+    // معاملة الحذف الحفاظية: إعادة إسناد الملكية ثم حذف الحساب
+    const reassigned = await db.$transaction(async (tx) => {
+      const opportunities = await tx.opportunity.updateMany({
+        where: { createdById: id },
+        data: { createdById: session.user.id },
+      })
+      const interviews = await tx.opportunityInterview.updateMany({
+        where: { createdById: id },
+        data: { createdById: session.user.id },
+      })
+      const selections = await tx.opportunitySelection.updateMany({
+        where: { selectedById: id },
+        data: { selectedById: session.user.id },
+      })
+      await tx.user.delete({ where: { id } })
+      return { opportunities: opportunities.count, interviews: interviews.count, selections: selections.count }
+    })
+
+    await logForsahAudit({
+      actorId: session.user.id,
+      actorRole: 'ADMIN',
+      action: 'HR_DELETED',
+      entityType: 'HR',
+      entityId: id,
+      meta: { name: hr.name, hospitalName: hr.hospitalName, ...reassigned },
+    })
+
+    const total = reassigned.opportunities + reassigned.interviews + reassigned.selections
+    return NextResponse.json({
+      message: total > 0
+        ? `حُذف حساب «${hr.name}» نهائياً — أُسندت ${total} سجلاته الإدارية (فرص/مقابلات/اختيارات) إلى حسابك حفاظاً على السجلات`
+        : `حُذف حساب «${hr.name}» نهائياً — لا سجلات إدارية بحاجة لإعادة إسناد`,
+      reassigned,
+    })
   } catch (error) {
     return handleApiError(error)
   }

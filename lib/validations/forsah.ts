@@ -177,12 +177,12 @@ export const hrCreateSchema = z
       .max(120)
       .optional()
       .or(z.literal('')),
+    // الجولة 68: المنشأة إجبارية وتُختار حصراً من الجهات الصحية المسجلة (بلا إدخال حر)
     hospitalName: z
-      .string()
+      .string({ error: 'اختيار المنشأة من الجهات الصحية مطلوب' })
       .trim()
-      .max(120, 'اسم المنشأة طويل جداً')
-      .optional()
-      .or(z.literal('')),
+      .min(2, 'اختيار المنشأة من الجهات الصحية مطلوب')
+      .max(120, 'اسم المنشأة طويل جداً'),
     jobTitle: z.string().trim().max(80, 'المسمى الوظيفي طويل جداً').optional().or(z.literal('')),
     // كلمة المرور الأولية — يغيرها HR لاحقاً من ملفه
     password: z
@@ -218,6 +218,13 @@ export const hrCreateSchema = z
   })
 
 export type HrCreateInput = z.infer<typeof hrCreateSchema>
+
+/** حذف حساب موارد بشرية — الجولة 68: تأكيد كلمة مرور الإدارة إلزامي */
+export const hrDeleteSchema = z.object({
+  password: z
+    .string({ error: 'كلمة مرور الإدارة مطلوبة لتأكيد الحذف' })
+    .min(1, 'كلمة مرور الإدارة مطلوبة لتأكيد الحذف'),
+})
 
 /** تعديل حساب موارد بشرية من الإدارة */
 export const hrUpdateSchema = z.object({

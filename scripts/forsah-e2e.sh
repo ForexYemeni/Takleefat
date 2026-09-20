@@ -270,6 +270,39 @@ res=$(api hr GET "/api/opportunities/$OPP_ID/transaction")
 TXCOUNT=$(echo "$res" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['transactions']))" 2>/dev/null)
 [ "$TXCOUNT" = "1" ] && check "البيانات المالية سليمة بعد دورة الإغلاق الكامل" 0 || check "البيانات المالية بعد الإغلاق ($TXCOUNT)" 1
 
+echo "═══ 10.6) الجولة 68: المنشأة من الجهات + حذف HR بتأكيد كلمة مرور الإدارة ═══"
+# المنشأة تُختار حصراً من الجهات الصحية — إنشاء بلا منشأة مرفوض
+FAC_PHONE="77$(shuf -i 1000000-9999999 -n 1)"
+NOFAC_JSON='{"name": "فاطمة سالم", "phone": "PHONE_PLACEHOLDER", "email": "", "hospitalName": "", "jobTitle": "", "password": "HrPass1234", "status": "APPROVED", "forsahPermissions": [], "forsahCommissionPercent": null}'
+NOFAC_JSON="${NOFAC_JSON/PHONE_PLACEHOLDER/$FAC_PHONE}"
+res=$(api admin POST "/api/admin/hr" "$NOFAC_JSON")
+echo "$res" | grep -q "اختيار المنشأة" && check "إنشاء HR بلا منشأة مرفوض (المنشأة إجبارية)" 0 || { check "إنشاء HR بلا منشأة مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+# إنشاء HR بمنشأة من قائمة الجهات الصحية الفعلية (نفس تدفق الواجهة الجديد)
+FAC_NAME=$(api admin GET "/api/hospitals" | python3 -c "import sys,json;h=json.load(sys.stdin)['hospitals'];print(h[0]['name'] if h else 'مستشفى الأمل')")
+FAC_JSON='{"name": "فاطمة سالم", "phone": "PHONE_PLACEHOLDER", "email": "", "hospitalName": "FAC_PLACEHOLDER", "jobTitle": "أخصائية", "password": "HrPass1234", "status": "APPROVED", "forsahPermissions": [], "forsahCommissionPercent": null}'
+FAC_JSON="${FAC_JSON/PHONE_PLACEHOLDER/$FAC_PHONE}"; FAC_JSON="${FAC_JSON/FAC_PLACEHOLDER/$FAC_NAME}"
+res=$(api admin POST "/api/admin/hr" "$FAC_JSON")
+echo "$res" | grep -q "أُنشئ حساب" && check "إنشاء HR بمنشأة مختارة من الجهات الصحية ينجح" 0 || { check "إنشاء HR بمنشأة من الجهات" 1; echo "    RES: $(echo $res | head -c 200)"; }
+FAC_HR_ID=$(api admin GET '/api/admin/forsah' | python3 -c "import sys,json;print([a['id'] for a in json.load(sys.stdin)['hrAccounts'] if a['phone']=='$FAC_PHONE'][0])" 2>/dev/null)
+# حذف بلا كلمة مرور → مرفوض
+res=$(api admin DELETE "/api/admin/hr/$FAC_HR_ID" '{}')
+echo "$res" | grep -q "كلمة مرور الإدارة مطلوبة" && check "حذف HR بلا كلمة مرور مرفوض (422)" 0 || { check "حذف HR بلا كلمة مرور مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+# حذف بكلمة مرور خاطئة → مرفوض والحساب باقٍ
+res=$(api admin DELETE "/api/admin/hr/$FAC_HR_ID" '{"password": "WrongPass99"}')
+echo "$res" | grep -q "غير صحيحة" && check "حذف HR بكلمة مرور خاطئة مرفوض (403)" 0 || { check "حذف HR بكلمة مرور خاطئة مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+STILL=$(api admin GET '/api/admin/forsah' | python3 -c "import sys,json;print(len([a for a in json.load(sys.stdin)['hrAccounts'] if a['phone']=='$FAC_PHONE']))")
+[ "$STILL" = "1" ] && check "الحساب باقٍ بعد رفض الحذف" 0 || check "الحساب باقي بعد الرفض ($STILL)" 1
+# حذف بكلمة مرور الإدارة الصحيحة → ينجح
+res=$(api admin DELETE "/api/admin/hr/$FAC_HR_ID" '{"password": "admin12345"}')
+echo "$res" | grep -q "حُذف حساب" && check "الحذف بتأكيد كلمة مرور الإدارة ينجح" 0 || { check "الحذف بكلمة المرور الصحيحة" 1; echo "    RES: $(echo $res | head -c 300)"; }
+GONE=$(api admin GET '/api/admin/forsah' | python3 -c "import sys,json;print(len([a for a in json.load(sys.stdin)['hrAccounts'] if a['phone']=='$FAC_PHONE']))")
+[ "$GONE" = "0" ] && check "الحساب اختفى من القائمة بعد الحذف" 0 || check "الحساب اختفى بعد الحذف ($GONE)" 1
+res=$(api admin GET "/api/admin/forsah")
+echo "$res" | grep -q "HR_DELETED" && check "سجل التدقيق يوثق حذف HR" 0 || check "سجل التدقيق يوثق حذف HR" 1
+# حذف حساب غير موجود → 404
+res=$(api admin DELETE "/api/admin/hr/nonexistent123" '{"password": "admin12345"}')
+echo "$res" | grep -q "غير موجود" && check "حذف HR غير موجود مرفوض (404)" 0 || check "حذف HR غير موجود (404)" 1
+
 echo "═══ 11) Regression: الأنظمة القائمة سليمة ═══"
 res=$(api nurse GET "/api/posts")
 echo "$res" | grep -q '"posts"' && check "/api/posts (تكليفات) يعمل" 0 || check "/api/posts يعمل" 1

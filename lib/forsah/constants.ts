@@ -183,6 +183,8 @@ export const FORSAH_AUDIT_ACTIONS = {
   HR_ENABLED: 'فعّلت الإدارة حساب موارد بشرية',
   HR_PASSWORD_RESET: 'أعادت الإدارة تعيين كلمة مرور HR',
   HR_PERMISSIONS_CHANGED: 'غيّرت الإدارة صلاحيات HR',
+  // الجولة 68: الحذف النهائي لحساب HR بتأكيد كلمة مرور الإدارة
+  HR_DELETED: 'حذفت الإدارة حساب موارد بشرية نهائياً',
   // الجولة 67: الإغلاق الكلي للنظام
   FORSAH_SYSTEM_CLOSED: 'أغلقت الإدارة نظام فرصة كلياً',
   FORSAH_SYSTEM_OPENED: 'أعادت الإدارة تشغيل نظام فرصة',

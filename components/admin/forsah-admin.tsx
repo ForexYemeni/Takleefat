@@ -19,12 +19,13 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserCog,
   Users,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
+import { apiDelete, apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
 import { cn, formatDate } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -541,6 +542,22 @@ function HrAccountDialog({
   const [permissions, setPermissions] = useState<string[]>(
     mode === 'create' ? [...defaults] : [...(account?.forsahPermissions ?? [])]
   )
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // الجولة 68: المنشأة تُختار حصراً من الجهات الصحية المسجلة — بلا أي إدخال حر
+  const { data: hospitalsData } = useQuery({
+    queryKey: ['admin-forsah-hospitals'],
+    queryFn: () =>
+      apiFetcher<{ hospitals: { id: string; name: string; type: string; city: string | null; location: string | null }[] }>('/api/hospitals'),
+    staleTime: 60_000,
+  })
+  const hospitals = hospitalsData?.hospitals ?? []
+  // حفاظ: إن كانت منشأة الحساب القائمة غير موجودة في القائمة النشطة تُضاف كخيار للحفاظ على قيمتها
+  const hospitalNames = hospitals.map((h) => h.name)
+  const facilityOptions =
+    account?.hospitalName && !hospitalNames.includes(account.hospitalName)
+      ? [account.hospitalName, ...hospitalNames]
+      : hospitalNames
 
   const togglePermission = (key: string) => {
     setPermissions((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
@@ -578,9 +595,14 @@ function HrAccountDialog({
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const canCreate = name.trim().split(/\s+/).length === 2 && /^7\d{8}$/.test(phone) && password.length >= 8
+  const canCreate =
+    name.trim().split(/\s+/).length === 2 &&
+    /^7\d{8}$/.test(phone) &&
+    password.length >= 8 &&
+    !!hospitalName.trim()
 
   return (
+    <>
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl sm:max-w-md" dir="rtl">
         <DialogHeader>
@@ -619,8 +641,22 @@ function HrAccountDialog({
                 </div>
               </div>
               <div>
-                <Label className="text-xs font-black">المنشأة / الجهة الصحية</Label>
-                <Input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} placeholder="مثال: مستشفى الثورة العام" className="mt-1" />
+                <Label className="text-xs font-black">المنشأة / الجهة الصحية *</Label>
+                <Select value={hospitalName || undefined} onValueChange={setHospitalName}>
+                  <SelectTrigger className="mt-1 w-full">
+                    <SelectValue placeholder="اختر من الجهات الصحية المسجلة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {facilityOptions.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hospitals.length === 0 && (
+                  <p className="mt-1 text-[10px] font-bold text-amber-600">
+                    لا توجد جهات صحية نشطة بعد — أضِفها من صفحة «الجهات الصحية» وستُدرج هنا تلقائياً
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -647,9 +683,22 @@ function HrAccountDialog({
                   <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs font-black">المنشأة</Label>
-                  <Input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} className="mt-1" />
+                  <Label className="text-xs font-black">المنشأة / الجهة الصحية</Label>
+                  <Select value={hospitalName || undefined} onValueChange={setHospitalName}>
+                    <SelectTrigger className="mt-1 w-full">
+                      <SelectValue placeholder="اختر من الجهات الصحية" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {facilityOptions.map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs font-black">كلمة مرور جديدة (لإعادة التعيين)</Label>
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="8 أحرف + أرقام على الأقل" dir="ltr" className="mt-1" />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'SET_STATUS', status: account?.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED' })}>
@@ -661,13 +710,33 @@ function HrAccountDialog({
                   إعادة تعيين كلمة المرور
                 </Button>
                 {password.length > 0 && password.length < 8 && (
-                  <p className="text-[10px] font-bold text-rose-600">كلمة المرور الجديدة 8 أحرف على الأقل</p>
+                  <p className="text-[10px] font-bold text-rose-600">اكتب كلمة المرور الجديدة أعلاه — 8 أحرف على الأقل</p>
                 )}
               </div>
               <div className="border-t pt-3">
                 <Button size="sm" className="rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'UPDATE', jobTitle, hospitalName })}>
                   <Save className="size-3.5" />
                   حفظ البيانات
+                </Button>
+              </div>
+              {/* الجولة 68: منطقة الخطر — حذف نهائي بتأكيد كلمة مرور الإدارة */}
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3 dark:border-rose-900/60 dark:bg-rose-950/30">
+                <p className="flex items-center gap-1.5 text-xs font-black text-rose-700 dark:text-rose-300">
+                  <Trash2 className="size-3.5" />
+                  منطقة خطر — حذف نهائي
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-rose-700/80 dark:text-rose-300/80">
+                  حذف الحساب لا رجعة فيه: تُسند فرصه ومقابلاته واختياراته إلى حسابك حفاظاً على السجلات،
+                  وتبقى سجلات التدقيق محفوظة. يتطلب تأكيداً بكلمة مرور الإدارة.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 rounded-xl border-rose-300 text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/60"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="size-3.5" />
+                  حذف الحساب نهائياً
                 </Button>
               </div>
             </>
@@ -711,6 +780,84 @@ function HrAccountDialog({
               </div>
             </div>
           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* حوار تأكيد الحذف — الجولة 68 (خارج حوار الإدارة — Radix portals) */}
+    {confirmDelete && account && (
+      <HrDeleteDialog
+        account={account}
+        onOpenChange={(o) => !o && setConfirmDelete(false)}
+        onSaved={onSaved}
+      />
+    )}
+    </>
+  )
+}
+
+/* ================= حوار تأكيد حذف حساب HR — الجولة 68 ================= */
+
+function HrDeleteDialog({
+  account,
+  onOpenChange,
+  onSaved,
+}: {
+  account: HrAccount
+  onOpenChange: (o: boolean) => void
+  onSaved: () => void
+}) {
+  const [password, setPassword] = useState('')
+  const del = useMutation({
+    mutationFn: () => apiDelete<{ message: string; reassigned: { opportunities: number; interviews: number; selections: number } }>(`/api/admin/hr/${account.id}`, { password }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      onOpenChange(false)
+      onSaved()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-3xl sm:max-w-sm" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-black text-rose-700 dark:text-rose-300">
+            <Trash2 className="size-4" />
+            حذف حساب: {account.name}
+          </DialogTitle>
+          <DialogDescription className="text-xs leading-relaxed">
+            حذف نهائي لا رجعة فيه. حفاظاً على السجلات: تُسند الفرص ودعوات المقابلة والاختيارات
+            التي أنشأها إلى حسابك تلقائياً، وتبقى سجلات التدقيق محفوظة.
+            أكّد الحذف بكلمة مرور حسابك الإداري.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs font-black">كلمة مرور الإدارة *</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="كلمة مرور حسابك الإداري"
+              dir="ltr"
+              className="mt-1"
+              onKeyDown={(e) => e.key === 'Enter' && password.length > 0 && del.mutate()}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1 rounded-xl bg-rose-600 text-white hover:bg-rose-700"
+              disabled={del.isPending || password.length === 0}
+              onClick={() => del.mutate()}
+            >
+              <Trash2 className="size-4" />
+              {del.isPending ? 'جارٍ الحذف...' : 'حذف نهائي'}
+            </Button>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -768,6 +915,7 @@ const AUDIT_LABELS: Record<string, string> = {
   HR_DISABLED: 'عطّل حساب HR',
   HR_ENABLED: 'فعّل حساب HR',
   HR_PASSWORD_RESET: 'أعاد تعيين كلمة مرور HR',
+  HR_DELETED: 'حذف حساب HR نهائياً',
   HR_PERMISSIONS_CHANGED: 'غيّر صلاحيات HR',
 }
 
