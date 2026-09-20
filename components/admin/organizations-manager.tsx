@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Building2,
+  CalendarDays,
   CheckCircle2,
   Cross,
   Hospital,
@@ -24,7 +25,7 @@ import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiDelete, apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
-import { formatDate, USER_STATUS_LABELS, GENDER_LABELS } from '@/lib/utils'
+import { cn, formatDate, USER_STATUS_LABELS, GENDER_LABELS } from '@/lib/utils'
 import { AFFILIATION_STATUS_LABELS, ORG_STATUS_LABELS, ORG_TYPE_LABELS } from '@/lib/network'
 import { StatusBadge } from '@/components/shared/status-badge'
 import {
@@ -54,14 +55,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 /**
@@ -154,9 +147,9 @@ const ORG_FILTER_TABS = [
 ] as const
 
 function TypeIcon({ type }: { type: string }) {
-  if (type === 'CLINIC') return <Stethoscope className="size-4" />
-  if (type === 'MEDICAL_CENTER' || type === 'MEDICAL_COMPLEX') return <Cross className="size-4" />
-  return <Hospital className="size-4" />
+  if (type === 'CLINIC') return <Stethoscope className="size-5" />
+  if (type === 'MEDICAL_CENTER' || type === 'MEDICAL_COMPLEX') return <Cross className="size-5" />
+  return <Hospital className="size-5" />
 }
 
 export function OrganizationsManager() {
@@ -294,65 +287,99 @@ export function OrganizationsManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-extrabold">الجهات الصحية</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Healthcare Organizations — كيانات مستقلة في شبكة الكوادر الصحية المعتمدة، تُربط بها الكوادر وتُبنى عليها التكليفات
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative w-full sm:w-56">
-            <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="بحث بالاسم أو المدينة..." className="ps-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* الترويسة الطبية الفاخرة — نفس العناصر بهوية تكليفات */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] sm:p-5">
+        <div aria-hidden className="pointer-events-none absolute -top-20 start-4 h-40 w-64 rounded-full bg-primary/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 end-4 h-44 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-cyan-600 text-white shadow-lg shadow-primary/25">
+              <Building2 className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-xl font-black tracking-tight sm:text-2xl">الجهات الصحية</h1>
+              <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+                Healthcare Organizations — كيانات مستقلة في شبكة الكوادر الصحية المعتمدة، تُربط بها الكوادر وتُبنى عليها التكليفات
+              </p>
+            </div>
           </div>
-          <Button onClick={openCreate} className="shrink-0 gap-2">
-            <Plus className="size-4" />
-            إضافة جهة
-          </Button>
+          <div className="flex w-full items-center gap-2.5 lg:w-auto">
+            <div className="relative flex-1 sm:w-64 sm:flex-none">
+              <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="بحث بالاسم أو المدينة..."
+                className="h-11 rounded-xl border-border/70 bg-background ps-9 shadow-sm transition-shadow focus-visible:ring-primary/25"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={openCreate}
+              className="h-11 shrink-0 gap-2 rounded-xl bg-gradient-to-l from-primary to-cyan-600 px-5 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-transform hover:scale-[1.02]"
+            >
+              <Plus className="size-4" />
+              إضافة جهة
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* تبويبات تصفية الحالة — تُبرز الجهات الجديدة بانتظار الاعتماد */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {ORG_FILTER_TABS.map((tab) => {
           const count =
             tab.value === 'ALL'
               ? (data?.hospitals ?? []).length
               : (data?.hospitals ?? []).filter((o) => o.status === tab.value).length
+          const active = statusFilter === tab.value
           return (
             <button
               key={tab.value}
               type="button"
               onClick={() => setStatusFilter(tab.value)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
-                statusFilter === tab.value
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'bg-background text-muted-foreground hover:border-primary/40'
-              }`}
+              aria-pressed={active}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-bold transition-all duration-200',
+                active
+                  ? 'border-transparent bg-gradient-to-l from-primary to-cyan-600 text-white shadow-md shadow-primary/25'
+                  : 'border-border/70 bg-card text-muted-foreground shadow-sm hover:border-primary/40 hover:text-foreground'
+              )}
             >
               {tab.label}
-              {tab.value !== 'ALL' && <span className="ms-1 opacity-70">({count})</span>}
+              {tab.value !== 'ALL' && (
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none',
+                    active ? 'bg-white/25 text-white' : 'bg-secondary text-muted-foreground'
+                  )}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           )
         })}
       </div>
 
       {pendingCount > 0 && statusFilter !== 'PENDING' && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <Hourglass className="size-5 shrink-0" />
-          <p className="leading-relaxed">
-            يوجد <span className="font-extrabold">{pendingCount}</span> جهة صحية جديدة اقترحها
-            الكوادر أو المستلمون الإداريون — راجع بياناتها واعتمدها أو ارفضها.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="ms-auto shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100"
-            onClick={() => setStatusFilter('PENDING')}
-          >
-            مراجعة الطلبات
-          </Button>
+        <div className="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-l from-amber-50 via-amber-50/50 to-transparent p-4 dark:border-amber-900 dark:from-amber-950/40 dark:via-amber-950/20 dark:to-transparent">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              <Hourglass className="size-5" />
+            </span>
+            <p className="flex-1 min-w-52 text-sm leading-relaxed text-amber-900 dark:text-amber-200">
+              يوجد <span className="font-extrabold">{pendingCount}</span> جهة صحية جديدة اقترحها
+              الكوادر أو المستلمون الإداريون — راجع بياناتها واعتمدها أو ارفضها.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full shrink-0 justify-center rounded-lg border-amber-400/70 font-bold text-amber-800 hover:bg-amber-100 sm:w-auto dark:text-amber-200 dark:hover:bg-amber-950"
+              onClick={() => setStatusFilter('PENDING')}
+            >
+              مراجعة الطلبات
+            </Button>
+          </div>
         </div>
       )}
 
@@ -362,128 +389,151 @@ export function OrganizationsManager() {
           title="لا توجد جهات صحية"
           description="أضف أول جهة صحية معتمدة لتبدأ شبكة الكوادر الصحية."
           action={
-            <Button onClick={openCreate} className="gap-2">
+            <Button onClick={openCreate} className="gap-2 rounded-xl bg-gradient-to-l from-primary to-cyan-600 text-white shadow-lg shadow-primary/25">
               <Plus className="size-4" />
               إضافة جهة
             </Button>
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-secondary/60 hover:bg-secondary/60">
-                  <TableHead>الجهة</TableHead>
-                  <TableHead className="hidden md:table-cell">النوع</TableHead>
-                  <TableHead className="hidden lg:table-cell">المدينة / الموقع</TableHead>
-                  <TableHead className="hidden md:table-cell">التواصل</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="hidden sm:table-cell">الكوادر</TableHead>
-                  <TableHead className="hidden lg:table-cell">الإنشاء</TableHead>
-                  <TableHead className="text-start">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orgs.map((org) => (
-                  <TableRow key={org.id}>
-                    <TableCell>
-                      <p className="flex items-center gap-1.5 font-bold">
-                        <TypeIcon type={org.type} />
-                        {org.name}
-                      </p>
-                      {org.status === 'PENDING' && (
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300">
-                          <ShieldAlert className="size-3" />
-                          جهة مقترحة — بانتظار مراجعتها واعتمادها
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <Badge variant="outline">{ORG_TYPE_LABELS[org.type] ?? org.type}</Badge>
-                    </TableCell>
-                    <TableCell className="hidden max-w-40 truncate lg:table-cell">
-                      {[org.city, org.location].filter(Boolean).join(' — ') || '—'}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <span className="block text-xs" dir="ltr">{org.phone || '—'}</span>
-                      <span className="block text-xs text-muted-foreground" dir="ltr">{org.email || ''}</span>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={org.status} labels={ORG_STATUS_LABELS} />
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      {/* الجولة 38: عدادات مجتمع الكوادر في جدول الجهات */}
-                      <div className="flex flex-col items-start gap-1">
-                        <Badge variant="secondary">{org._count?.affiliations ?? 0} ارتباط</Badge>
-                        <Badge variant="outline" className="bg-emerald-500/5 text-emerald-700 dark:text-emerald-400">
-                          {(org.community?.accreditedNurses ?? 0) + (org.community?.accreditedDoctors ?? 0)} معتمد ·{' '}
-                          {org.community?.availableNow ?? 0} متاح الآن
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">
-                      {formatDate(org.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {/* جهة مقترحة: اعتماد / رفض مباشر */}
-                        {org.status === 'PENDING' && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1.5 text-xs text-emerald-700 hover:text-emerald-700"
-                              disabled={reviewMutation.isPending}
-                              onClick={() => reviewMutation.mutate({ id: org.id, status: 'ACTIVE' })}
-                            >
-                              <CheckCircle2 className="size-3.5" />
-                              اعتماد
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1.5 text-xs text-red-600 hover:text-red-600"
-                              disabled={reviewMutation.isPending}
-                              onClick={() => reviewMutation.mutate({ id: org.id, status: 'REJECTED' })}
-                            >
-                              <XCircle className="size-3.5" />
-                              رفض
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => {
-                            setDashboardId(org.id)
-                            setDashboardOpen(true)
-                          }}
-                        >
-                          <Users className="size-3.5" />
-                          الكوادر والتكليفات
-                        </Button>
-                        <Button variant="ghost" size="icon" aria-label="تعديل" onClick={() => openEdit(org)}>
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="حذف"
-                          className="text-red-600 hover:text-red-600"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => setDeleteTarget(org)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {orgs.map((org) => (
+            <article
+              key={org.id}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_16px_36px_-20px_rgba(15,27,78,0.28)]"
+            >
+              {/* شريط هوية علوي رقيق يتلوّن بحسب الحالة */}
+              <div
+                aria-hidden
+                className={cn(
+                  'h-1 w-full',
+                  org.status === 'ACTIVE'
+                    ? 'bg-gradient-to-l from-primary via-sky-500 to-cyan-400'
+                    : org.status === 'PENDING'
+                      ? 'bg-gradient-to-l from-amber-500 to-amber-300'
+                      : 'bg-gradient-to-l from-muted-foreground/40 to-muted-foreground/10'
+                )}
+              />
+
+              {/* رأس البطاقة — الهوية + الحالة */}
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-2 p-4 pb-2.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-cyan-500/15 text-primary ring-1 ring-primary/10">
+                  <TypeIcon type={org.type} />
+                </span>
+                <div className="min-w-[180px] flex-1">
+                  <h3 className="truncate text-[15px] font-extrabold leading-6" title={org.name}>
+                    {org.name}
+                  </h3>
+                  <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">
+                    {ORG_TYPE_LABELS[org.type] ?? org.type}
+                  </p>
+                  {org.status === 'PENDING' && (
+                    <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      <ShieldAlert className="size-3 shrink-0" />
+                      جهة مقترحة — بانتظار مراجعتها واعتمادها
+                    </p>
+                  )}
+                </div>
+                <StatusBadge status={org.status} labels={ORG_STATUS_LABELS} className="ms-auto shrink-0" />
+              </div>
+
+              {/* بيانات الجهة — نفس بيانات الجدول السابق بلا إضافات */}
+              <div className="space-y-1.5 px-4 text-xs text-muted-foreground">
+                <p className="flex items-center gap-1.5">
+                  <MapPin className="size-3.5 shrink-0 text-primary/60" />
+                  <span className="min-w-0 truncate">{[org.city, org.location].filter(Boolean).join(' — ') || '—'}</span>
+                </p>
+                <p className="flex flex-wrap items-center gap-x-3.5 gap-y-0.5">
+                  <span className="flex items-center gap-1.5" dir="ltr">
+                    <Phone className="size-3.5 shrink-0 text-primary/60" />
+                    {org.phone || '—'}
+                  </span>
+                  {org.email && (
+                    <span className="flex min-w-0 items-center gap-1.5" dir="ltr">
+                      <Mail className="size-3.5 shrink-0 text-primary/60" />
+                      <span className="truncate">{org.email}</span>
+                    </span>
+                  )}
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <CalendarDays className="size-3.5 shrink-0 text-primary/60" />
+                  <span>الإنشاء: {formatDate(org.createdAt)}</span>
+                </p>
+              </div>
+
+              {/* مجتمع الكوادر — نفس العدادات */}
+              <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3 pt-2.5">
+                <Badge variant="secondary" className="rounded-full px-2.5 font-bold">
+                  {org._count?.affiliations ?? 0} ارتباط
+                </Badge>
+                <Badge variant="outline" className="rounded-full bg-emerald-500/5 px-2.5 font-bold text-emerald-700 dark:text-emerald-400">
+                  {(org.community?.accreditedNurses ?? 0) + (org.community?.accreditedDoctors ?? 0)} معتمد ·{' '}
+                  {org.community?.availableNow ?? 0} متاح الآن
+                </Badge>
+              </div>
+
+              {/* الإجراءات — نفس الأزرار الحالية بلا إضافات */}
+              <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 bg-secondary/40 px-2.5 py-2">
+                {org.status === 'PENDING' && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-700"
+                      disabled={reviewMutation.isPending}
+                      onClick={() => reviewMutation.mutate({ id: org.id, status: 'ACTIVE' })}
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      اعتماد
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-500/10 hover:text-red-600"
+                      disabled={reviewMutation.isPending}
+                      onClick={() => reviewMutation.mutate({ id: org.id, status: 'REJECTED' })}
+                    >
+                      <XCircle className="size-3.5" />
+                      رفض
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-lg text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+                  onClick={() => {
+                    setDashboardId(org.id)
+                    setDashboardOpen(true)
+                  }}
+                >
+                  <Users className="size-3.5" />
+                  الكوادر والتكليفات
+                </Button>
+                <div className="ms-auto flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="تعديل"
+                    className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    onClick={() => openEdit(org)}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="حذف"
+                    className="size-8 rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => setDeleteTarget(org)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
