@@ -9,7 +9,7 @@
  * الألوان مختارة بدرجات تضمن تباين النص الأبيض فوقها (WCAG ≥ 4.5:1)
  */
 
-export type RoleKey = 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
+export type RoleKey = 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' | 'HR'
 
 export interface RoleTheme {
   /** لون التمييز الأساسي — أزرار/تنقل نشط/أيقونات */
@@ -64,6 +64,15 @@ export const ROLE_THEME: Record<RoleKey, RoleTheme> = {
     accentGlow: '#22D3EE',
     accentSoft: 'rgba(34, 211, 238, 0.13)',
     label: 'مدير النظام',
+  },
+  // الموارد البشرية — بنفسجي كهربائي (جولة 66 — ميزة «فرصة»):
+  // هوية Accent مميزة للقسم (Electric Violet) تندمج مع هوية تكليفات دون كسرها
+  HR: {
+    accent: '#7C3AED',
+    accentStrong: '#6D28D9',
+    accentGlow: '#A78BFA',
+    accentSoft: 'rgba(139, 92, 246, 0.12)',
+    label: 'الموارد البشرية',
   },
 }
 

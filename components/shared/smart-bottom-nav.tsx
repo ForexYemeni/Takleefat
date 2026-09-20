@@ -7,7 +7,9 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Bell,
+  Briefcase,
   Building2,
+  CalendarClock,
   CheckCircle2,
   ClipboardList,
   Clock,
@@ -23,7 +25,9 @@ import {
   Sparkles,
   Stethoscope,
   UserRound,
+  Users,
   Wallet,
+  XCircle,
 } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
 import { cn, formatCurrency, timeAgo } from '@/lib/utils'
@@ -125,6 +129,18 @@ function roleConfig(role: NavRole): { tabs: NavTab[]; center: CenterAction } {
         ],
         center: { kind: 'link', label: 'غرفة العمليات', icon: Command, href: '/admin' },
       }
+    case 'HR':
+      // الجولة 66 — لوحة الموارد البشرية (ميزة «فرصة»): إضافي بحت كلياً —
+      // لا مساس بحالات الأدوار القائمة، والشارة على الفرص = متقدمون بانتظار المراجعة
+      return {
+        tabs: [
+          { key: 'home', label: 'الرئيسية', icon: LayoutDashboard, href: '/hr', kind: 'link' },
+          { key: 'opportunities', label: 'الفرص', icon: Briefcase, href: '/hr/opportunities', kind: 'link', badge: 'assignments' },
+          { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
+          { key: 'profile', label: 'الملف', icon: UserRound, href: '/hr/profile', kind: 'link' },
+        ],
+        center: { kind: 'link', label: 'نشر فرصة', icon: Plus, href: '/hr/opportunities?new=1' },
+      }
   }
 }
 
@@ -161,7 +177,14 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
   const { data: postsData } = useQuery({
     queryKey: ['open-posts'],
     queryFn: () => apiFetcher<{ posts: NavPost[] }>('/api/posts'),
-    enabled: role !== 'ADMIN',
+    enabled: role !== 'ADMIN' && role !== 'HR',
+    staleTime: 30_000,
+  })
+  // الجولة 66: شارة HR — متقدمون بانتظار المراجعة عبر إحصاءات «فرصة» (إضافي بحت)
+  const { data: forsahStats } = useQuery({
+    queryKey: ['forsah-nav-stats'],
+    queryFn: () => apiFetcher<{ stats: { pendingApplications: number } }>('/api/forsah/dashboard'),
+    enabled: role === 'HR',
     staleTime: 30_000,
   })
   const { data: statsData } = useQuery({
@@ -187,8 +210,10 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
       return posts.reduce((sum, p) => sum + (p._count?.applications ?? 0), 0)
     }
     if (role === 'ADMIN') return statsData?.pendingApplications ?? 0
+    // الجولة 66: HR — المتقدمون الجدد على فرصه (إضافي بحت)
+    if (role === 'HR') return forsahStats?.stats?.pendingApplications ?? 0
     return 0
-  }, [postsData, statsData, role])
+  }, [postsData, statsData, forsahStats, role])
 
   const badgeFor = (tab: NavTab): number => {
     if (tab.badge === 'notifications') return unreadCount
@@ -379,6 +404,17 @@ const NOTIF_ICON: Record<string, React.ComponentType<{ className?: string }>> = 
   ASSIGNMENT_CREATED: Send,
   DOCUMENT_REVIEWED: FileCheck2,
   GENERIC: Bell,
+  // الجولة 66 — أحداث «فرصة» (إضافي بحت)
+  OPPORTUNITY_PUBLISHED: Briefcase,
+  OPPORTUNITY_APPLICATION_RECEIVED: Inbox,
+  OPPORTUNITY_APPLICATION_REVIEWED: FileCheck2,
+  OPPORTUNITY_INTERVIEW_INVITED: CalendarClock,
+  OPPORTUNITY_INTERVIEW_CONFIRMED: CheckCircle2,
+  OPPORTUNITY_INTERVIEW_DECLINED: XCircle,
+  OPPORTUNITY_CANDIDATE_SELECTED: Users,
+  OPPORTUNITY_PAYMENT_PENDING: Wallet,
+  OPPORTUNITY_PAYMENT_COMPLETED: Wallet,
+  OPPORTUNITY_CLOSED: XCircle,
 }
 
 function NotificationsDrawer({

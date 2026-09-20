@@ -1,0 +1,244 @@
+#!/bin/bash
+# ============================================================
+# اختبار E2E شامل لميزة «فرصة | Forsah» — الجولة 66
+# يشغّل الدورة الكاملة على قاعدة الاختبار المحلية ويتحقق من كل قواعد
+# المواصفة: الأهلية، منع التكرار، إغلاق server-side، المالية، الصلاحيات.
+# ============================================================
+set -u
+BASE="http://localhost:3000"
+NEW_HR_PHONE="77$(shuf -i 1000000-9999999 -n 1)"
+JAR_DIR="/tmp/forsah-e2e"
+mkdir -p "$JAR_DIR"
+
+PASS=0; FAIL=0
+check() { # check <name> <condition(0=ok)>
+  if [ "$2" -eq 0 ]; then PASS=$((PASS+1)); echo "  ✅ $1"
+  else FAIL=$((FAIL+1)); echo "  ❌ $1"; fi
+}
+jqget() { echo "$1" | python3 -c "import sys,json;d=json.load(sys.stdin);print(eval(\"d$2\"))" 2>/dev/null; }
+
+login() { # login <phone> <password> <jarname>
+  local jar="$JAR_DIR/$3.txt"
+  local res=$(curl -s -c "$jar" -X POST "$BASE/api/auth/callback/credentials" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "phone=$1&password=$2&csrfToken=&json=true" -o /dev/null -w "%{http_code}")
+  # NextAuth credentials عبر callback يحتاج csrf — نجلبها أولاً
+  curl -s -c "$jar" "$BASE/api/auth/csrf" > "$JAR_DIR/csrf-$3.json"
+  local token=$(jqget "$(cat "$JAR_DIR/csrf-$3.json")" "['csrfToken']")
+  res=$(curl -s -b "$jar" -c "$jar" -X POST "$BASE/api/auth/callback/credentials" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "phone=$1&password=$2&csrfToken=$token&json=true" -o /dev/null -w "%{http_code}")
+  echo "$res"
+}
+
+api() { # api <jar> <method> <path> [body]
+  local jar="$JAR_DIR/$1.txt"; local m="$2"; local p="$3"; local b="${4:-}"
+  if [ -n "$b" ]; then
+    curl -s -b "$jar" -X "$m" "$BASE$p" -H "Content-Type: application/json" -d "$b"
+  else
+    curl -s -b "$jar" -X "$m" "$BASE$p"
+  fi
+}
+
+echo "═══ 0) تسوية إعدادات الرسوم (نسبة 5٪ من الراتب + عمولة HR 30٪) ═══"
+login "773178684" "admin12345" "admin" > /dev/null
+api admin PATCH "/api/admin/forsah" '{"forsahFeeType": "PERCENTAGE", "forsahFeeValue": 5, "forsahHrCommissionPercent": 30, "forsahFeeMin": 0, "forsahFeeMax": 0}' > /dev/null
+HRS_ID=$(api admin GET "/api/admin/forsah" | python3 -c "import sys,json;print([a['id'] for a in json.load(sys.stdin)['hrAccounts'] if a['phone']=='770100200'][0])")
+PERMS=$(api admin GET "/api/admin/forsah" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+perms=[a['forsahPermissions'] for a in d['hrAccounts'] if a['phone']=='770100200'][0]
+print(json.dumps(sorted(set(perms + ['opportunity.close']))))")
+api admin PATCH "/api/admin/hr/$HRS_ID" "{\"action\": \"SET_PERMISSIONS\", \"forsahPermissions\": $PERMS}" > /dev/null
+echo "  (تم منح close لحساب HR الاختباري لإختبار مسار إغلاق HR)"
+
+echo "═══ 1) تسجيل الدخول لكل الأدوار ═══"
+r=$(login "770100200" "Forsah1234" "hr");        check "دخول HR (200)" $([ "$r" = "200" ] && echo 0 || echo 1)
+r=$(login "770300400" "Nurse1234" "nurse");      check "دخول الكادر المؤهل (200)" $([ "$r" = "200" ] && echo 0 || echo 1)
+r=$(login "770300500" "Nurse1234" "nurse2");     check "دخول الكادر غير المؤهل (200)" $([ "$r" = "200" ] && echo 0 || echo 1)
+r=$(login "770500600" "Doctor1234" "doctor");    check "دخول الطبيب (200)" $([ "$r" = "200" ] && echo 0 || echo 1)
+r=$(login "773178684" "admin12345" "admin");     check "دخول الإدارة (200)" $([ "$r" = "200" ] && echo 0 || echo 1)
+
+echo "═══ 2) الحماية: منع الوصول غير المصرح ═══"
+res=$(api nurse POST "/api/admin/hr" '{}')
+echo "$res" | grep -qE "ليست لديك صلاحية|403" && check "NURSE مرفوض من إنشاء HR (403)" 0 || { check "NURSE مرفوض من إنشاء HR" 1; echo "    RES: $(echo $res | head -c 150)"; }
+res=$(api nurse GET "/api/admin/forsah")
+echo "$res" | grep -qE "ليست لديك صلاحية|403" && check "NURSE مرفوض من لوحة فرصة الإدارية (403)" 0 || { check "NURSE مرفوض من /api/admin/forsah" 1; echo "    RES: $(echo $res | head -c 150)"; }
+res=$(api hr GET "/api/admin/forsah")
+echo "$res" | grep -q "ليست لديك صلاحية" && check "HR مرفوض من لوحة الإدارة (403)" 0 || { check "HR مرفوض من /api/admin/forsah" 1; echo "    RES: $(echo $res | head -c 150)"; }
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR_DIR/nurse.txt" "$BASE/hr")
+[ "$code" = "404" ] || [ "$code" = "307" ] || [ "$code" = "302" ] && check "NURSE يُحظر من صفحة /hr ($code)" 0 || check "NURSE يُحظر من صفحة /hr ($code)" 1
+
+echo "═══ 3) HR ينشئ فرصة ═══"
+HOSPITAL_ID=$(api hr GET "/api/hospitals" | python3 -c "import sys,json;print(json.load(sys.stdin)['hospitals'][0]['id'])")
+res=$(api hr POST "/api/opportunities" '{
+  "title": "مطلوب كادر تمريضي لعناية مركزة — فرصة عمل شهرية",
+  "hospitalId": "'$HOSPITAL_ID'",
+  "audience": "NURSE",
+  "departmentId": null,
+  "salaryAmount": 300000,
+  "salaryType": "MONTHLY",
+  "salaryCurrency": "YER",
+  "workStartTime": "08:00",
+  "workEndTime": "20:00",
+  "positionsNeeded": 2,
+  "gender": "FEMALE",
+  "vacations": "جمعة أسبوعياً",
+  "procedureSharePercent": null,
+  "minYearsExperience": 2,
+  "licenseRequired": false,
+  "requiredDocuments": ["الهوية الشخصية"],
+  "description": "فرصة عمل لكوادر التمريض في قسم العناية المركزة",
+  "responsibilities": "متابعة الحالات الحرجة",
+  "benefits": "بدل نقل",
+  "notes": ""
+}')
+OPP_ID=$(jqget "$res" "['opportunity']['id']")
+OPP_NUM=$(jqget "$res" "['opportunity']['number']")
+echo "$res" | grep -q "مسودة" && check "إنشاء الفرصة كمسودة (رقم $OPP_NUM)" 0 || { check "إنشاء الفرصة كمسودة" 1; echo "    RES: $res" | head -c 300; }
+# القسم: نربط القسم بعنوان الفرصة لاحقاً عبر تعديل — هنا نتركه بلا قسم (مفتوح لكل الأقسام)
+
+echo "═══ 4) النشر وإشعار المؤهلين ═══"
+res=$(api hr PATCH "/api/opportunities/$OPP_ID" '{"action": "publish"}')
+echo "$res" | grep -qE "نُشرت الفرصة|نشرت الفرصة" && check "نشر الفرصة" 0 || { check "نشر الفرصة" 1; echo "    RES: $res" | head -c 300; }
+res=$(api hr GET "/api/forsah/dashboard")
+PUB=$(jqget "$res" "['stats']['published']")
+[ "$PUB" = "1" ] && check "إحصائية «منشورة» = 1" 0 || check "إحصائية «منشورة» = 1 (got $PUB)" 1
+
+echo "═══ 5) فلترة الأهلية من الخادم ═══"
+res=$(api nurse GET "/api/opportunities")
+COUNT=$(jqget "$res" "['total']")
+[ "$COUNT" = "1" ] && check "الكادر المؤهل يرى الفرصة" 0 || { check "الكادر المؤهل يرى الفرصة ($COUNT)" 1; echo "   RES: $(echo $res | head -c 400)"; }
+res=$(api nurse2 GET "/api/opportunities")
+COUNT=$(jqget "$res" "['total']")
+[ "$COUNT" = "0" ] && check "غير المؤهل (ذكر/بلا خبرة) لا يراها" 0 || check "غير المؤهل لا يراها ($COUNT)" 1
+res=$(api doctor GET "/api/opportunities")
+COUNT=$(jqget "$res" "['total']")
+[ "$COUNT" = "0" ] && check "الطبيب لا يرى فرصة الكادر (جمهور)" 0 || check "الطبيب لا يرى فرصة الكادر ($COUNT)" 1
+
+echo "═══ 6) التقديم ومنع التكرار ═══"
+res=$(api nurse POST "/api/opportunities/$OPP_ID/apply" '{"coverNote": "أرغب بالتقديم، لدي خبرة 3 سنوات"}')
+echo "$res" | grep -q "تم إرسال طلبك بنجاح" && check "تقديم ناجح" 0 || { check "تقديم ناجح" 1; echo "    RES: $(echo $res | head -c 300)"; }
+res=$(api nurse POST "/api/opportunities/$OPP_ID/apply" '{}')
+echo "$res" | grep -q "مسبقاً" && check "التقديم المكرر مرفوض (409)" 0 || check "التقديم المكرر مرفوض" 1
+res=$(api nurse2 POST "/api/opportunities/$OPP_ID/apply" '{}')
+echo "$res" | grep -qE "لا تستوفي شروط هذه الفرصة|لا يمكنك التقديم" && check "غير المؤهل مرفوض من التقديم (server-side)" 0 || { check "غير المؤهل مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api nurse GET "/api/me/opportunities")
+echo "$res" | grep -q '"status":"PENDING"' && check "«فرصي» يعرض الطلب (PENDING)" 0 || { check "«فرصي» يعرض الطلب" 1; echo "    RES: $(echo $res | head -c 200)"; }
+
+echo "═══ 7) المراجعة ثم المقابلة ═══"
+APP_ID=$(api hr GET "/api/opportunities/$OPP_ID/applications" | python3 -c "import sys,json;print(json.load(sys.stdin)['applications'][0]['id'])")
+res=$(api hr PATCH "/api/opportunities/applications/$APP_ID" '{"status": "REVIEWED"}')
+echo "$res" | grep -q "تمت مراجعة الطلب" && check "مراجعة الطلب" 0 || { check "مراجعة الطلب" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api hr POST "/api/opportunities/$OPP_ID/interviews" '{
+  "applicationIds": ["'$APP_ID'"],
+  "scheduledDate": "2026-12-01",
+  "scheduledTime": "10:30",
+  "mode": "ONSITE",
+  "location": "مبنى الإدارة — الطابق الثالث",
+  "address": "صنعاء — شارع الزراعة",
+  "mapUrl": "",
+  "notes": "احضري الهوية"
+}')
+echo "$res" | grep -q "دعوة مقابلة" && check "إرسال دعوة المقابلة" 0 || { check "إرسال دعوة المقابلة" 1; echo "    RES: $(echo $res | head -c 300)"; }
+INT_ID=$(api nurse GET "/api/me/opportunities" | python3 -c "import sys,json;print(json.load(sys.stdin)['applications'][0]['interviews'][0]['id'])")
+res=$(api nurse POST "/api/opportunities/interviews/$INT_ID/respond" '{"response": "CONFIRMED"}')
+echo "$res" | grep -q "أكدت حضورك" && check "تأكيد الحضور" 0 || { check "تأكيد الحضور" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api nurse GET "/api/me/opportunities")
+echo "$res" | grep -q '"status":"INTERVIEW_CONFIRMED"' && check "حالة الطلب = مقابلة مؤكدة" 0 || { check "حالة الطلب = مقابلة مؤكدة" 1; echo "    RES: $(echo $res | head -c 200)"; }
+
+echo "═══ 8) الاختيار والعملية المالية (Idempotent) ═══"
+res=$(api hr POST "/api/opportunities/$OPP_ID/selections" '{"applicationIds": ["'$APP_ID'"], "note": "أداء ممتاز"}')
+echo "$res" | grep -q "تم اختيار" && check "اختيار الموظف" 0 || { check "اختيار الموظف" 1; echo "    RES: $(echo $res | head -c 300)"; }
+# الرسوم: 5٪ من 300000 = 15000 — HR 30٪ = 4500 — الإدارة 10500
+res=$(api hr GET "/api/opportunities/$OPP_ID/transaction")
+FEE=$(jqget "$res" "['transactions'][0]['feeAmount']")
+HRC=$(jqget "$res" "['transactions'][0]['hrCommissionAmount']")
+ADM=$(jqget "$res" "['transactions'][0]['adminAmount']")
+[ "$FEE" = "15000" ] && [ "$HRC" = "4500" ] && [ "$ADM" = "10500" ] && check "الحساب المالي 15000/4500/10500 صحيح" 0 || check "الحساب المالي ($FEE/$HRC/$ADM)" 1
+# إعادة الاختيار نفسه مرفوضة (الطلب في حالة SELECTED)
+res=$(api hr POST "/api/opportunities/$OPP_ID/selections" '{"applicationIds": ["'$APP_ID'"]}')
+echo "$res" | grep -q "error\|غير متاحة" && check "إعادة الاختيار مرفوضة (لا تكرار)" 0 || check "إعادة الاختيار مرفوضة" 1
+TXCOUNT=$(api hr GET "/api/opportunities/$OPP_ID/transaction" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['transactions']))")
+[ "$TXCOUNT" = "1" ] && check "عملية مالية واحدة حصراً (idempotencyKey)" 0 || check "عملية مالية واحدة ($TXCOUNT)" 1
+# فتح رقم المتقدم المختار لـHR
+res=$(api hr GET "/api/opportunities/applications/$APP_ID")
+echo "$res" | grep -q '"phoneLocked":false' && check "رقم المختار مفتوح لـHR (خصوصية)" 0 || { check "رقم المختار مفتوح لـHR" 1; echo "    RES: $(echo $res | grep -o 'phoneLocked[^,]*' | head -2)"; }
+
+echo "═══ 9) إغلاق الفرصة — server-side enforced ═══"
+res=$(api hr PATCH "/api/opportunities/$OPP_ID" '{"action": "close"}')
+echo "$res" | grep -q "أُغلقت الفرصة" && check "إغلاق من HR المصرح له" 0 || { check "إغلاق من HR" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api nurse2 POST "/api/opportunities/$OPP_ID/apply" '{}')
+echo "$res" | grep -q "هذه الفرصة مغلقة ولم تعد متاحة للتقديم" && check "التقديم بعد الإغلاق مرفوض برسالة المواصفة" 0 || { check "التقديم بعد الإغلاق مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api hr POST "/api/opportunities/$OPP_ID/interviews" '{"applicationIds": [], "scheduledDate": "2026-12-01", "scheduledTime": "10:00", "mode": "ONSITE", "location": "x"}')
+echo "$res" | grep -q "error\|مغلقة" && check "لا دعوات مقابلات جديدة بعد الإغلاق" 0 || check "لا دعوات جديدة بعد الإغلاق" 1
+# البيانات محفوظة: الطلبات والمقابلات والاختيارات باقية
+res=$(api hr GET "/api/opportunities/$OPP_ID/applications")
+SELCOUNT=$(jqget "$res" "['selectedCount']")
+[ "$SELCOUNT" = "1" ] && check "الاختيارات محفوظة بعد الإغلاق (لا حذف)" 0 || check "الاختيارات محفوظة ($SELCOUNT)" 1
+res=$(api hr GET "/api/opportunities/$OPP_ID/transaction")
+TXCOUNT=$(echo "$res" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['transactions']))")
+[ "$TXCOUNT" = "1" ] && check "البيانات المالية محفوظة بعد الإغلاق" 0 || check "البيانات المالية محفوظة ($TXCOUNT)" 1
+# HR بلا صلاحية close لا يغلق — ملاحظة: hr الاختباري مُنح close ضمنياً؟ لا — لم نمنحه close!
+# سحب صلاحية close من hr ثم إنشاء فرصة جديدة والمحاولة
+PERMS=$(api admin GET "/api/admin/forsah" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+perms=[a['forsahPermissions'] for a in d['hrAccounts'] if a['phone']=='770100200'][0]
+print(json.dumps([p for p in perms if p!='opportunity.close']))")
+api admin PATCH "/api/admin/hr/$(api admin GET '/api/admin/forsah' | python3 -c "import sys,json;print([a['id'] for a in json.load(sys.stdin)['hrAccounts'] if a['phone']=='770100200'][0])")" "{\"action\": \"SET_PERMISSIONS\", \"forsahPermissions\": $PERMS}" > /dev/null
+res=$(api hr POST "/api/opportunities" '{
+  "title": "فرصة اختبار ثانية بلا صلاحية إغلاق",
+  "hospitalId": "'$HOSPITAL_ID'",
+  "audience": "NURSE",
+  "salaryAmount": 100000,
+  "salaryType": "MONTHLY",
+  "salaryCurrency": "YER",
+  "positionsNeeded": 1,
+  "gender": "ANY"
+}')
+OPP2_ID=$(jqget "$res" "['opportunity']['id']")
+[ -n "$OPP2_ID" ] && check "إنشاء فرصة ثانية" 0 || check "إنشاء فرصة ثانية" 1
+res=$(api hr PATCH "/api/opportunities/$OPP2_ID" '{"action": "close"}')
+echo "$res" | grep -q "ليست لديك صلاحية" && check "HR بلا صلاحية close مرفوض من الإغلاق (403)" 0 || { check "HR بلا صلاحية close مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+# الإدارة تغلق أي فرصة — السلطة العليا
+res=$(api admin PATCH "/api/opportunities/$OPP2_ID" '{"action": "close"}')
+echo "$res" | grep -q "أُغلقت الفرصة" && check "الإدارة تُغلق أي فرصة (السلطة العليا)" 0 || { check "الإدارة تُغلق أي فرصة" 1; echo "    RES: $(echo $res | head -c 200)"; }
+
+echo "═══ 10) الإدارة: الرسوم + HR + التدقيق ═══"
+res=$(api admin PATCH "/api/admin/forsah" '{"forsahFeeType": "FIXED", "forsahFeeValue": 20000, "forsahHrCommissionPercent": 30, "forsahFeeMin": 0, "forsahFeeMax": 0}')
+echo "$res" | grep -q "حُفظت إعدادات" && check "تحديث إعدادات الرسوم (مبلغ ثابت 20000)" 0 || check "تحديث إعدادات الرسوم" 1
+NEW_HR_JSON='{"name": "منى صالح", "phone": "PHONE_PLACEHOLDER", "email": "", "hospitalName": "مستشفى الأمل", "jobTitle": "أخصائية توظيف", "password": "HrPass1234", "status": "APPROVED", "forsahPermissions": [], "forsahCommissionPercent": null}'
+NEW_HR_JSON="${NEW_HR_JSON/PHONE_PLACEHOLDER/$NEW_HR_PHONE}"
+res=$(api admin POST "/api/admin/hr" "$NEW_HR_JSON")
+echo "$res" | grep -q "أُنشئ حساب" && check "الإدارة تنشئ حساب HR جديد" 0 || { check "الإدارة تنشئ حساب HR" 1; echo "    RES: $(echo $res | head -c 300)"; }
+res=$(api hr GET "/api/opportunities")
+echo "$res" | grep -q "منى صالح" && check "HR لا يرى حسابات HR الآخرين (معزولة)" 1 || check "HR لا يرى حسابات HR الآخرين" 0
+res=$(api admin GET "/api/admin/forsah")
+echo "$res" | grep -q "أنشأ حساب HR\|HR_CREATED" && check "سجل التدقيق يوثق إنشاء HR" 0 || check "سجل التدقيق يوثق إنشاء HR" 1
+# دفع العملية من الإدارة
+TX_ID=$(api admin GET "/api/admin/forsah" > /dev/null; api hr GET "/api/opportunities/$OPP_ID/transaction" | python3 -c "import sys,json;print(json.load(sys.stdin)['transactions'][0]['id'])")
+res=$(api admin PATCH "/api/opportunities/$OPP_ID/transaction" '{"transactionId": "'$TX_ID'", "status": "PAID"}')
+echo "$res" | grep -q "مسددة" && check "الإدارة تسدد العملية المالية" 0 || { check "الإدارة تسدد العملية" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api hr PATCH "/api/opportunities/$OPP_ID/transaction" '{"transactionId": "'$TX_ID'", "status": "CANCELLED"}')
+echo "$res" | grep -q "ليست لديك صلاحية\|error" && check "HR لا يستطيع تعديل العمليات المالية (403)" 0 || check "HR لا يعدل العمليات" 1
+
+echo "═══ 11) Regression: الأنظمة القائمة سليمة ═══"
+res=$(api nurse GET "/api/posts")
+echo "$res" | grep -q '"posts"' && check "/api/posts (تكليفات) يعمل" 0 || check "/api/posts يعمل" 1
+res=$(api admin GET "/api/stats")
+echo "$res" | grep -q "pendingApplications" && check "/api/stats (إحصاءات) يعمل" 0 || check "/api/stats يعمل" 1
+res=$(api admin GET "/api/admin/hospitals")
+echo "$res" | grep -q "hospitals" && check "/api/admin/hospitals يعمل" 0 || check "/api/admin/hospitals يعمل" 1
+res=$(api nurse GET "/api/me/work-departments")
+echo "$res" | grep -q "departments" && check "/api/me/work-departments يعمل" 0 || check "/api/me/work-departments يعمل" 1
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR_DIR/nurse.txt" "$BASE/nurse")
+[ "$code" = "200" ] && check "لوحة الكادر /nurse تحمل (200)" 0 || check "لوحة الكادر تحمل ($code)" 1
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR_DIR/admin.txt" "$BASE/admin")
+[ "$code" = "200" ] && check "لوحة الإدارة /admin تحمل (200)" 0 || check "لوحة الإدارة تحمل ($code)" 1
+
+echo ""
+echo "══════════════════════════════════"
+echo "النتيجة: نجاح $PASS — فشل $FAIL"
+echo "══════════════════════════════════"
+[ $FAIL -eq 0 ] && echo "🎉 كل الاختبارات ناجحة" || echo "⚠️ توجد اختبارات فاشلة تحتاج مراجعة"

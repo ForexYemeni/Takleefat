@@ -5,6 +5,7 @@ import { getToken } from 'next-auth/jwt'
  * حماية المسارات حسب الدور — تكليفات | Takleefat
  * /admin → مدير النظام | /nurse → الكادر التمريضي | /receiver → المستلم الإداري
  * /doctor → الطبيب | /supervisor → مشرف الأطباء (منظومة الأطباء)
+ * الجولة 66: /hr → الموارد البشرية (ميزة «فرصة») — إضافي بحت بلا مساس بالقواعد القائمة
  */
 const ROLE_HOME: Record<string, string> = {
   ADMIN: '/admin',
@@ -12,6 +13,7 @@ const ROLE_HOME: Record<string, string> = {
   RECEIVER: '/receiver',
   DOCTOR: '/doctor',
   DOCTOR_SUPERVISOR: '/supervisor',
+  HR: '/hr',
 }
 
 export async function middleware(req: NextRequest) {
@@ -41,6 +43,7 @@ export async function middleware(req: NextRequest) {
     { prefix: '/receiver', allowedRole: 'RECEIVER' },
     { prefix: '/doctor', allowedRole: 'DOCTOR' },
     { prefix: '/supervisor', allowedRole: 'DOCTOR_SUPERVISOR' },
+    { prefix: '/hr', allowedRole: 'HR' },
   ]
 
   // الجولة 60 — الصلاحيات المركّبة:
@@ -69,6 +72,7 @@ export const config = {
     '/receiver/:path*',
     '/doctor/:path*',
     '/supervisor/:path*',
+    '/hr/:path*',
     '/login',
     '/register',
   ],

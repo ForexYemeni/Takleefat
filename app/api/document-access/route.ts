@@ -8,14 +8,16 @@ import { notifyAdmins } from '@/lib/notifications'
  * طلبات رؤية مستندات الكادر — الجولة 61 | تكليفات | Takleefat
  * ============================================================
  * GET  /api/document-access — قائمة الطلبات:
- *      الإدارة ترى كل الطلبات، والمستلم/المشرف يرى طلباته هو فقط.
- * POST /api/document-access — إنشاء طلب جديد (المستلم/المشرف):
+ *      الإدارة ترى كل الطلبات، والمستلم/المشرف/HR يرى طلباته هو فقط.
+ * POST /api/document-access — إنشاء طلب جديد (المستلم/المشرف/HR):
  *      { targetId, reason } — سبب إجباري، ولا يُقبل طلب جديد
  *      إذا كان هناك طلب قيد المراجعة أو منح قائم لنفس الكادر.
+ *      الجولة 66: يُسمح لموارد البشرية (HR) بطلب رؤية مستندات متقدم
+ *      لفرصة عمل — نفس مسار الموافقة الإدارية القائم (إضافي بحت).
  */
 export async function GET() {
   try {
-    const session = await requireRole('ADMIN', 'RECEIVER', 'DOCTOR_SUPERVISOR')
+    const session = await requireRole('ADMIN', 'RECEIVER', 'DOCTOR_SUPERVISOR', 'HR')
     const isAdmin = session.user.role === 'ADMIN'
 
     const requests = await db.documentAccessRequest.findMany({
@@ -45,7 +47,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR')
+    // الجولة 66: HR يضيف لمسارات طلب الرؤية القائمة (إضافي بحت)
+    const session = await requireRole('RECEIVER', 'DOCTOR_SUPERVISOR', 'HR')
 
     if (session.user.status !== 'APPROVED') {
       return jsonError('لا يمكن إرسال الطلب قبل اعتماد حسابك من الإدارة', 403)

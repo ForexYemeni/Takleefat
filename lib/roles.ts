@@ -20,8 +20,9 @@ import type { RoleKey } from '@/lib/role-theme'
 
 export type SessionRole = RoleKey
 
-/** الأدوار التي تملك لوحة عمل — الإدارة (ADMIN) مستثناة من الصلاحيات المركّبة نهائياً */
-export const PANEL_ROLES = ['NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR'] as const
+/** الأدوار التي تملك لوحة عمل — الإدارة (ADMIN) مستثناة من الصلاحيات المركّبة نهائياً
+ *  الجولة 66: HR (الموارد البشرية — ميزة «فرصة») لوحة إدارية جديدة — لا يُنشئ حسابه بنفسه */
+export const PANEL_ROLES = ['NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR', 'HR'] as const
 
 /** لوحة كل دور — تُستخدم في الإشعارات وروابط التوجيه والمبدّل */
 export const ROLE_DASHBOARD: Record<RoleKey, string> = {
@@ -30,6 +31,7 @@ export const ROLE_DASHBOARD: Record<RoleKey, string> = {
   RECEIVER: '/receiver',
   DOCTOR: '/doctor',
   DOCTOR_SUPERVISOR: '/supervisor',
+  HR: '/hr',
 }
 
 /** هل يملك هذا الحساب صلاحية الدور المطلوب؟ (الدور الأساسي أو صلاحية مركّبة ممنوحة) */
@@ -50,7 +52,7 @@ export function hasRole(
 export function effectiveRoles(
   user: { role?: string | null; extraRoles?: string[] | null } | null | undefined
 ): SessionRole[] {
-  const known: SessionRole[] = ['ADMIN', 'NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR']
+  const known: SessionRole[] = ['ADMIN', 'NURSE', 'RECEIVER', 'DOCTOR', 'DOCTOR_SUPERVISOR', 'HR']
   const primary = user?.role && known.includes(user.role as SessionRole)
     ? (user.role as SessionRole)
     : null

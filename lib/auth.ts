@@ -82,7 +82,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        token.role = (user as { role: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' }).role
+        token.role = (user as { role: 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' | 'HR' }).role
         token.status = (
           user as { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
         ).status
@@ -134,7 +134,7 @@ export const authOptions: NextAuthOptions = {
           // الحساب حُذف من القاعدة — جلسة غير صالحة (تُرفض 401 في كل المسارات)
           session.user.id = ''
           session.user.name = (token.name as string) ?? ''
-          session.user.role = undefined as unknown as 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
+          session.user.role = undefined as unknown as 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' | 'HR'
         }
       }
       return session

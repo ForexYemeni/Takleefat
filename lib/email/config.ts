@@ -104,6 +104,18 @@ const TYPE_CATEGORY_MAP: Record<NotificationType, EmailCategory> = {
   GENERIC: 'admin',
   ACCOUNT_APPROVED: 'account',
   ACCOUNT_REJECTED: 'account',
+  // الجولة 66: ميزة «فرصة» — أحداث فرص العمل تصنف ضمن «التنبيهات المهمة»
+  // (قنوات إشعار قائمة تُعاد استخدامها — لا نظام بريد جديد)
+  OPPORTUNITY_PUBLISHED: 'important',
+  OPPORTUNITY_APPLICATION_RECEIVED: 'requests',
+  OPPORTUNITY_APPLICATION_REVIEWED: 'requests',
+  OPPORTUNITY_INTERVIEW_INVITED: 'important',
+  OPPORTUNITY_INTERVIEW_CONFIRMED: 'important',
+  OPPORTUNITY_INTERVIEW_DECLINED: 'important',
+  OPPORTUNITY_CANDIDATE_SELECTED: 'important',
+  OPPORTUNITY_PAYMENT_PENDING: 'important',
+  OPPORTUNITY_PAYMENT_COMPLETED: 'important',
+  OPPORTUNITY_CLOSED: 'important',
 }
 
 /** قسم نوع إشعار البريد — الأنواع المباشرة تُصنَّف يدوياً */

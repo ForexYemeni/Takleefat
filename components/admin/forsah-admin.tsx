@@ -1,0 +1,674 @@
+'use client'
+
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  BadgeCheck,
+  Briefcase,
+  Building2,
+  ClipboardList,
+  Eye,
+  KeyRound,
+  Lock,
+  Pencil,
+  Plus,
+  Save,
+  ScrollText,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  UserCog,
+  Users,
+  XCircle,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
+import { formatDate } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ForsahBadge, formatSalary } from '@/components/forsah/opportunity-visuals'
+import { FORSAH_PERMISSIONS, DEFAULT_HR_PERMISSIONS } from '@/lib/forsah/constants'
+
+const PERMISSION_LABELS: Record<string, string> = {
+  'opportunity.view': 'عرض الفرص',
+  'opportunity.create': 'إنشاء فرصة',
+  'opportunity.edit': 'تعديل فرصة',
+  'opportunity.publish': 'نشر فرصة',
+  'opportunity.pause': 'إيقاف/استئناف',
+  'opportunity.close': 'إغلاق فرصة',
+  'opportunity.viewApplicants': 'عرض المتقدمين',
+  'opportunity.inviteInterview': 'دعوة مقابلات',
+  'opportunity.selectCandidate': 'اختيار موظفين',
+  'opportunity.viewFinancials': 'عرض المالية',
+  'opportunity.viewCommission': 'عرض العمولات',
+  'opportunity.manage': 'إدارة عليا (فرصة)',
+}
+
+/**
+ * لوحة الإدارة لمنظومة «فرصة» — الجولة 66 (المواصفة 2/14/16/20)
+ * تبويب الفرص: كل الفرص + إغلاق الفرصة بصلاحية الإدارة العليا + الأرشفة.
+ * تبويب حسابات الموارد البشرية: إنشاء HR + تعديل + تفعيل/تعطيل + كلمة مرور + صلاحيات.
+ * تبويب الرسوم: نوع/قيمة الرسوم + نسبة HR + الحدود — الإدارة وحدها.
+ */
+export function ForsahAdminManager() {
+  const [tab, setTab] = useState('opportunities')
+  const queryClient = useQueryClient()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['forsah-admin'],
+    queryFn: () =>
+      apiFetcher<{
+        opportunities: AdminOpportunity[]
+        hrAccounts: HrAccount[]
+        feeSettings: FeeSettings
+        defaults: { permissions: string[]; all: string[] }
+        auditLogs: AuditRow[]
+      }>('/api/admin/forsah'),
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['forsah-admin'] })
+
+  const close = useMutation({
+    mutationFn: (id: string) => apiPatch<{ message: string }>(`/api/opportunities/${id}`, { action: 'close' }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      invalidate()
+      setCloseTarget(null)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const archive = useMutation({
+    mutationFn: (id: string) => apiPatch<{ message: string }>(`/api/opportunities/${id}`, { action: 'archive' }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      invalidate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const [closeTarget, setCloseTarget] = useState<AdminOpportunity | null>(null)
+  const [hrDialog, setHrDialog] = useState<{ mode: 'create' } | { mode: 'edit'; account: HrAccount } | null>(null)
+
+  return (
+    <div className="space-y-5">
+      <header>
+        <h1 className="flex items-center gap-2 text-xl font-black md:text-2xl">
+          <span className="flex size-9 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-violet-500 text-white shadow-md">
+            <Briefcase className="size-4.5" />
+          </span>
+          فرصة — الموارد البشرية
+        </h1>
+        <p className="mt-1 text-xs font-bold text-muted-foreground">
+          الإدارة العليا لمنظومة فرص العمل: حسابات الموارد البشرية، كل الفرص، إغلاق أي فرصة، الرسوم والعمولات
+        </p>
+      </header>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex h-auto w-full flex-wrap">
+          <TabsTrigger value="opportunities" className="gap-1 text-xs"><Briefcase className="size-3.5" />الفرص</TabsTrigger>
+          <TabsTrigger value="hr" className="gap-1 text-xs"><UserCog className="size-3.5" />الموارد البشرية</TabsTrigger>
+          <TabsTrigger value="fees" className="gap-1 text-xs"><BadgeCheck className="size-3.5" />الرسوم والعمولات</TabsTrigger>
+          <TabsTrigger value="audit" className="gap-1 text-xs"><ScrollText className="size-3.5" />سجل التدقيق</TabsTrigger>
+        </TabsList>
+
+        {/* ---------- الفرص ---------- */}
+        <TabsContent value="opportunities" className="space-y-3">
+          {isLoading ? (
+            <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
+          ) : (data?.opportunities.length ?? 0) === 0 ? (
+            <EmptyBox icon={Briefcase} title="لا فرص بعد" note="أنشئ حساب موارد بشرية ليبدأ بنشر الفرص" />
+          ) : (
+            data!.opportunities.map((o) => (
+              <article key={o.id} className="rounded-2xl border bg-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="secondary">فرصة {o.number}</Badge>
+                      <ForsahBadge status={o.status} />
+                    </div>
+                    <h3 className="mt-1 truncate text-sm font-black" title={o.title}>{o.title}</h3>
+                    <p className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] font-bold text-muted-foreground">
+                      <span className="flex items-center gap-1"><Building2 className="size-3" />{o.hospital.name}</span>
+                      <span className="flex items-center gap-1"><UserCog className="size-3" />{o.createdBy.name}</span>
+                      <span className="flex items-center gap-1"><Users className="size-3" />{o._count.applications} متقدم</span>
+                      <span className="flex items-center gap-1"><ClipboardList className="size-3" />{o._count.selections}/{o.positionsNeeded} اختيار</span>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {o.status === 'CLOSED' ? (
+                      <Button size="sm" variant="outline" className="h-8 rounded-lg text-[11px]" disabled={archive.isPending} onClick={() => archive.mutate(o.id)}>
+                        أرشفة
+                      </Button>
+                    ) : o.status !== 'ARCHIVED' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-lg text-[11px] text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
+                        disabled={close.isPending}
+                        onClick={() => setCloseTarget(o)}
+                      >
+                        <XCircle className="size-3.5" />
+                        إغلاق الفرصة
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </TabsContent>
+
+        {/* ---------- حسابات الموارد البشرية ---------- */}
+        <TabsContent value="hr" className="space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" className="rounded-xl bg-gradient-to-l from-violet-600 to-violet-500 text-white hover:from-violet-700 hover:to-violet-600" onClick={() => setHrDialog({ mode: 'create' })}>
+              <Plus className="size-4" />
+              إضافة موارد بشرية
+            </Button>
+          </div>
+          {isLoading ? (
+            <div className="space-y-2">{[0, 1].map((i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}</div>
+          ) : (data?.hrAccounts.length ?? 0) === 0 ? (
+            <EmptyBox icon={UserCog} title="لا حسابات موارد بشرية بعد" note="أنشئ أول حساب HR — يدخل من تسجيل الدخول الحالي دون أي نظام جديد" />
+          ) : (
+            data!.hrAccounts.map((h) => (
+              <article key={h.id} className="rounded-2xl border bg-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-black">{h.name}</p>
+                    <p className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] font-bold text-muted-foreground">
+                      <span dir="ltr">{h.phone}</span>
+                      {h.jobTitle && <span>{h.jobTitle}</span>}
+                      {h.hospitalName && <span>{h.hospitalName}</span>}
+                      <span>{h._count.forsahOpportunitiesCreated} فرصة</span>
+                      <span>{h.forsahPermissions.length} صلاحية</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <StatusChip status={h.status} />
+                    <Button size="sm" variant="ghost" className="h-8 rounded-lg text-[11px]" onClick={() => setHrDialog({ mode: 'edit', account: h })}>
+                      <Pencil className="size-3.5" />
+                      إدارة
+                    </Button>
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </TabsContent>
+
+        {/* ---------- الرسوم والعمولات ---------- */}
+        <TabsContent value="fees">
+          {data ? <FeesForm settings={data.feeSettings} onSaved={invalidate} /> : <Skeleton className="h-72 rounded-3xl" />}
+        </TabsContent>
+
+        {/* ---------- سجل التدقيق ---------- */}
+        <TabsContent value="audit" className="space-y-2">
+          {isLoading ? (
+            <Skeleton className="h-64 rounded-3xl" />
+          ) : (data?.auditLogs.length ?? 0) === 0 ? (
+            <EmptyBox icon={ScrollText} title="سجل التدقيق فارغ" note="كل عملية حساسة في «فرصة» تُسجل هنا تلقائياً" />
+          ) : (
+            <div className="rounded-3xl border bg-card p-4">
+              <ol className="space-y-2.5">
+                {data!.auditLogs.map((log) => (
+                  <li key={log.id} className="flex items-start gap-2.5 text-xs">
+                    <span className="mt-1 size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold">
+                        {log.actor?.name ?? 'النظام'}{' '}
+                        <span className="text-muted-foreground">({log.actorRole})</span>{' '}
+                        — {auditLabel(log.action)}
+                      </p>
+                      <p className="text-[10px] font-bold text-muted-foreground">
+                        {log.entityType} • {formatDate(log.createdAt)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* حوار تأكيد الإغلاق الإداري — المواصفة 14 حرفياً */}
+      <Dialog open={!!closeTarget} onOpenChange={(o) => !o && setCloseTarget(null)}>
+        <DialogContent className="rounded-3xl sm:max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">هل أنت متأكد من إغلاق هذه الفرصة؟</DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
+              «{closeTarget?.title}» — ستتوقف فوراً عن استقبال أي طلبات جديدة، تختفي من قوائم المؤهلين،
+              ويُمنع أي تقديم جديد من الخادم. جميع الطلبات والمقابلات والاختيارات والبيانات المالية
+              وسجل التدقيق محفوظة — لا حذف لأي بيانات.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Button className="flex-1 rounded-xl bg-rose-600 text-white hover:bg-rose-700" disabled={close.isPending} onClick={() => closeTarget && close.mutate(closeTarget.id)}>
+              <XCircle className="size-4" />
+              إغلاق الفرصة
+            </Button>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setCloseTarget(null)}>
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* حوار إنشاء/إدارة HR */}
+      {hrDialog && (
+        <HrAccountDialog
+          mode={hrDialog.mode}
+          account={hrDialog.mode === 'edit' ? hrDialog.account : null}
+          defaults={data?.defaults.permissions ?? DEFAULT_HR_PERMISSIONS}
+          onOpenChange={(o) => !o && setHrDialog(null)}
+          onSaved={invalidate}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ================= نموذج الرسوم ================= */
+
+interface FeeSettings {
+  forsahFeeType: string
+  forsahFeeValue: number
+  forsahHrCommissionPercent: number
+  forsahFeeMin: number
+  forsahFeeMax: number
+}
+
+function FeesForm({ settings, onSaved }: { settings: FeeSettings; onSaved: () => void }) {
+  const [feeType, setFeeType] = useState(settings.forsahFeeType)
+  const [feeValue, setFeeValue] = useState(String(settings.forsahFeeValue))
+  const [hrPercent, setHrPercent] = useState(String(settings.forsahHrCommissionPercent))
+  const [feeMin, setFeeMin] = useState(String(settings.forsahFeeMin))
+  const [feeMax, setFeeMax] = useState(String(settings.forsahFeeMax))
+
+  const save = useMutation({
+    mutationFn: () =>
+      apiPatch<{ message: string }>('/api/admin/forsah', {
+        forsahFeeType: feeType,
+        forsahFeeValue: Number(feeValue),
+        forsahHrCommissionPercent: Number(hrPercent),
+        forsahFeeMin: Number(feeMin),
+        forsahFeeMax: Number(feeMax),
+      }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      onSaved()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const exampleSalary = 300000
+  const fee =
+    feeType === 'PERCENTAGE'
+      ? Math.round((exampleSalary * Number(feeValue || 0)) / 100)
+      : Number(feeValue || 0)
+  const hrFee = Math.round((fee * Number(hrPercent || 0)) / 100)
+
+  return (
+    <div className="space-y-4 rounded-3xl border bg-card p-5">
+      <div>
+        <h2 className="text-sm font-black">إعدادات رسوم «فرصة»</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">الإدارة وحدها تتحكم في نوع وقيمة الرسوم ونسبة HR والحدود — تسري على الاختيارات الجديدة</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label className="text-xs font-black">نوع الرسوم</Label>
+          <Select value={feeType} onValueChange={(v) => setFeeType(v)}>
+            <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PERCENTAGE">نسبة من الراتب</SelectItem>
+              <SelectItem value="FIXED">مبلغ ثابت</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs font-black">{feeType === 'PERCENTAGE' ? 'قيمة النسبة (٪)' : 'المبلغ الثابت'}</Label>
+          <Input type="number" min={0} value={feeValue} onChange={(e) => setFeeValue(e.target.value)} className="mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs font-black">نسبة عمولة HR (٪ من الرسوم)</Label>
+          <Input type="number" min={0} max={100} value={hrPercent} onChange={(e) => setHrPercent(e.target.value)} className="mt-1" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs font-black">الحد الأدنى</Label>
+            <Input type="number" min={0} value={feeMin} onChange={(e) => setFeeMin(e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs font-black">الحد الأعلى</Label>
+            <Input type="number" min={0} value={feeMax} onChange={(e) => setFeeMax(e.target.value)} className="mt-1" />
+            <p className="mt-0.5 text-[10px] text-muted-foreground">0 = بلا حد</p>
+          </div>
+        </div>
+      </div>
+      {/* مثال حي */}
+      <div className="rounded-2xl bg-muted/50 p-3 text-xs font-bold leading-relaxed">
+        مثال حي — راتب 300,000: الرسوم {fee.toLocaleString('ar-YE')} — نصيب HR {hrFee.toLocaleString('ar-YE')} ({hrPercent}٪) — نصيب الإدارة {(fee - hrFee).toLocaleString('ar-YE')}
+      </div>
+      <Button className="rounded-xl" disabled={save.isPending} onClick={() => save.mutate()}>
+        <Save className="size-4" />
+        {save.isPending ? 'جارٍ الحفظ...' : 'حفظ الإعدادات'}
+      </Button>
+    </div>
+  )
+}
+
+/* ================= حوار حساب HR ================= */
+
+interface HrAccount {
+  id: string
+  name: string
+  phone: string
+  email: string | null
+  jobTitle: string | null
+  hospitalName: string | null
+  status: string
+  forsahPermissions: string[]
+  forsahCommissionPercent: number | null
+  _count: { forsahOpportunitiesCreated: number }
+}
+
+function HrAccountDialog({
+  mode,
+  account,
+  defaults,
+  onOpenChange,
+  onSaved,
+}: {
+  mode: 'create' | 'edit'
+  account: HrAccount | null
+  defaults: string[]
+  onOpenChange: (o: boolean) => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(account?.name ?? '')
+  const [phone, setPhone] = useState(account?.phone ?? '')
+  const [email, setEmail] = useState(account?.email ?? '')
+  const [hospitalName, setHospitalName] = useState(account?.hospitalName ?? '')
+  const [jobTitle, setJobTitle] = useState(account?.jobTitle ?? '')
+  const [password, setPassword] = useState('')
+  const [status, setStatus] = useState(account?.status ?? 'APPROVED')
+  const [commission, setCommission] = useState(account?.forsahCommissionPercent != null ? String(account.forsahCommissionPercent) : '')
+  const [permissions, setPermissions] = useState<string[]>(
+    mode === 'create' ? [...defaults] : [...(account?.forsahPermissions ?? [])]
+  )
+
+  const togglePermission = (key: string) => {
+    setPermissions((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]))
+  }
+
+  const create = useMutation({
+    mutationFn: () =>
+      apiPost<{ message: string }>('/api/admin/hr', {
+        name,
+        phone,
+        email,
+        hospitalName,
+        jobTitle,
+        password,
+        status,
+        forsahPermissions: permissions,
+        forsahCommissionPercent: commission === '' ? null : Number(commission),
+      }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      onOpenChange(false)
+      onSaved()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const act = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiPatch<{ message: string }>(`/api/admin/hr/${account!.id}`, body),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      onOpenChange(false)
+      onSaved()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const canCreate = name.trim().split(/\s+/).length === 2 && /^7\d{8}$/.test(phone) && password.length >= 8
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl sm:max-w-md" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-black">
+            <UserCog className="size-4 text-violet-600" />
+            {mode === 'create' ? 'إضافة موارد بشرية' : `إدارة حساب: ${account?.name}`}
+          </DialogTitle>
+          <DialogDescription className="text-xs leading-relaxed">
+            {mode === 'create'
+              ? 'الإدارة وحدها تنشئ حسابات HR — لا يوجد تسجيل ذاتي. يدخل الحساب من تسجيل الدخول الحالي.'
+              : 'عدّل البيانات أو الحالة أو الصلاحيات — كل التغييرات تسري فوراً وتُسجل تدقيقاً.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {mode === 'create' ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-black">الاسم واللقب *</Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="سامي عبدالله" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-black">الهاتف *</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="7xxxxxxxx" dir="ltr" inputMode="tel" className="mt-1 text-start" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-black">البريد الإلكتروني</Label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="اختياري" dir="ltr" className="mt-1 text-start" />
+                </div>
+                <div>
+                  <Label className="text-xs font-black">المسمى الوظيفي</Label>
+                  <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="مدير التوظيف" className="mt-1" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-black">المنشأة / الجهة الصحية</Label>
+                <Input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} placeholder="مثال: مستشفى الثورة العام" className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-black">كلمة المرور الأولية *</Label>
+                  <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="8 أحرف + أرقام" className="mt-1" dir="ltr" />
+                </div>
+                <div>
+                  <Label className="text-xs font-black">حالة الحساب</Label>
+                  <Select value={status} onValueChange={(v) => setStatus(v)}>
+                    <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="APPROVED">معتمد (دخول فوري)</SelectItem>
+                      <SelectItem value="PENDING">قيد المراجعة</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-black">المسمى الوظيفي</Label>
+                  <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-black">المنشأة</Label>
+                  <Input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} className="mt-1" />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'SET_STATUS', status: account?.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED' })}>
+                  <Lock className="size-3.5" />
+                  {account?.status === 'SUSPENDED' ? 'إعادة تفعيل الحساب' : 'تعطيل الحساب'}
+                </Button>
+                <Button size="sm" variant="outline" className="rounded-xl" disabled={act.isPending || password.length < 8} onClick={() => act.mutate({ action: 'RESET_PASSWORD', password })}>
+                  <KeyRound className="size-3.5" />
+                  إعادة تعيين كلمة المرور
+                </Button>
+                {password.length > 0 && password.length < 8 && (
+                  <p className="text-[10px] font-bold text-rose-600">كلمة المرور الجديدة 8 أحرف على الأقل</p>
+                )}
+              </div>
+              <div className="border-t pt-3">
+                <Button size="sm" className="rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'UPDATE', jobTitle, hospitalName })}>
+                  <Save className="size-3.5" />
+                  حفظ البيانات
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* الصلاحيات — للوضعين */}
+          <div className="rounded-2xl border p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-black">
+              <ShieldCheck className="size-3.5 text-violet-600" />
+              صلاحيات «فرصة» ({permissions.length}/{FORSAH_PERMISSIONS.length})
+            </p>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {FORSAH_PERMISSIONS.map((p) => (
+                <label key={p} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[11px] font-bold hover:bg-accent">
+                  <Checkbox checked={permissions.includes(p)} onCheckedChange={() => togglePermission(p)} className="size-3.5" />
+                  {PERMISSION_LABELS[p] ?? p}
+                </label>
+              ))}
+            </div>
+            {mode === 'edit' && (
+              <Button size="sm" variant="outline" className="mt-2 w-full rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'SET_PERMISSIONS', forsahPermissions: permissions })}>
+                <Save className="size-3.5" />
+                حفظ الصلاحيات
+              </Button>
+            )}
+          </div>
+
+          {mode === 'create' ? (
+            <Button className="w-full rounded-xl bg-gradient-to-l from-violet-600 to-violet-500 text-white hover:from-violet-700 hover:to-violet-600" disabled={!canCreate || create.isPending} onClick={() => create.mutate()}>
+              <Sparkles className="size-4" />
+              {create.isPending ? 'جارٍ الإنشاء...' : 'إنشاء الحساب'}
+            </Button>
+          ) : (
+            <div>
+              <Label className="text-xs font-black">نسبة عمولة HR الخاصة (٪ — فراغ = الإعداد العام)</Label>
+              <div className="mt-1 flex gap-2">
+                <Input value={commission} onChange={(e) => setCommission(e.target.value.replace(/[^\d.]/g, ''))} placeholder="مثال: 30" inputMode="decimal" />
+                <Button size="sm" className="rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'UPDATE' })}>
+                  حفظ
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ================= مساعدات ================= */
+
+function StatusChip({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    APPROVED: { label: 'معتمد', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200' },
+    PENDING: { label: 'قيد المراجعة', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200' },
+    SUSPENDED: { label: 'موقوف', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200' },
+  }
+  const s = map[status] ?? { label: status, cls: 'bg-muted text-muted-foreground' }
+  return <Badge variant="secondary" className={s.cls}>{s.label}</Badge>
+}
+
+function EmptyBox({ icon: Icon, title, note }: { icon: React.ComponentType<{ className?: string }>; title: string; note: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-3xl border border-dashed px-6 py-12 text-center">
+      <span className="flex size-12 items-center justify-center rounded-2xl bg-violet-100 dark:bg-violet-950/50">
+        <Icon className="size-6 text-violet-600 dark:text-violet-300" />
+      </span>
+      <p className="text-sm font-black">{title}</p>
+      <p className="max-w-xs text-xs text-muted-foreground">{note}</p>
+    </div>
+  )
+}
+
+const AUDIT_LABELS: Record<string, string> = {
+  OPPORTUNITY_CREATED: 'أنشأ فرصة',
+  OPPORTUNITY_UPDATED: 'عدّل فرصة',
+  OPPORTUNITY_PUBLISHED: 'نشر فرصة',
+  OPPORTUNITY_PAUSED: 'أوقف فرصة',
+  OPPORTUNITY_RESUMED: 'استأنف فرصة',
+  OPPORTUNITY_CLOSED_BY_HR: 'أغلق فرصة',
+  OPPORTUNITY_CLOSED_BY_ADMIN: 'أغلق الإدارة فرصة',
+  OPPORTUNITY_ARCHIVED: 'أرشف فرصة',
+  APPLICANT_PROFILE_VIEWED: 'شاهد ملف متقدم',
+  APPLICANT_DOCUMENTS_VIEWED: 'شاهد مستندات متقدم',
+  APPLICANT_CONTACT_VIEWED: 'شاهد تواصل متقدم',
+  APPLICATION_SUBMITTED: 'قدّم على فرصة',
+  APPLICATION_REVIEWED: 'راجع تقديم',
+  APPLICATION_REJECTED: 'رفض تقديم',
+  APPLICATION_WITHDRAWN: 'انسحب تقديم',
+  INTERVIEW_INVITED: 'أرسل دعوة مقابلة',
+  INTERVIEW_RESPONDED: 'رد على دعوة مقابلة',
+  CANDIDATE_SELECTED: 'اختار مرشحاً',
+  TRANSACTION_CREATED: 'أُنشئت عملية مالية',
+  TRANSACTION_UPDATED: 'عُدّلت عملية مالية',
+  FEE_SETTINGS_CHANGED: 'غيّر رسوم الفرصة',
+  HR_CREATED: 'أنشأ حساب HR',
+  HR_UPDATED: 'عدّل حساب HR',
+  HR_DISABLED: 'عطّل حساب HR',
+  HR_ENABLED: 'فعّل حساب HR',
+  HR_PASSWORD_RESET: 'أعاد تعيين كلمة مرور HR',
+  HR_PERMISSIONS_CHANGED: 'غيّر صلاحيات HR',
+}
+
+function auditLabel(action: string): string {
+  return AUDIT_LABELS[action] ?? action
+}
+
+/* أنواع داخلية */
+
+interface AdminOpportunity {
+  id: string
+  number: number
+  title: string
+  status: string
+  positionsNeeded: number
+  hospital: { name: string }
+  createdBy: { id: string; name: string; jobTitle: string | null }
+  _count: { applications: number; selections: number; interviews: number }
+}
+
+interface AuditRow {
+  id: string
+  action: string
+  actorRole: string
+  entityType: string
+  createdAt: string
+  actor: { name: string } | null
+}

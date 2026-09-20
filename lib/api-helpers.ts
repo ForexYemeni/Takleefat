@@ -24,7 +24,8 @@ export async function requireSession(): Promise<Session> {
 
 /**
  * يتطلب صلاحية دور محدد (أو أكثر)
- * الأدوار الخمسة: ADMIN | NURSE | RECEIVER | DOCTOR | DOCTOR_SUPERVISOR
+ * الأدوار الستة: ADMIN | NURSE | RECEIVER | DOCTOR | DOCTOR_SUPERVISOR | HR
+ * الجولة 66: إضافة HR (الموارد البشرية — ميزة «فرصة») — إضافي بحت بلا مساس بالأدوار القائمة
  *
  * الجولة 60 — الصلاحيات المركّبة: التحقق يتم على «الوضع النشط» (activeRole)
  * وليس الدور الأساسي حصراً — الوضع النشط يثبّته layout اللوحة عند دخولها
@@ -33,7 +34,7 @@ export async function requireSession(): Promise<Session> {
  * → السلوك مطابق تماماً لما كان عليه قبل هذه الجولة.
  */
 export async function requireRole(
-  ...roles: Array<'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'>
+  ...roles: Array<'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' | 'HR'>
 ) {
   const session = await requireSession()
   const operating = session.user.activeRole ?? session.user.role

@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
+  Briefcase,
   Building2,
+  CalendarClock,
   ClipboardList,
   Coins,
   FileCheck2,
@@ -28,6 +30,7 @@ import {
   UserRound,
   Users,
   UserSquare2,
+  Wallet,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
@@ -55,7 +58,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
-export type DashboardRole = 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR'
+export type DashboardRole = 'ADMIN' | 'NURSE' | 'RECEIVER' | 'DOCTOR' | 'DOCTOR_SUPERVISOR' | 'HR'
 
 interface NavItem {
   href: string
@@ -76,6 +79,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/admin/receivers', label: 'المستلمون الإداريون', icon: UserCog },
       { href: '/admin/doctors', label: 'الأطباء', icon: Stethoscope },
       { href: '/admin/supervisors', label: 'مشرفو الأطباء', icon: UserSquare2 },
+      // الجولة 66 — ميزة «فرصة»: إدارة الموارد البشرية والفرص (إضافي بحت)
+      { href: '/admin/forsah', label: 'فرصة — الموارد البشرية', icon: Briefcase },
       { href: '/admin/organizations', label: 'الجهات الصحية', icon: Building2 },
       { href: '/admin/departments', label: 'الأقسام الطبية', icon: ClipboardList },
       { href: '/admin/specialties', label: 'التخصصات الطبية', icon: HeartPulse },
@@ -94,6 +99,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     items: [
       { href: '/nurse', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/nurse/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
+      // الجولة 66 — ميزة «فرصة»: فرص العمل الصحية المناسبة للكادر (إضافي بحت)
+      { href: '/nurse/opportunities', label: 'فرصة — فرص العمل', icon: Briefcase },
       { href: '/nurse/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
       { href: '/nurse/documents', label: 'مستنداتي', icon: FileCheck2 },
       { href: '/nurse/card', label: 'بطاقتي المهنية', icon: IdCard },
@@ -119,6 +126,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     items: [
       { href: '/doctor', label: 'نظرة عامة', icon: LayoutDashboard },
       { href: '/doctor/assignments', label: 'التكليفات والتقديم', icon: ClipboardList },
+      // الجولة 66 — ميزة «فرصة»: فرص العمل الصحية المناسبة للطبيب (إضافي بحت)
+      { href: '/doctor/opportunities', label: 'فرصة — فرص العمل', icon: Briefcase },
       { href: '/doctor/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
       { href: '/doctor/documents', label: 'مستنداتي', icon: FileCheck2 },
       { href: '/doctor/card', label: 'بطاقتي المهنية', icon: IdCard },
@@ -136,6 +145,19 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/supervisor/document-access', label: 'طلبات المستندات', icon: KeyRound },
       { href: '/supervisor/earnings', label: 'أرباحي', icon: Coins },
       { href: '/supervisor/profile', label: 'الملف الشخصي', icon: UserRound },
+    ],
+  },
+  // الجولة 66 — لوحة الموارد البشرية (ميزة «فرصة»): إضافي بحت كلياً بلا أي مساس باللوحات القائمة
+  HR: {
+    roleLabel: 'الموارد البشرية',
+    profilePath: '/hr/profile',
+    items: [
+      { href: '/hr', label: 'نظرة عامة', icon: LayoutDashboard },
+      { href: '/hr/opportunities', label: 'الفرص', icon: Briefcase },
+      { href: '/hr/applicants', label: 'المتقدمون', icon: Users },
+      { href: '/hr/interviews', label: 'المقابلات', icon: CalendarClock },
+      { href: '/hr/financials', label: 'المالية والعمولات', icon: Wallet },
+      { href: '/hr/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
   },
 }

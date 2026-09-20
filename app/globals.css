@@ -482,6 +482,13 @@
   --role-accent-glow: #22d3ee;
   --role-accent-soft: rgba(34, 211, 238, 0.13);
 }
+/* الجولة 66 — الموارد البشرية (ميزة «فرصة»): بنفسجي كهربائي مميز يندمج مع هوية تكليفات */
+[data-role='HR'] {
+  --role-accent: #7c3aed;
+  --role-accent-strong: #6d28d9;
+  --role-accent-glow: #a78bfa;
+  --role-accent-soft: rgba(139, 92, 246, 0.12);
+}
 
 /* ---------- 2) Liquid Glass — زجاج سائل مقتصد ---------- */
 .liquid-glass {

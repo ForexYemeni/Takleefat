@@ -42,6 +42,17 @@ export interface PlatformSettings {
   promoUntil: string | null
   /** ملاحظة العرض التي تظهر في البانرات — مثال: «بمناسبة افتتاح المنصة» */
   promoNote: string
+  // ---------- الجولة 66: رسوم ميزة «فرصة» (إضافي بحت — مستقلة تماماً عن رسوم التكليفات) ----------
+  /** نوع رسوم الفرصة: نسبة من الراتب أو مبلغ ثابت — الإدارة وحدها تتحكم بها */
+  forsahFeeType: 'PERCENTAGE' | 'FIXED'
+  /** قيمة الرسوم: نسبة (٪) عند PERCENTAGE أو مبلغ عند FIXED */
+  forsahFeeValue: number
+  /** نسبة عمولة HR الافتراضية من الرسوم (٪) — تتجاوزها نسبة الحساب الفردية إن عُينت */
+  forsahHrCommissionPercent: number
+  /** الحد الأدنى للرسوم (0 = بلا حد) */
+  forsahFeeMin: number
+  /** الحد الأعلى للرسوم (0 = بلا حد) */
+  forsahFeeMax: number
 }
 
 /**
@@ -82,6 +93,12 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   promoActive: false,
   promoUntil: null,
   promoNote: '',
+  // الجولة 66: رسوم «فرصة» — 5٪ من الراتب وعمولة HR ثلاثين بالمئة افتراضياً (آمنة ومنطقية)
+  forsahFeeType: 'PERCENTAGE',
+  forsahFeeValue: 5,
+  forsahHrCommissionPercent: 30,
+  forsahFeeMin: 0,
+  forsahFeeMax: 0,
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
@@ -97,6 +114,12 @@ const KEYS: Record<keyof PlatformSettings, string> = {
   promoActive: 'promoActive',
   promoUntil: 'promoUntil',
   promoNote: 'promoNote',
+  // الجولة 66
+  forsahFeeType: 'forsahFeeType',
+  forsahFeeValue: 'forsahFeeValue',
+  forsahHrCommissionPercent: 'forsahHrCommissionPercent',
+  forsahFeeMin: 'forsahFeeMin',
+  forsahFeeMax: 'forsahFeeMax',
 }
 
 /**
@@ -197,6 +220,15 @@ export async function getSettings(): Promise<PlatformSettings> {
       promoActive: map.get(KEYS.promoActive) === '1',
       promoUntil,
       promoNote: map.get(KEYS.promoNote) ?? SETTINGS_DEFAULTS.promoNote,
+      // الجولة 66: رسوم «فرصة» — قراءة آمنة مع الافتراضيات
+      forsahFeeType: map.get(KEYS.forsahFeeType) === 'FIXED' ? 'FIXED' : 'PERCENTAGE',
+      forsahFeeValue: num('forsahFeeValue', SETTINGS_DEFAULTS.forsahFeeValue),
+      forsahHrCommissionPercent: Math.min(
+        100,
+        num('forsahHrCommissionPercent', SETTINGS_DEFAULTS.forsahHrCommissionPercent)
+      ),
+      forsahFeeMin: num('forsahFeeMin', SETTINGS_DEFAULTS.forsahFeeMin),
+      forsahFeeMax: num('forsahFeeMax', SETTINGS_DEFAULTS.forsahFeeMax),
     }
   } catch {
     // في حال عدم توفر الجداول بعد — نُرجع الافتراضي بدل تعطيل الخدمة
