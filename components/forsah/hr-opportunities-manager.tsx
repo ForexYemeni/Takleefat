@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Briefcase,
   Building2,
@@ -38,7 +38,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { OpportunityWizard } from '@/components/forsah/opportunity-wizard'
-import { ForsahBadge, formatSalary, InfoChip } from '@/components/forsah/opportunity-visuals'
+import { ForsahBadge, ForsahErrorState, formatSalary, InfoChip } from '@/components/forsah/opportunity-visuals'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 
 /**
  * إدارة فرص HR — الجولة 66 | ميزة «فرصة»
@@ -66,6 +67,8 @@ interface HrOpportunity {
 
 export function HrOpportunitiesManager() {
   const [q, setQ] = useState('')
+  // الجولة 67: بحث مؤجل — لا وميض مع كل حرف
+  const dq = useDebouncedValue(q, 300)
   const [status, setStatus] = useState('ALL')
   // الفتح التلقائي من الزر المركزي (?new=1) — تهيئة أولية بلا أي setState داخل effect
   const searchParams = useSearchParams()
@@ -75,12 +78,16 @@ export function HrOpportunitiesManager() {
   const [closeTarget, setCloseTarget] = useState<HrOpportunity | null>(null)
   const queryClient = useQueryClient()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['forsah-opportunities', q, status],
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['forsah-opportunities', dq, status],
     queryFn: () =>
       apiFetcher<{ opportunities: HrOpportunity[]; total: number }>(
-        `/api/opportunities?take=50${q ? `&q=${encodeURIComponent(q)}` : ''}${status !== 'ALL' ? `&status=${status}` : ''}`
+        `/api/opportunities?take=50${dq ? `&q=${encodeURIComponent(dq)}` : ''}${status !== 'ALL' ? `&status=${status}` : ''}`
       ),
+    // الجولة 67: تبقى القائمة معروضة أثناء التحديث + حالة خطأ صريحة أدناه
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+    retry: 1,
   })
 
   const transition = useMutation({
@@ -161,7 +168,10 @@ export function HrOpportunitiesManager() {
       </div>
 
       {/* القائمة */}
-      {isLoading ? (
+      {isError ? (
+        // الجولة 67: رسالة الخطأ الحقيقية مع إعادة المحاولة — بدل الاختفاء الصامت
+        <ForsahErrorState message={(error as Error | null)?.message} onRetry={() => refetch()} />
+      ) : isLoading ? (
         <div className="space-y-3">
           {[0, 1, 2].map((i) => <Skeleton key={i} className="h-36 rounded-3xl" />)}
         </div>

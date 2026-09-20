@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Briefcase,
   CalendarClock,
@@ -39,10 +39,12 @@ import {
   EligibilityPanel,
   ApplicationTimeline,
   ForsahBadge,
+  ForsahErrorState,
   formatSalary,
   SALARY_TYPE_AR,
   InfoChip,
 } from '@/components/forsah/opportunity-visuals'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 
 /**
  * متصفح «فرصة» للكادر التمريضي والأطباء — الجولة 66 | تكليفات | Takleefat
@@ -127,21 +129,29 @@ const GENDER_AR: Record<string, string> = { MALE: 'ذكور', FEMALE: 'إناث'
 export function OpportunitiesBrowser({ basePath }: { basePath: '/nurse/opportunities' | '/doctor/opportunities' }) {
   const [tab, setTab] = useState<'matches' | 'mine'>('matches')
   const [q, setQ] = useState('')
+  // الجولة 67: البحث المؤجل — لا استعلام جديد مع كل حرف (كان سبباً رئيسياً في وميض المحتوى)
+  const dq = useDebouncedValue(q, 300)
   const [detailId, setDetailId] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const matches = useQuery({
-    queryKey: ['forsah-matches', q],
+    queryKey: ['forsah-matches', dq],
     queryFn: () =>
       apiFetcher<{ opportunities: OpportunityLite[]; total: number }>(
-        `/api/opportunities?page=1&take=30${q ? `&q=${encodeURIComponent(q)}` : ''}`
+        `/api/opportunities?page=1&take=30${dq ? `&q=${encodeURIComponent(dq)}` : ''}`
       ),
+    // الجولة 67: تُبقى القائمة السابقة معروضة أثناء الجلب — لا انزلاق للهيكل العظمي
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    retry: 1,
   })
 
   const mine = useQuery({
     queryKey: ['forsah-mine'],
     queryFn: () => apiFetcher<{ applications: MyApplication[] }>('/api/me/opportunities'),
     enabled: tab === 'mine',
+    staleTime: 15_000,
+    retry: 1,
   })
 
   const detail = useQuery({
@@ -218,7 +228,13 @@ export function OpportunitiesBrowser({ basePath }: { basePath: '/nurse/opportuni
       {/* ---------- قائمة الفرص المؤهلة ---------- */}
       {tab === 'matches' && (
         <section className="space-y-3">
-          {matches.isLoading ? (
+          {/* الجولة 67: حالة الخطأ صريحة برسالة حقيقية وإعادة محاولة — بدل الاختفاء الصامت */}
+          {matches.isError ? (
+            <ForsahErrorState
+              message={(matches.error as Error | null)?.message}
+              onRetry={() => matches.refetch()}
+            />
+          ) : matches.isLoading ? (
             <div className="space-y-3">
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-40 rounded-3xl" />
@@ -250,7 +266,12 @@ export function OpportunitiesBrowser({ basePath }: { basePath: '/nurse/opportuni
       {/* ---------- فرصي ---------- */}
       {tab === 'mine' && (
         <section className="space-y-3">
-          {mine.isLoading ? (
+          {mine.isError ? (
+            <ForsahErrorState
+              message={(mine.error as Error | null)?.message}
+              onRetry={() => mine.refetch()}
+            />
+          ) : mine.isLoading ? (
             <div className="space-y-3">
               {[0, 1].map((i) => (
                 <Skeleton key={i} className="h-32 rounded-3xl" />

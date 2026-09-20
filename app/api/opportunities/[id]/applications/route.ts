@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
-import { requireForsahPermission, assertOpportunityOwnership } from '@/lib/forsah/server'
+import { assertForsahEnabled, assertOpportunityOwnership, requireForsahPermission } from '@/lib/forsah/server'
 import { maskPhone } from '@/lib/phone-privacy'
 import { FORSAH_MESSAGES } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
@@ -26,6 +26,8 @@ export async function GET(
   try {
     const session = await requireRole('HR', 'ADMIN')
     const actor = await requireForsahPermission(session, 'opportunity.viewApplicants')
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة
+    await assertForsahEnabled(actor.role)
     const { id } = await params
 
     const opportunity = await db.opportunity.findUnique({

@@ -169,7 +169,28 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
   const [aiOpen, setAiOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { tabs, center } = useMemo(() => roleConfig(role), [role])
+  const baseConfig = useMemo(() => roleConfig(role), [role])
+
+  // ---------- الجولة 67: الإغلاق الكلي لنظام «فرصة» — الشارات ولوحات HR تتبع حالة النظام ----------
+  const { data: forsahStatus } = useQuery({
+    queryKey: ['forsah-status'],
+    queryFn: () => apiFetcher<{ enabled: boolean }>('/api/forsah/status'),
+    staleTime: 60_000,
+    retry: 1,
+  })
+  const forsahEnabled = forsahStatus?.enabled ?? true
+
+  const { tabs, center } = useMemo(() => {
+    if (role === 'HR' && !forsahEnabled) {
+      // النظام مغلق: يُخفى تبويب الفرص ويتحول الزر المركزي للرئيسية —
+      // وتبقى الشارة على الرئيسية إن وُجد متقدمون (البيانات محفوظة)
+      return {
+        tabs: baseConfig.tabs.filter((t) => t.key !== 'opportunities'),
+        center: { kind: 'link' as const, label: 'الرئيسية', icon: LayoutDashboard, href: '/hr' },
+      }
+    }
+    return baseConfig
+  }, [baseConfig, role, forsahEnabled])
 
   // ---------- شارات حقيقية ----------
   const { unreadCount } = useNotifications()

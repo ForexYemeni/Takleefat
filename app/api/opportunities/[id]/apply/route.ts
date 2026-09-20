@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { forsahApplySchema } from '@/lib/validations/forsah'
-import { buildCandidate } from '@/lib/forsah/server'
+import { assertForsahEnabled, buildCandidate } from '@/lib/forsah/server'
 import { evaluateOpportunityEligibility } from '@/lib/forsah/eligibility'
 import { isOpportunityOpen, FORSAH_MESSAGES } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
@@ -29,6 +29,8 @@ export async function POST(
     const session = await requireRole('NURSE', 'DOCTOR')
     const { id } = await params
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة (يعيد التشغيل من لوحته)
+    await assertForsahEnabled(role)
 
     if (session.user.status !== 'APPROVED') {
       throw new ApiError('حسابك غير معتمد بعد — لا يمكنك التقديم حتى اعتماده من الإدارة', 403)

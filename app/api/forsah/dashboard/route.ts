@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
-import { requireForsahPermission } from '@/lib/forsah/server'
+import { assertForsahEnabled, requireForsahPermission } from '@/lib/forsah/server'
 
 /**
  * GET /api/forsah/dashboard — إحصائيات لوحة HR (الجولة 66 — المواصفة 4)
@@ -15,6 +15,8 @@ export async function GET(_req: NextRequest) {
   try {
     const session = await requireRole('HR', 'ADMIN')
     const actor = await requireForsahPermission(session, 'opportunity.view')
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة
+    await assertForsahEnabled(actor.role)
     const scope = actor.role === 'ADMIN' ? {} : { createdById: actor.id }
 
     const [

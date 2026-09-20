@@ -12,6 +12,7 @@ import {
   MapPin,
   Sparkles,
   Stethoscope,
+  TriangleAlert,
   UserCheck,
   Users,
 } from 'lucide-react'
@@ -276,6 +277,47 @@ export function ApplicationTimeline({ status, selected }: { status: string; sele
               ? 'سحبت طلبك من هذه الفرصة'
               : 'اعتذرت عن حضور المقابلة'}
         </p>
+      )}
+    </div>
+  )
+}
+
+// ---------------- الجولة 67: حالة خطأ موحدة ----------------
+
+/**
+ * حالة فشل جلب البيانات — تُظهر رسالة الخطأ الحقيقية مع زر إعادة المحاولة
+ * بدل الانزلاق الصامت إلى حالة «لا توجد بيانات» (سبب وميض المحتوى واختفائه).
+ */
+export function ForsahErrorState({
+  message,
+  onRetry,
+  compact,
+}: {
+  message?: string
+  onRetry?: () => void
+  compact?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-center gap-3 rounded-3xl border border-amber-200 bg-amber-50/60 text-center dark:border-amber-800 dark:bg-amber-950/20',
+        compact ? 'px-4 py-6' : 'px-6 py-12'
+      )}
+    >
+      <span className="flex size-12 items-center justify-center rounded-2xl bg-amber-100 dark:bg-amber-950/50">
+        <TriangleAlert className="size-6 text-amber-600 dark:text-amber-300" />
+      </span>
+      <p className="text-sm font-black text-amber-800 dark:text-amber-200">
+        {message || 'تعذر تحميل البيانات — تحقق من الاتصال وأعد المحاولة'}
+      </p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white shadow-sm transition-colors hover:bg-amber-700"
+        >
+          إعادة المحاولة
+        </button>
       )}
     </div>
   )

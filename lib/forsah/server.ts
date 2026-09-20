@@ -6,8 +6,9 @@ import {
   type EligibilityCandidate,
 } from '@/lib/forsah/eligibility'
 import { hasForsahPermission } from '@/lib/forsah/permissions'
-import type { ForsahPermission } from '@/lib/forsah/constants'
+import { FORSAH_MESSAGES, type ForsahPermission } from '@/lib/forsah/constants'
 import { ApiError } from '@/lib/api-helpers'
+import { getSettings } from '@/lib/settings'
 
 /**
  * مساعدات خادم «فرصة» — الجولة 66 | تكليفات | Takleefat
@@ -120,4 +121,62 @@ export async function assertOpportunityOwnership(
   if (opportunity.createdById !== actor.id) {
     throw new ApiError('هذه الفرصة ليست من فرصك — لا يمكنك إدارتها', 403)
   }
+}
+
+// ---------------- الجولة 67: الإغلاق الكلي لنظام «فرصة» ----------------
+
+/**
+ * هل نظام «فرصة» مفعّل؟ — يقرأ الإعداد من القاعدة لحظياً
+ * (الغياب = مفعّل — افتراضي آمن لا يعطل النظام أبداً)
+ */
+export async function isForsahEnabled(): Promise<boolean> {
+  try {
+    const settings = await getSettings()
+    return settings.forsahSystemEnabled
+  } catch {
+    return true
+  }
+}
+
+/**
+ * حرس الإغلاق الكلي — يُلقي 503 عند إغلاق النظام
+ * الإدارة مستثناة دائماً حتى تستطيع إعادة التشغيل من لوحتها.
+ */
+export async function assertForsahEnabled(actorRole?: string): Promise<void> {
+  if (actorRole === 'ADMIN') return
+  if (!(await isForsahEnabled())) {
+    throw new ApiError(FORSAH_MESSAGES.SYSTEM_CLOSED, 503)
+  }
+}
+
+/**
+ * الجولة 67: اسم الفرصة يُولَّد تلقائياً حصراً — «فرصة + القسم» للكادر أو «فرصة + التخصص» للأطباء
+ * (بدل الاسم اليدوي — بلا أي مدخل حر من HR)
+ */
+export async function computeOpportunityTitle(input: {
+  audience: 'NURSE' | 'DOCTOR'
+  departmentId?: string | null
+  specialtyId?: string | null
+}): Promise<string> {
+  if (input.audience === 'NURSE' && input.departmentId) {
+    const dept = await db.department.findUnique({
+      where: { id: input.departmentId },
+      select: { name: true },
+    })
+    if (dept?.name) return buildTitle(dept.name)
+  }
+  if (input.audience === 'DOCTOR' && input.specialtyId) {
+    const spec = await db.specialty.findUnique({
+      where: { id: input.specialtyId },
+      select: { name: true },
+    })
+    if (spec?.name) return buildTitle(spec.name)
+  }
+  // احتياط نظري لا يُمرّ عليه التحقق أبداً (القسم/التخصص إجباريان الآن)
+  return input.audience === 'DOCTOR' ? 'فرصة طبية' : 'فرصة وظيفية'
+}
+
+function buildTitle(name: string): string {
+  const clean = name.trim().slice(0, 120)
+  return `فرصة ${clean}`
 }

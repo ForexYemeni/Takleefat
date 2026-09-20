@@ -21,6 +21,7 @@ import {
 import { apiFetcher } from '@/lib/api-client'
 import { formatCurrency } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ForsahErrorState } from '@/components/forsah/opportunity-visuals'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -48,9 +49,11 @@ interface ForsahStats {
 }
 
 export function HrDashboard() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['forsah-dashboard'],
     queryFn: () => apiFetcher<{ stats: ForsahStats }>('/api/forsah/dashboard'),
+    staleTime: 15_000,
+    retry: 1,
   })
 
   const stats = data?.stats
@@ -139,7 +142,10 @@ export function HrDashboard() {
             </span>
           ) : null}
         </div>
-        {isLoading ? (
+        {isError ? (
+          // الجولة 67: رسالة حقيقية (مثل إغلاق النظام من الإدارة) بدل أرقام صفرية مضللة
+          <ForsahErrorState message={(error as Error | null)?.message} onRetry={() => refetch()} />
+        ) : isLoading ? (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
             {Array.from({ length: 10 }).map((_, i) => (
               <Skeleton key={i} className="h-24 rounded-2xl" />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { handleApiError } from '@/lib/api-helpers'
+import { isForsahEnabled } from '@/lib/forsah/server'
 
 /**
  * GET /api/opportunities/public — قائمة عامة آمنة لمحركات البحث (المواصفة 29)
@@ -13,6 +14,10 @@ export async function GET(req: NextRequest) {
   try {
     const page = Math.max(1, Number(req.nextUrl.searchParams.get('page') ?? 1) || 1)
     const take = Math.min(30, Math.max(6, Number(req.nextUrl.searchParams.get('take') ?? 12) || 12))
+    // الجولة 67: الإغلاق الكلي — الصفحة العامة تُرجع قائمة فارغة بلا خطأ
+    if (!(await isForsahEnabled())) {
+      return NextResponse.json({ opportunities: [], total: 0, page, take })
+    }
 
     const [rows, total] = await Promise.all([
       db.opportunity.findMany({

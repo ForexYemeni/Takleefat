@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { forsahReviewSchema } from '@/lib/validations/forsah'
-import { requireForsahPermission } from '@/lib/forsah/server'
+import { assertForsahEnabled, requireForsahPermission } from '@/lib/forsah/server'
 import { phoneView, maskPhone } from '@/lib/phone-privacy'
 import { FORSAH_MESSAGES } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
@@ -28,6 +28,8 @@ export async function GET(
     const session = await requireRole('HR', 'ADMIN', 'NURSE', 'DOCTOR')
     const { id } = await params
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة (يعيد التشغيل من لوحته)
+    await assertForsahEnabled(role)
 
     const application = await db.opportunityApplication.findUnique({
       where: { id },
@@ -47,6 +49,8 @@ export async function GET(
 
     // ---------- HR المالك / الإدارة ----------
     const actor = await requireForsahPermission(session, 'opportunity.viewApplicants')
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة
+    await assertForsahEnabled(actor.role)
     if (actor.role !== 'ADMIN' && application.opportunity.createdById !== actor.id) {
       throw new ApiError('هذا المتقدم ليس من فرصك', 403)
     }
@@ -185,6 +189,8 @@ export async function PATCH(
     const session = await requireRole('HR', 'ADMIN', 'NURSE', 'DOCTOR')
     const { id } = await params
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة (يعيد التشغيل من لوحته)
+    await assertForsahEnabled(role)
 
     const application = await db.opportunityApplication.findUnique({
       where: { id },
@@ -226,6 +232,8 @@ export async function PATCH(
 
     // ---------- HR: مراجعة / رفض ----------
     const actor = await requireForsahPermission(session, 'opportunity.viewApplicants')
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة
+    await assertForsahEnabled(actor.role)
     if (actor.role !== 'ADMIN' && application.opportunity.createdById !== actor.id) {
       throw new ApiError('هذا المتقدم ليس من فرصك', 403)
     }

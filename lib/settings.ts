@@ -53,6 +53,8 @@ export interface PlatformSettings {
   forsahFeeMin: number
   /** الحد الأعلى للرسوم (0 = بلا حد) */
   forsahFeeMax: number
+  /** الجولة 67: الإغلاق الكلي لنظام «فرصة» من الإدارة — عند الإغلاق تتوقف كل الواجهات والمسارات عدا لوحة الإدارة نفسها */
+  forsahSystemEnabled: boolean
 }
 
 /**
@@ -99,6 +101,7 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   forsahHrCommissionPercent: 30,
   forsahFeeMin: 0,
   forsahFeeMax: 0,
+  forsahSystemEnabled: true,
 }
 
 const KEYS: Record<keyof PlatformSettings, string> = {
@@ -120,6 +123,7 @@ const KEYS: Record<keyof PlatformSettings, string> = {
   forsahHrCommissionPercent: 'forsahHrCommissionPercent',
   forsahFeeMin: 'forsahFeeMin',
   forsahFeeMax: 'forsahFeeMax',
+  forsahSystemEnabled: 'forsahSystemEnabled',
 }
 
 /**
@@ -229,6 +233,8 @@ export async function getSettings(): Promise<PlatformSettings> {
       ),
       forsahFeeMin: num('forsahFeeMin', SETTINGS_DEFAULTS.forsahFeeMin),
       forsahFeeMax: num('forsahFeeMax', SETTINGS_DEFAULTS.forsahFeeMax),
+      // الجولة 67: الإغلاق الكلي — الغياب = يعمل (افتراضي آمن)، '0' فقط يعني مغلقاً
+      forsahSystemEnabled: map.get(KEYS.forsahSystemEnabled) !== '0',
     }
   } catch {
     // في حال عدم توفر الجداول بعد — نُرجع الافتراضي بدل تعطيل الخدمة

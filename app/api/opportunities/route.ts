@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { opportunitySchema } from '@/lib/validations/forsah'
-import { OPPORTUNITY_INCLUDE, requireForsahPermission, buildCandidate } from '@/lib/forsah/server'
+import { OPPORTUNITY_INCLUDE, requireForsahPermission, buildCandidate, assertForsahEnabled, computeOpportunityTitle } from '@/lib/forsah/server'
 import { evaluateOpportunityEligibility } from '@/lib/forsah/eligibility'
 import { isOpportunityOpen, FORSAH_MESSAGES } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
@@ -20,6 +20,8 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireRole('NURSE', 'DOCTOR', 'HR', 'ADMIN')
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة لرؤية كل شيء، والباقي محجوب
+    await assertForsahEnabled(role)
     const { searchParams } = req.nextUrl
     const q = searchParams.get('q')?.trim() ?? ''
     const status = searchParams.get('status') ?? ''
@@ -123,12 +125,14 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/opportunities — إنشاء فرصة جديدة (HR بصلاحية create / الإدارة)
  * الرقم التسلسلي يُولَّد تلقائياً «فرصة رقم N» — الحالة الابتدائية مسودة
+ * الجولة 67: اسم الفرصة يُولَّد تلقائياً «فرصة + القسم/التخصص» — بلا مدخل يدوي
  * ثم يُنشر من مسار التحويلات بعد فحص الاكتمال.
  */
 export async function POST(req: NextRequest) {
   try {
     const session = await requireRole('HR', 'ADMIN')
     const actor = await requireForsahPermission(session, 'opportunity.create')
+    await assertForsahEnabled(actor.role)
 
     if (!rateLimit(`forsah:create:${actor.id}`, 20, 60 * 60 * 1000)) {
       return jsonError('عدد كبير من محاولات الإنشاء — انتقل دقيقة وأعد المحاولة', 429)
@@ -146,12 +150,13 @@ export async function POST(req: NextRequest) {
       return jsonError('الجهة الصحية غير موجودة أو غير نشطة — اختر من القائمة المعتمدة', 422)
     }
     // مراجع الكتالوجات الحالية حصراً — لا نسخ تخصص/قسم/مؤهل (المواصفة 6)
+    // الجولة 67: نُرجع الاسم معنا لتوليد اسم الفرصة التلقائي من نفس المرجع
     if (data.specialtyId) {
-      const exists = await db.specialty.findUnique({ where: { id: data.specialtyId }, select: { id: true } })
+      const exists = await db.specialty.findUnique({ where: { id: data.specialtyId }, select: { id: true, name: true } })
       if (!exists) return jsonError('التخصص غير موجود في الكتالوج', 422)
     }
     if (data.departmentId) {
-      const exists = await db.department.findUnique({ where: { id: data.departmentId }, select: { id: true } })
+      const exists = await db.department.findUnique({ where: { id: data.departmentId }, select: { id: true, name: true } })
       if (!exists) return jsonError('القسم غير موجود في الكتالوج', 422)
     }
     if (data.qualificationId) {
@@ -159,13 +164,20 @@ export async function POST(req: NextRequest) {
       if (!exists) return jsonError('المؤهل غير موجود في الكتالوج', 422)
     }
 
+    // الجولة 67: الاسم يُولَّد تلقائياً «فرصة + القسم (للكادر) / التخصص (للأطباء)» — بلا أي مدخل يدوي
+    const title = await computeOpportunityTitle({
+      audience: data.audience,
+      departmentId: data.departmentId || null,
+      specialtyId: data.specialtyId || null,
+    })
+
     const last = await db.opportunity.aggregate({ _max: { number: true } })
     const number = (last._max.number ?? 0) + 1
 
     const opportunity = await db.opportunity.create({
       data: {
         number,
-        title: data.title,
+        title,
         hospitalId: data.hospitalId,
         audience: data.audience,
         specialtyId: data.specialtyId || null,

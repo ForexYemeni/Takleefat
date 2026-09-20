@@ -7,6 +7,8 @@ import {
   requireForsahPermission,
   assertOpportunityOwnership,
   buildCandidate,
+  assertForsahEnabled,
+  computeOpportunityTitle,
 } from '@/lib/forsah/server'
 import { evaluateOpportunityEligibility } from '@/lib/forsah/eligibility'
 import { FORSAH_MESSAGES } from '@/lib/forsah/constants'
@@ -47,6 +49,8 @@ export async function GET(
     const session = await requireRole('NURSE', 'DOCTOR', 'HR', 'ADMIN')
     const { id } = await params
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة، والباقي محجوب
+    await assertForsahEnabled(role)
     const opportunity = await loadOpportunity(id)
     const isManager = role === 'ADMIN' || (role === 'HR' && opportunity.createdById === session.user.id)
 
@@ -116,6 +120,8 @@ export async function PATCH(
 
     const opportunity = await loadOpportunity(id)
     const actorRole = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة فقط تُدير الفرص بعد الإغلاق الكلي
+    await assertForsahEnabled(actorRole)
 
     // ---------- الإغلاق: صلاحية عليا محمية من الخادم (المواصفة 14) ----------
     if (action === 'close') {
@@ -210,10 +216,16 @@ export async function PATCH(
       const data = parsed.data
       const hospital = await db.hospital.findUnique({ where: { id: data.hospitalId }, select: { id: true } })
       if (!hospital) return jsonError('الجهة الصحية غير موجودة', 422)
+      // الجولة 67: الاسم يُعاد توليده تلقائياً من القسم/التخصص بعد كل تعديل
+      const title = await computeOpportunityTitle({
+        audience: data.audience,
+        departmentId: data.departmentId || null,
+        specialtyId: data.specialtyId || null,
+      })
       const updated = await db.opportunity.update({
         where: { id },
         data: {
-          title: data.title,
+          title,
           hospitalId: data.hospitalId,
           audience: data.audience,
           specialtyId: data.specialtyId || null,

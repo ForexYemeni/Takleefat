@@ -34,9 +34,11 @@ import {
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { ROLE_THEME } from '@/lib/role-theme'
 import { ROLE_DASHBOARD } from '@/lib/roles'
+import { apiFetcher } from '@/lib/api-client'
 import { Logo } from '@/components/shared/logo'
 import { SmartBottomNav } from '@/components/shared/smart-bottom-nav'
 import { NotificationBell } from '@/components/shared/notification-bell'
@@ -169,6 +171,13 @@ interface DashboardShellProps {
 }
 
 /**
+ * الجولة 67 — عناصر «فرصة» في قوائم الكادر والأطباء — تُخفى فور الإغلاق الكلي للنظام.
+ * لوحة الإدارة تبقى ظاهرة دائماً (هي وحدها من يفتح النظام من جديد)،
+ * ولوحة HR كاملة تعتمد على النظام فتبقى مع رسالة الإغلاق داخل صفحاتها.
+ */
+const FORSAH_NAV_HREFS = new Set(['/nurse/opportunities', '/doctor/opportunities'])
+
+/**
  * هيكل لوحة التحكم — تكليفات | Takleefat
  * شريط جانبي ثابت على الشاشات الكبيرة + قائمة منزلقة على الجوال
  */
@@ -180,7 +189,18 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
   const profilePath = NAV_CONFIG[role].profilePath
   const displayName = (session?.user?.name as string | undefined) || userName
   const [mobileOpen, setMobileOpen] = useState(false)
-  const navItems = NAV_CONFIG[role].items
+
+  // الجولة 67: حالة نظام «فرصة» — عند الإغلاق الكلي تختفي عناصره من قوائم الكادر والأطباء فوراً
+  const { data: forsahStatus } = useQuery({
+    queryKey: ['forsah-status'],
+    queryFn: () => apiFetcher<{ enabled: boolean }>('/api/forsah/status'),
+    staleTime: 60_000,
+    retry: 1,
+  })
+  const forsahEnabled = forsahStatus?.enabled ?? true
+  const navItems = NAV_CONFIG[role].items.filter(
+    (item) => forsahEnabled || role === 'ADMIN' || !FORSAH_NAV_HREFS.has(item.href)
+  )
   const roleLabel = NAV_CONFIG[role].roleLabel
 
   // الجولة 60 — مبدّل اللوحات للصلاحيات المركّبة:

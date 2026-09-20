@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { OPPORTUNITY_INTERVIEW_MODE_LABELS } from '@/lib/forsah/constants'
+import { assertForsahEnabled } from '@/lib/forsah/server'
 
 /**
  * GET /api/me/opportunities — «فرصي» للكادر/الطبيب (الجولة 66 — المواصفة 23)
@@ -14,6 +15,8 @@ export async function GET(_req: NextRequest) {
   try {
     const session = await requireRole('NURSE', 'DOCTOR')
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة (يعيد التشغيل من لوحته)
+    await assertForsahEnabled(role)
 
     const applications = await db.opportunityApplication.findMany({
       where: { userId: session.user.id },

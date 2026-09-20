@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   CalendarClock,
   Coins,
   Eye,
   FileCheck2,
+  FileUser,
   KeyRound,
   MapPin,
   PauseCircle,
@@ -37,7 +38,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ForsahBadge, formatSalary, TRANSACTION_STATUS_AR } from '@/components/forsah/opportunity-visuals'
+import { CandidateCvDialog } from '@/components/forsah/candidate-cv'
+import { ForsahBadge, ForsahErrorState, formatSalary, TRANSACTION_STATUS_AR } from '@/components/forsah/opportunity-visuals'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 
 /**
  * إدارة فرصة واحدة — الجولة 66 | ميزة «فرصة»
@@ -223,17 +226,23 @@ function ApplicantsTab({ opportunityId, onInvalidate }: { opportunityId: string;
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [inviteOpen, setInviteOpen] = useState(false)
   const [selectOpen, setSelectOpen] = useState(false)
+  // الجولة 67: عرض السيرة الذاتية الاحترافية للمتقدم
+  const [cvId, setCvId] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const dq = useDebouncedValue(q, 300)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['forsah-applicants', opportunityId, q],
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['forsah-applicants', opportunityId, dq],
     queryFn: () =>
       apiFetcher<{
         applications: ApplicationRow[]
         total: number
         selectedCount: number
         opportunity: { positionsNeeded: number; title: string }
-      }>(`/api/opportunities/${opportunityId}/applications?take=50${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+      }>(`/api/opportunities/${opportunityId}/applications?take=50${dq ? `&q=${encodeURIComponent(dq)}` : ''}`),
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+    retry: 1,
   })
 
   const review = useMutation({
@@ -287,7 +296,10 @@ function ApplicantsTab({ opportunityId, onInvalidate }: { opportunityId: string;
         </p>
       )}
 
-      {isLoading ? (
+      {isError ? (
+        // الجولة 67: حالة الخطأ صريحة (بما فيها رسالة إغلاق النظام من الإدارة)
+        <ForsahErrorState message={(error as Error | null)?.message} onRetry={() => refetch()} />
+      ) : isLoading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
         </div>
@@ -337,6 +349,15 @@ function ApplicantsTab({ opportunityId, onInvalidate }: { opportunityId: string;
                     <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground" style={{ overflowWrap: 'anywhere' }}>{a.coverNote}</p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-1.5">
+                    {/* الجولة 67: السيرة الذاتية الاحترافية — عرض الملف المهني المتكامل */}
+                    <Button
+                      size="sm"
+                      className="h-7 rounded-lg bg-gradient-to-l from-violet-600 to-violet-500 px-2.5 text-[11px] text-white hover:from-violet-700 hover:to-violet-600"
+                      onClick={() => setCvId(a.id)}
+                    >
+                      <FileUser className="size-3" />
+                      السيرة الذاتية
+                    </Button>
                     {['PENDING', 'REVIEWED'].includes(a.status) && (
                       <>
                         <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px]" disabled={review.isPending} onClick={() => review.mutate({ applicationId: a.id, status: 'REVIEWED' })}>
@@ -386,6 +407,9 @@ function ApplicantsTab({ opportunityId, onInvalidate }: { opportunityId: string;
           onInvalidate()
         }}
       />
+
+      {/* الجولة 67: حوار السيرة الذاتية الاحترافية */}
+      {cvId && <CandidateCvDialog applicationId={cvId} onClose={() => setCvId(null)} />}
     </div>
   )
 }
@@ -572,11 +596,15 @@ function SelectConfirmDialog({
 /* ================= تبويب المقابلات ================= */
 
 function InterviewsTab({ opportunityId }: { opportunityId: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['forsah-interviews', opportunityId],
     queryFn: () => apiFetcher<InterviewsPayload>(`/api/opportunities/${opportunityId}/interviews`),
+    staleTime: 15_000,
+    retry: 1,
   })
 
+  // الجولة 67: حالة الخطأ صريحة بدل الاختفاء الصامت
+  if (isError) return <ForsahErrorState message={(error as Error | null)?.message} onRetry={() => refetch()} />
   if (isLoading) return <div className="space-y-2">{[0, 1].map((i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}</div>
   if ((data?.interviews.length ?? 0) === 0)
     return <EmptyMini icon={CalendarClock} title="لا مقابلات بعد" note="رشّح المتقدمين للمقابلة من تبويب المتقدمين" />
@@ -613,11 +641,14 @@ function InterviewsTab({ opportunityId }: { opportunityId: string }) {
 /* ================= تبويب المختارين ================= */
 
 function SelectionsTab({ opportunityId }: { opportunityId: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['forsah-selections', opportunityId],
     queryFn: () => apiFetcher<SelectionsPayload>(`/api/opportunities/${opportunityId}/selections`),
+    staleTime: 15_000,
+    retry: 1,
   })
 
+  if (isError) return <ForsahErrorState message={(error as Error | null)?.message} onRetry={() => refetch()} />
   if (isLoading) return <Skeleton className="h-40 rounded-2xl" />
   if ((data?.selections.length ?? 0) === 0)
     return <EmptyMini icon={UserCheck} title="لا موظفين مختارين بعد" note="اختر الموظفين من تبويب المتقدمين بعد المقابلات" />
@@ -652,11 +683,14 @@ function SelectionsTab({ opportunityId }: { opportunityId: string }) {
 /* ================= تبويب المالية ================= */
 
 function FinanceTab({ opportunityId }: { opportunityId: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['forsah-tx', opportunityId],
     queryFn: () => apiFetcher<TxPayload>(`/api/opportunities/${opportunityId}/transaction`),
+    staleTime: 15_000,
+    retry: 1,
   })
 
+  if (isError) return <ForsahErrorState message={(error as Error | null)?.message} onRetry={() => refetch()} />
   if (isLoading) return <Skeleton className="h-40 rounded-2xl" />
   if ((data?.transactions.length ?? 0) === 0)
     return (

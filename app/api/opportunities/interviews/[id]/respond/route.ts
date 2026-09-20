@@ -5,6 +5,7 @@ import { OPPORTUNITY_INTERVIEW_RESPONSE_LABELS, FORSAH_MESSAGES } from '@/lib/fo
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { rateLimit } from '@/lib/rate-limit'
 import { notify } from '@/lib/notifications'
+import { assertForsahEnabled } from '@/lib/forsah/server'
 
 /**
  * POST /api/opportunities/interviews/[id]/respond — رد المرشح على دعوة المقابلة
@@ -19,6 +20,8 @@ export async function POST(
     const session = await requireRole('NURSE', 'DOCTOR')
     const { id } = await params
     const role = session.user.activeRole ?? session.user.role
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة (يعيد التشغيل من لوحته)
+    await assertForsahEnabled(role)
 
     if (!rateLimit(`forsah:respond:${session.user.id}`, 20, 10 * 60 * 1000)) {
       return jsonError('محاولات كثيرة — انتظر قليلاً', 429)

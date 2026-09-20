@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { forsahSelectionSchema } from '@/lib/validations/forsah'
-import { requireForsahPermission, assertOpportunityOwnership } from '@/lib/forsah/server'
+import { assertForsahEnabled, assertOpportunityOwnership, requireForsahPermission } from '@/lib/forsah/server'
 import { isOpportunityOpen, FORSAH_MESSAGES } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { settleOpportunitySelection, assertSelectionsAvailable } from '@/lib/forsah/finance'
@@ -28,6 +28,8 @@ export async function GET(
   try {
     const session = await requireRole('HR', 'ADMIN')
     const actor = await requireForsahPermission(session, 'opportunity.viewFinancials')
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة
+    await assertForsahEnabled(actor.role)
     const { id } = await params
 
     const opportunity = await db.opportunity.findUnique({
@@ -85,6 +87,8 @@ export async function POST(
   try {
     const session = await requireRole('HR', 'ADMIN')
     const actor = await requireForsahPermission(session, 'opportunity.selectCandidate')
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة
+    await assertForsahEnabled(actor.role)
     const { id } = await params
 
     if (!rateLimit(`forsah:select:${actor.id}`, 30, 60 * 60 * 1000)) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
-import { forsahFeeSettingsSchema } from '@/lib/validations/forsah'
+import { forsahFeeSettingsSchema, forsahSystemToggleSchema } from '@/lib/validations/forsah'
 import { requireForsahPermission } from '@/lib/forsah/server'
 import { setSetting, getSettings } from '@/lib/settings'
 import { logForsahAudit } from '@/lib/forsah/audit'
@@ -66,6 +66,8 @@ export async function GET() {
         forsahFeeMin: settings.forsahFeeMin,
         forsahFeeMax: settings.forsahFeeMax,
       },
+      // الجولة 67: حالة النظام الكلية للإدارة
+      systemEnabled: settings.forsahSystemEnabled,
       defaults: { permissions: DEFAULT_HR_PERMISSIONS, all: FORSAH_PERMISSIONS },
       auditLogs,
     })
@@ -79,7 +81,40 @@ export async function PATCH(req: NextRequest) {
     const session = await requireRole('ADMIN')
     await requireForsahPermission(session, 'opportunity.manage')
 
-    const parsed = forsahFeeSettingsSchema.safeParse(await req.json().catch(() => ({})))
+    const body = await req.json().catch(() => ({}))
+
+    // ---------- الجولة 67: الإغلاق الكلي لنظام «فرصة» — إدارة حصراً ----------
+    if (typeof body?.systemEnabled === 'boolean') {
+      const parsed = forsahSystemToggleSchema.safeParse(body)
+      if (!parsed.success) {
+        return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
+      }
+      const enabled = parsed.data.systemEnabled
+      const current = await getSettings()
+      if (current.forsahSystemEnabled === enabled) {
+        return NextResponse.json({
+          message: enabled ? 'نظام «فرصة» يعمل بالفعل' : 'نظام «فرصة» مغلق بالفعل',
+          systemEnabled: enabled,
+        })
+      }
+      await setSetting('forsahSystemEnabled', enabled ? '1' : '0')
+      await logForsahAudit({
+        actorId: session.user.id,
+        actorRole: 'ADMIN',
+        action: enabled ? 'FORSAH_SYSTEM_OPENED' : 'FORSAH_SYSTEM_CLOSED',
+        entityType: 'Settings',
+        entityId: 'forsah-system',
+      })
+      return NextResponse.json({
+        message: enabled
+          ? 'أُعيد تشغيل نظام «فرصة» — يعود ظاهراً لكل المستخدمين فوراً'
+          : 'أُغلق نظام «فرصة» كلياً — اختفى من كل الواجهات وتوقفت كل مساراته (البيانات محفوظة كاملة)',
+        systemEnabled: enabled,
+      })
+    }
+
+    // ---------- إعدادات الرسوم (المواصفة 16) ----------
+    const parsed = forsahFeeSettingsSchema.safeParse(body)
     if (!parsed.success) {
       return jsonError(parsed.error.issues[0]?.message ?? 'البيانات غير صحيحة', 422)
     }

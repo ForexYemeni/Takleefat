@@ -48,9 +48,11 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * معالج إنشاء/تعديل فرصة — الجولة 66 | ميزة «فرصة» (المواصفة 5)
+ * معالج إنشاء/تعديل فرصة — الجولة 66/67 | ميزة «فرصة» (المواصفة 5)
  * ============================================================
  * 4 خطوات: الأساسيات → الراتب والدوام → المتطلبات → المحتوى والنشر.
+ * الجولة 67: اسم الفرصة يُولّد تلقائياً «فرصة + القسم/التخصص» — بلا حقل يدوي،
+ * والقسم الطبي إجباري للكادر والتخصص إجباري للأطباء (بدل «بلا قيد»).
  * التخصص/القسم/المؤهل من الكتالوجات الحالية حصراً (FK — لا نسخ).
  */
 
@@ -117,7 +119,6 @@ export function OpportunityWizard({
     // النوع الناتج (output) هو ما يستخدمه النموذج، والكاست آمن هنا
     resolver: zodResolver(opportunitySchema) as unknown as Resolver<OpportunityInput>,
     defaultValues: {
-      title: editData?.title ?? '',
       hospitalId: (editData as { hospitalId?: string } | null)?.hospitalId ?? '',
       audience: (editData?.audience as 'NURSE' | 'DOCTOR') ?? 'NURSE',
       specialtyId: (editData?.specialtyId as string) ?? '',
@@ -196,17 +197,32 @@ export function OpportunityWizard({
   const goNext = async () => {
     // فحص حقول الخطوة الحالية قبل التقدم
     if (step === 0) {
-      const ok = await form.trigger(['title', 'hospitalId', 'audience', 'positionsNeeded'])
+      const ok = await form.trigger(['hospitalId', 'audience', 'positionsNeeded'])
       if (!ok) return
     }
     if (step === 1) {
       const ok = await form.trigger(['salaryType', 'salaryCurrency'])
       if (!ok) return
     }
+    if (step === 2) {
+      // الجولة 67: القسم (للكادر) / التخصص (للأطباء) إجباري — لا تقدم بلا اختيار
+      const ok = await form.trigger(audienceState === 'DOCTOR' ? ['specialtyId'] : ['departmentId'])
+      if (!ok) return
+    }
     setStep((s) => Math.min(STEPS.length - 1, s + 1))
   }
 
   const submit = form.handleSubmit((values) => saveMutation.mutate(values))
+
+  // الجولة 67: معاينة حية لاسم الفرصة التلقائي — «فرصة + القسم (كادر) / التخصص (أطباء)»
+  const autoTitle = useMemo(() => {
+    if (audienceState === 'DOCTOR') {
+      const name = specialties.find((s) => s.id === specialtyIdState)?.name
+      return name ? `فرصة ${name}` : null
+    }
+    const name = departments.find((d) => d.id === departmentIdState)?.name
+    return name ? `فرصة ${name}` : null
+  }, [audienceState, specialtyIdState, departmentIdState, specialties, departments])
 
   const setAudience = (v: 'NURSE' | 'DOCTOR') => {
     setAudienceState(v)
@@ -301,10 +317,16 @@ export function OpportunityWizard({
           {/* ---------- الخطوة 1: الأساسيات ---------- */}
           {step === 0 && (
             <div className="space-y-3.5">
-              <Field label="اسم الفرصة" required>
-                <Input placeholder="مثال: مطلوب طبيب باطنية لقطاع العيادات الخارجية" {...form.register('title')} />
-                <FormError message={form.formState.errors.title?.message} />
-              </Field>
+              {/* الجولة 67: اسم الفرصة تلقائي من القسم/التخصص — معاينة حية بدل الحقل اليدوي */}
+              <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-3.5 dark:border-violet-800 dark:bg-violet-950/30">
+                <p className="flex items-center gap-1.5 text-[11px] font-black text-violet-800 dark:text-violet-200">
+                  <Sparkles className="size-3.5" />
+                  اسم الفرصة يُولّد تلقائياً عند اختيار القسم أو التخصص
+                </p>
+                <p className="mt-1 text-sm font-black text-violet-900 dark:text-violet-100" dir="rtl">
+                  {autoTitle ?? 'فرصة — يظهر الاسم بعد اختيار القسم/التخصص في خطوة المتطلبات'}
+                </p>
+              </div>
               <Field label="المنشأة / الجهة الصحية" required>
                 <Select value={hospitalIdState || undefined} onValueChange={setHospitalId}>
                   <SelectTrigger className="w-full">
@@ -389,30 +411,32 @@ export function OpportunityWizard({
           {step === 2 && (
             <div className="space-y-3.5">
               {audienceState === 'DOCTOR' ? (
-                <Field label="التخصص الطبي المطلوب">
+                <Field label="التخصص الطبي المطلوب" required>
                   <Select value={specialtyIdState || undefined} onValueChange={setSpecialtyId}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="بلا قيد — كل التخصصات" /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="اختر التخصص من الكتالوج" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">بلا قيد</SelectItem>
                       {specialties.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">تظهر الفرصة حصراً لأطباء هذا التخصص</p>
+                  {/* الجولة 67: التخصص إجباري للأطباء — أساس اسم الفرصة التلقائي وعرضها للمؤهلين حصراً */}
+                  <FormError message={form.formState.errors.specialtyId?.message} />
+                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">تظهر الفرصة حصراً لأطباء هذا التخصص — ويدخل اسمها التلقائي من التخصص</p>
                 </Field>
               ) : (
-                <Field label="القسم الطبي المطلوب">
+                <Field label="القسم الطبي المطلوب" required>
                   <Select value={departmentIdState || undefined} onValueChange={setDepartmentId}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="بلا قيد — كل الأقسام" /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="اختر القسم من الكتالوج" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">بلا قيد</SelectItem>
                       {departments.map((d) => (
                         <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">تظهر الفرصة حصراً لكوادر هذا القسم</p>
+                  {/* الجولة 67: القسم إجباري — لا «بلا قيد» بعد اليوم */}
+                  <FormError message={form.formState.errors.departmentId?.message} />
+                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">تظهر الفرصة حصراً لكوادر هذا القسم — ويدخل اسمها التلقائي من القسم</p>
                 </Field>
               )}
               <Field label="المؤهل المطلوب">

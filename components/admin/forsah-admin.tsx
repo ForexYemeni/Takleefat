@@ -12,6 +12,8 @@ import {
   Lock,
   Pencil,
   Plus,
+  Power,
+  PowerOff,
   Save,
   ScrollText,
   Send,
@@ -23,7 +25,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
-import { formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -80,9 +82,12 @@ export function ForsahAdminManager() {
         opportunities: AdminOpportunity[]
         hrAccounts: HrAccount[]
         feeSettings: FeeSettings
+        systemEnabled: boolean
         defaults: { permissions: string[]; all: string[] }
         auditLogs: AuditRow[]
       }>('/api/admin/forsah'),
+    staleTime: 15_000,
+    retry: 1,
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['forsah-admin'] })
@@ -109,6 +114,20 @@ export function ForsahAdminManager() {
   const [closeTarget, setCloseTarget] = useState<AdminOpportunity | null>(null)
   const [hrDialog, setHrDialog] = useState<{ mode: 'create' } | { mode: 'edit'; account: HrAccount } | null>(null)
 
+  // ---------- الجولة 67: الإغلاق الكلي لنظام «فرصة» ----------
+  const systemEnabled = data?.systemEnabled ?? true
+  const [systemDialog, setSystemDialog] = useState<null | 'close' | 'open'>(null)
+  const systemToggle = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiPatch<{ message: string; systemEnabled: boolean }>('/api/admin/forsah', { systemEnabled: enabled }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      setSystemDialog(null)
+      invalidate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   return (
     <div className="space-y-5">
       <header>
@@ -122,6 +141,111 @@ export function ForsahAdminManager() {
           الإدارة العليا لمنظومة فرص العمل: حسابات الموارد البشرية، كل الفرص، إغلاق أي فرصة، الرسوم والعمولات
         </p>
       </header>
+
+      {/* ---------- الجولة 67: حالة النظام الكلية + الإغلاق الكلي (صلاحية عليا للإدارة) ---------- */}
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-2xl border p-4 shadow-sm',
+          systemEnabled
+            ? 'border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-card dark:border-emerald-800'
+            : 'border-rose-200 bg-gradient-to-l from-rose-50/80 to-card dark:border-rose-800'
+        )}
+      >
+        <span
+          className={cn(
+            'absolute inset-y-0 start-0 w-1',
+            systemEnabled ? 'bg-emerald-500' : 'bg-rose-500'
+          )}
+          aria-hidden
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3 ps-2">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-sm font-black">
+              {systemEnabled ? (
+                <>
+                  <span className="relative flex size-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+                  </span>
+                  نظام «فرصة» يعمل الآن — ظاهر لكل المستخدمين
+                </>
+              ) : (
+                <>
+                  <Lock className="size-4 text-rose-600" />
+                  نظام «فرصة» مغلق كلياً — مخفي عن الجميع وكل مساراته متوقفة
+                </>
+              )}
+            </p>
+            <p className="mt-1 text-[11px] font-bold leading-relaxed text-muted-foreground">
+              {systemEnabled
+                ? 'الإغلاق الكلي يوقف النظام بالكامل فوراً: يختفي من قوائم الكادر والأطباء ولوحة الموارد البشرية، وتُرفض كل المسارات — مع بقاء كل الفرص والطلبات والمقابلات والبيانات المالية محفوظة بلا أي حذف.'
+                : 'لن يستطيع أحد الوصول لأي جزء من النظام حتى إعادة التشغيل — الإدارة وحدها تفتحه من هنا. جميع البيانات محفوظة كاملة.'}
+            </p>
+          </div>
+          {systemEnabled ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
+              onClick={() => setSystemDialog('close')}
+            >
+              <PowerOff className="size-4" />
+              إغلاق كلي لنظام فرصة
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="shrink-0 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={() => setSystemDialog('open')}
+            >
+              <Power className="size-4" />
+              إعادة تشغيل النظام
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* حوار تأكيد الإغلاق الكلي — بنفس صياغة تأكيد إغلاق الفرصة (المواصفة 14) */}
+      <Dialog open={systemDialog !== null} onOpenChange={(o) => !o && setSystemDialog(null)}>
+        <DialogContent className="rounded-3xl sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              {systemDialog === 'close'
+                ? 'هل أنت متأكد من الإغلاق الكلي لنظام فرصة؟'
+                : 'إعادة تشغيل نظام فرصة لكل المستخدمين؟'}
+            </DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
+              {systemDialog === 'close'
+                ? 'سيختفي نظام «فرصة» فوراً من قوائم الكادر والأطباء ولوحة الموارد البشرية، وتتوقف كل مساراته عن العمل حصراً — وتبقى كل الفرص والطلبات والمقابلات والاختيارات والبيانات المالية وسجل التدقيق محفوظة بلا أي حذف. الإدارة وحدها تستطيع إعادة تشغيله من هنا.'
+                : 'سيعود نظام «فرصة» ظاهراً لكل المستخدمين المصرح لهم فوراً، وتُستأنف كل مساراته من حيث توقفت — بلا أي فقدان في البيانات.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            {systemDialog === 'close' ? (
+              <Button
+                className="flex-1 rounded-xl bg-rose-600 text-white hover:bg-rose-700"
+                disabled={systemToggle.isPending}
+                onClick={() => systemToggle.mutate(false)}
+              >
+                <PowerOff className="size-4" />
+                {systemToggle.isPending ? 'جارٍ الإغلاق...' : 'إغلاق النظام'}
+              </Button>
+            ) : (
+              <Button
+                className="flex-1 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
+                disabled={systemToggle.isPending}
+                onClick={() => systemToggle.mutate(true)}
+              >
+                <Power className="size-4" />
+                {systemToggle.isPending ? 'جارٍ التشغيل...' : 'إعادة التشغيل'}
+              </Button>
+            )}
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setSystemDialog(null)}>
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto w-full flex-wrap">

@@ -183,6 +183,9 @@ export const FORSAH_AUDIT_ACTIONS = {
   HR_ENABLED: 'فعّلت الإدارة حساب موارد بشرية',
   HR_PASSWORD_RESET: 'أعادت الإدارة تعيين كلمة مرور HR',
   HR_PERMISSIONS_CHANGED: 'غيّرت الإدارة صلاحيات HR',
+  // الجولة 67: الإغلاق الكلي للنظام
+  FORSAH_SYSTEM_CLOSED: 'أغلقت الإدارة نظام فرصة كلياً',
+  FORSAH_SYSTEM_OPENED: 'أعادت الإدارة تشغيل نظام فرصة',
 } as const
 
 export type ForsahAuditAction = keyof typeof FORSAH_AUDIT_ACTIONS
@@ -199,4 +202,6 @@ export const FORSAH_MESSAGES = {
   NOT_ELIGIBLE: 'لا تستوفي شروط هذه الفرصة حالياً — راجع قائمة المطابقة أدناه.',
   SELECTIONS_FULL: 'اكتمل عدد الموظفين المختارين لهذه الفرصة.',
   NO_PERMISSION: 'ليست لديك صلاحية لتنفيذ هذا الإجراء.',
+  // الجولة 67: الإغلاق الكلي لنظام «فرصة» من الإدارة
+  SYSTEM_CLOSED: 'نظام «فرصة» مغلق حالياً من إدارة المنصة — تابعونا قريباً.',
 } as const

@@ -19,13 +19,13 @@ const optionalText = (max: number, label: string) =>
     .optional()
     .or(z.literal(''))
 
-/** إنشاء/تعديل فرصة — wizard المواصفة 5 */
-export const opportunitySchema = z.object({
-  title: z
-    .string({ error: 'اسم الفرصة مطلوب' })
-    .trim()
-    .min(3, 'اسم الفرصة يجب أن يكون 3 أحرف على الأقل')
-    .max(140, 'اسم الفرصة طويل جداً'),
+/** إنشاء/تعديل فرصة — wizard المواصفة 5 — الجولة 67:
+ *  - اسم الفرصة لم يعد مدخلاً يدوياً — يُولَّد خادمياً «فرصة + القسم/التخصص» حصراً
+ *  - القسم الطبي إجباري للكادر، والتخصص إجباري للأطباء (بدل «بلا قيد»)
+ *  (أعمدة القاعدة تبقى nullable — الإلزام هنا على مستوى التحقق فقط بلا أي ترحيل مدمّر)
+ */
+export const opportunitySchema = z
+  .object({
   hospitalId: z.string({ error: 'الجهة الصحية مطلوبة' }).min(1, 'الجهة الصحية مطلوبة'),
   audience: z.enum(['NURSE', 'DOCTOR'], { error: 'نوع الكادر مطلوب' }),
   specialtyId: z.string().nullish().or(z.literal('')),
@@ -91,7 +91,25 @@ export const opportunitySchema = z.object({
   responsibilities: optionalText(4000, 'المهام والمسؤوليات'),
   benefits: optionalText(2000, 'المزايا'),
   notes: optionalText(2000, 'الملاحظات'),
-})
+  })
+  .superRefine((data, ctx) => {
+    // الجولة 67: القسم الطبي إجباري للكادر — لا «بلا قيد» بعد اليوم
+    if (data.audience === 'NURSE' && !String(data.departmentId ?? '').trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'القسم الطبي المطلوب إجباري — اختر قسماً من الكتالوج',
+        path: ['departmentId'],
+      })
+    }
+    // وللأطباء: التخصص إجباري (مقابِل منطوري لإلزام القسم — وأساس اسم الفرصة التلقائي)
+    if (data.audience === 'DOCTOR' && !String(data.specialtyId ?? '').trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'التخصص الطبي المطلوب إجباري — اختر تخصصاً من الكتالوج',
+        path: ['specialtyId'],
+      })
+    }
+  })
 
 export type OpportunityInput = z.infer<typeof opportunitySchema>
 
@@ -239,4 +257,9 @@ export const forsahFeeSettingsSchema = z.object({
     .max(100, 'النسبة يجب أن تكون بين 0 و 100'),
   forsahFeeMin: z.coerce.number().min(0, 'الحد الأدنى غير صحيح').max(99_999_999),
   forsahFeeMax: z.coerce.number().min(0, 'الحد الأعلى غير صحيح').max(99_999_999),
+})
+
+/** الجولة 67: الإغلاق الكلي لنظام «فرصة» — الإدارة حصراً */
+export const forsahSystemToggleSchema = z.object({
+  systemEnabled: z.boolean({ error: 'حالة النظام مطلوبة' }),
 })

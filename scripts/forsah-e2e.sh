@@ -1,8 +1,9 @@
 #!/bin/bash
 # ============================================================
-# اختبار E2E شامل لميزة «فرصة | Forsah» — الجولة 66
+# اختبار E2E شامل لميزة «فرصة | Forsah» — الجولتان 66/67
 # يشغّل الدورة الكاملة على قاعدة الاختبار المحلية ويتحقق من كل قواعد
-# المواصفة: الأهلية، منع التكرار، إغلاق server-side، المالية، الصلاحيات.
+# المواصفة: الأهلية، منع التكرار، إغلاق server-side، المالية، الصلاحيات
+# + الجولة 67: الاسم التلقائي، إلزام القسم/التخصص، والإغلاق الكلي للنظام.
 # ============================================================
 set -u
 BASE="http://localhost:3000"
@@ -69,13 +70,25 @@ echo "$res" | grep -q "ليست لديك صلاحية" && check "HR مرفوض �
 code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR_DIR/nurse.txt" "$BASE/hr")
 [ "$code" = "404" ] || [ "$code" = "307" ] || [ "$code" = "302" ] && check "NURSE يُحظر من صفحة /hr ($code)" 0 || check "NURSE يُحظر من صفحة /hr ($code)" 1
 
-echo "═══ 3) HR ينشئ فرصة ═══"
+echo "═══ 3) HR ينشئ فرصة (الجولة 67: بلا حقل اسم — الاسم يُولّد من القسم) ═══"
 HOSPITAL_ID=$(api hr GET "/api/hospitals" | python3 -c "import sys,json;print(json.load(sys.stdin)['hospitals'][0]['id'])")
+DEPT_ID=$(api hr GET "/api/departments" | python3 -c "import sys,json;print(json.load(sys.stdin)['departments'][0]['id'])")
+DEPT_NAME=$(api hr GET "/api/departments" | python3 -c "import sys,json;print(json.load(sys.stdin)['departments'][0]['name'])")
+# أولاً: الرفض بلا قسم (إلزامي الآن)
 res=$(api hr POST "/api/opportunities" '{
-  "title": "مطلوب كادر تمريضي لعناية مركزة — فرصة عمل شهرية",
   "hospitalId": "'$HOSPITAL_ID'",
   "audience": "NURSE",
-  "departmentId": null,
+  "salaryAmount": 300000,
+  "salaryType": "MONTHLY",
+  "salaryCurrency": "YER",
+  "positionsNeeded": 2,
+  "gender": "FEMALE"
+}')
+echo "$res" | grep -q "القسم الطبي المطلوب إجباري" && check "الإنشاء بلا قسم مرفوض (إلزامي)" 0 || { check "الإنشاء بلا قسم مرفوض" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api hr POST "/api/opportunities" '{
+  "hospitalId": "'$HOSPITAL_ID'",
+  "audience": "NURSE",
+  "departmentId": "'$DEPT_ID'",
   "salaryAmount": 300000,
   "salaryType": "MONTHLY",
   "salaryCurrency": "YER",
@@ -96,7 +109,8 @@ res=$(api hr POST "/api/opportunities" '{
 OPP_ID=$(jqget "$res" "['opportunity']['id']")
 OPP_NUM=$(jqget "$res" "['opportunity']['number']")
 echo "$res" | grep -q "مسودة" && check "إنشاء الفرصة كمسودة (رقم $OPP_NUM)" 0 || { check "إنشاء الفرصة كمسودة" 1; echo "    RES: $res" | head -c 300; }
-# القسم: نربط القسم بعنوان الفرصة لاحقاً عبر تعديل — هنا نتركه بلا قسم (مفتوح لكل الأقسام)
+AUTO_TITLE=$(jqget "$res" "['opportunity']['title']")
+[ "$AUTO_TITLE" = "فرصة $DEPT_NAME" ] && check "الاسم التلقائي = «فرصة $DEPT_NAME»" 0 || { check "الاسم التلقائي (got: $AUTO_TITLE)" 1; }
 
 echo "═══ 4) النشر وإشعار المؤهلين ═══"
 res=$(api hr PATCH "/api/opportunities/$OPP_ID" '{"action": "publish"}')
@@ -188,9 +202,9 @@ perms=[a['forsahPermissions'] for a in d['hrAccounts'] if a['phone']=='770100200
 print(json.dumps([p for p in perms if p!='opportunity.close']))")
 api admin PATCH "/api/admin/hr/$(api admin GET '/api/admin/forsah' | python3 -c "import sys,json;print([a['id'] for a in json.load(sys.stdin)['hrAccounts'] if a['phone']=='770100200'][0])")" "{\"action\": \"SET_PERMISSIONS\", \"forsahPermissions\": $PERMS}" > /dev/null
 res=$(api hr POST "/api/opportunities" '{
-  "title": "فرصة اختبار ثانية بلا صلاحية إغلاق",
   "hospitalId": "'$HOSPITAL_ID'",
   "audience": "NURSE",
+  "departmentId": "'$DEPT_ID'",
   "salaryAmount": 100000,
   "salaryType": "MONTHLY",
   "salaryCurrency": "YER",
@@ -222,6 +236,39 @@ res=$(api admin PATCH "/api/opportunities/$OPP_ID/transaction" '{"transactionId"
 echo "$res" | grep -q "مسددة" && check "الإدارة تسدد العملية المالية" 0 || { check "الإدارة تسدد العملية" 1; echo "    RES: $(echo $res | head -c 200)"; }
 res=$(api hr PATCH "/api/opportunities/$OPP_ID/transaction" '{"transactionId": "'$TX_ID'", "status": "CANCELLED"}')
 echo "$res" | grep -q "ليست لديك صلاحية\|error" && check "HR لا يستطيع تعديل العمليات المالية (403)" 0 || check "HR لا يعدل العمليات" 1
+
+echo "═══ 10.5) الجولة 67: الإغلاق الكلي لنظام «فرصة» من الإدارة ═══"
+res=$(api nurse GET "/api/forsah/status")
+echo "$res" | grep -q '"enabled":true' && check "حالة النظام = يعمل (status)" 0 || check "حالة النظام = يعمل" 1
+# الإدارة تُغلق النظام كلياً
+res=$(api admin PATCH "/api/admin/forsah" '{"systemEnabled": false}')
+echo "$res" | grep -q "أُغلق نظام" && check "الإدارة تُغلق النظام كلياً" 0 || { check "الإدارة تُغلق النظام" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api nurse GET "/api/forsah/status")
+echo "$res" | grep -q '"enabled":false' && check "الحالة بعد الإغلاق = مغلق" 0 || check "الحالة بعد الإغلاق" 1
+# كل المسارات مرفوضة برسالة الإغلاق (503) — HR والكادر
+res=$(api hr GET "/api/opportunities")
+echo "$res" | grep -q "نظام «فرصة» مغلق" && check "HR مرفوض من الفرص عند الإغلاق (503)" 0 || { check "HR مرفوض عند الإغلاق" 1; echo "    RES: $(echo $res | head -c 150)"; }
+res=$(api nurse GET "/api/opportunities")
+echo "$res" | grep -q "نظام «فرصة» مغلق" && check "الكادر مرفوض من الفرص عند الإغلاق" 0 || check "الكادر مرفوض عند الإغلاق" 1
+res=$(api nurse POST "/api/opportunities/$OPP2_ID/apply" '{}')
+echo "$res" | grep -q "نظام «فرصة» مغلق" && check "التقديم مرفوض عند الإغلاق الكلي" 0 || check "التقديم مرفوض عند الإغلاق" 1
+res=$(api hr GET "/api/forsah/dashboard")
+echo "$res" | grep -q "نظام «فرصة» مغلق" && check "لوحة HR محجوبة عند الإغلاق" 0 || check "لوحة HR محجوبة" 1
+# الإدارة مستثناة — ترى كل شيء لإعادة التشغيل
+res=$(api admin GET "/api/opportunities")
+echo "$res" | grep -q '"opportunities"' && check "الإدارة تبقى قادرة على العرض (استثناء)" 0 || check "الإدارة تبقى قادرة على العرض" 1
+# المسار العام SEO يرجع قائمة فارغة بلا خطأ
+res=$(curl -s "$BASE/api/opportunities/public")
+TOTAL=$(jqget "$res" "['total']")
+[ "$TOTAL" = "0" ] && check "المسار العام يعيد قائمة فارغة عند الإغلاق" 0 || check "المسار العام عند الإغلاق ($TOTAL)" 1
+# إعادة التشغيل — كل شيء يعود
+res=$(api admin PATCH "/api/admin/forsah" '{"systemEnabled": true}')
+echo "$res" | grep -q "أُعيد تشغيل" && check "الإدارة تعيد تشغيل النظام" 0 || { check "الإدارة تعيد التشغيل" 1; echo "    RES: $(echo $res | head -c 200)"; }
+res=$(api hr GET "/api/opportunities")
+echo "$res" | grep -q '"opportunities"' && check "HR يعمل مجدداً بعد إعادة التشغيل (البيانات محفوظة)" 0 || check "HR يعمل مجدداً" 1
+res=$(api hr GET "/api/opportunities/$OPP_ID/transaction")
+TXCOUNT=$(echo "$res" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['transactions']))" 2>/dev/null)
+[ "$TXCOUNT" = "1" ] && check "البيانات المالية سليمة بعد دورة الإغلاق الكامل" 0 || check "البيانات المالية بعد الإغلاق ($TXCOUNT)" 1
 
 echo "═══ 11) Regression: الأنظمة القائمة سليمة ═══"
 res=$(api nurse GET "/api/posts")
