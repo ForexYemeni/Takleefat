@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
-import { OPPORTUNITY_INTERVIEW_MODE_LABELS } from '@/lib/forsah/constants'
+import { OPPORTUNITY_INTERVIEW_MODE_LABELS, OPPORTUNITY_TRANSACTION_STATUS_LABELS, OPPORTUNITY_PAYMENT_TIMING_LABELS } from '@/lib/forsah/constants'
 import { assertForsahEnabled } from '@/lib/forsah/server'
 
 /**
@@ -38,6 +38,26 @@ export async function GET(_req: NextRequest) {
       take: 100,
     })
 
+    // الجولة 70: بيانات الدفع للمرشح المختار — العملية المالية مرتبطة بالاختيار
+    const selectionIds = applications.map((a) => a.selection?.id).filter((v): v is string => !!v)
+    const transactions = selectionIds.length
+      ? await db.opportunityTransaction.findMany({
+          where: { selectionId: { in: selectionIds } },
+          select: {
+            selectionId: true,
+            feeAmount: true,
+            currency: true,
+            feeType: true,
+            feePercent: true,
+            status: true,
+            paymentTiming: true,
+            paymentTimingChosenAt: true,
+            paymentDueAt: true,
+          },
+        })
+      : []
+    const txBySelection = new Map(transactions.map((t) => [t.selectionId, t]))
+
     return NextResponse.json({
       applications: applications.map((a) => ({
         id: a.id,
@@ -61,6 +81,24 @@ export async function GET(_req: NextRequest) {
           positionsNeeded: a.opportunity.positionsNeeded,
         },
         selected: !!a.selection,
+        // الجولة 70: بيانات الدفع بعد الاختيار — الرسوم والحالة وتوقيت السداد المختار
+        payment: (() => {
+          if (!a.selection) return null
+          const tx = txBySelection.get(a.selection.id)
+          if (!tx) return null
+          return {
+            feeAmount: tx.feeAmount,
+            currency: tx.currency,
+            feeType: tx.feeType,
+            feePercent: tx.feePercent,
+            status: tx.status,
+            statusLabel: OPPORTUNITY_TRANSACTION_STATUS_LABELS[tx.status],
+            paymentTiming: tx.paymentTiming,
+            paymentTimingLabel: tx.paymentTiming ? OPPORTUNITY_PAYMENT_TIMING_LABELS[tx.paymentTiming] : null,
+            paymentTimingChosenAt: tx.paymentTimingChosenAt,
+            paymentDueAt: tx.paymentDueAt,
+          }
+        })(),
         interviews: a.interviews.map((i) => ({
           id: i.id,
           scheduledDate: i.scheduledDate,

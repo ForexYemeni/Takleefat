@@ -161,6 +161,14 @@ export const forsahReviewSchema = z.object({
   reviewNote: optionalText(500, 'ملاحظة المراجعة'),
 })
 
+/** الجولة 70 — اختيار المرشح توقيت سداد رسوم الخدمة بعد اختياره — شفافية كاملة */
+export const forsahPaymentTimingSchema = z.object({
+  applicationId: z.string().min(1, 'معرف الطلب غير صحيح'),
+  timing: z.enum(['WITHIN_FIRST_TEN_DAYS', 'DIRECT', 'AFTER_THREE_DAYS'], {
+    error: 'توقيت السداد المختار غير صحيح',
+  }),
+})
+
 /** إنشاء حساب موارد بشرية — المواصفة 2 (الإدارة حصراً) */
 export const hrCreateSchema = z
   .object({

@@ -3,6 +3,7 @@ import type {
   OpportunityFeeType,
   OpportunityInterviewMode,
   OpportunityInterviewResponse,
+  OpportunityPaymentTiming,
   OpportunitySalaryType,
   OpportunityStatus,
   OpportunityTransactionStatus,
@@ -104,6 +105,13 @@ export const OPPORTUNITY_FEE_TYPE_LABELS: Record<OpportunityFeeType, string> = {
   FIXED: 'مبلغ ثابت',
 }
 
+/** الجولة 70 — توقيت سداد رسوم الخدمة الذي يختاره المرشح بعد اختياره */
+export const OPPORTUNITY_PAYMENT_TIMING_LABELS: Record<OpportunityPaymentTiming, string> = {
+  WITHIN_FIRST_TEN_DAYS: 'خلال أول 10 أيام من الدوام',
+  DIRECT: 'دفع مباشر',
+  AFTER_THREE_DAYS: 'بعد ثلاثة أيام',
+}
+
 export const OPPORTUNITY_TRANSACTION_STATUS_LABELS: Record<OpportunityTransactionStatus, string> =
   {
     PENDING: 'معلقة',
@@ -178,6 +186,8 @@ export const FORSAH_AUDIT_ACTIONS = {
   CANDIDATE_SELECTED: 'اختار مرشحاً',
   TRANSACTION_CREATED: 'أُنشئت عملية مالية',
   TRANSACTION_UPDATED: 'عُدّلت عملية مالية',
+  // الجولة 70: اختيار المرشح توقيت سداد رسومه بعد الاختيار — شفافية كاملة
+  PAYMENT_TIMING_SELECTED: 'اختار المرشح توقيت سداد الرسوم',
   FEE_SETTINGS_CHANGED: 'غيّر رسوم الفرصة',
   HR_CREATED: 'أنشأ الإدارة حساب موارد بشرية',
   HR_UPDATED: 'عدّلت الإدارة حساب موارد بشرية',

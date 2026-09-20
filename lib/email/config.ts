@@ -115,6 +115,8 @@ const TYPE_CATEGORY_MAP: Record<NotificationType, EmailCategory> = {
   OPPORTUNITY_CANDIDATE_SELECTED: 'important',
   OPPORTUNITY_PAYMENT_PENDING: 'important',
   OPPORTUNITY_PAYMENT_COMPLETED: 'important',
+  // الجولة 70: اختيار المرشح توقيت سداد الرسوم — مهم لجهة التوظيف
+  OPPORTUNITY_PAYMENT_TIMING_SELECTED: 'important',
   OPPORTUNITY_CLOSED: 'important',
 }
 

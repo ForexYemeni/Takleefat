@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { handleApiError } from '@/lib/api-helpers'
 import { isForsahEnabled } from '@/lib/forsah/server'
+import { buildCandidateFeePreview } from '@/lib/forsah/finance'
+import { getSettings } from '@/lib/settings'
 
 /**
  * GET /api/opportunities/public — قائمة عامة آمنة لمحركات البحث (المواصفة 29)
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ opportunities: [], total: 0, page, take })
     }
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, feeSettings] = await Promise.all([
       db.opportunity.findMany({
         where: { status: { in: ['PUBLISHED', 'ACTIVE'] } },
         orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
@@ -44,11 +46,16 @@ export async function GET(req: NextRequest) {
         take,
       }),
       db.opportunity.count({ where: { status: { in: ['PUBLISHED', 'ACTIVE'] } } }),
+      getSettings(),
     ])
 
     return NextResponse.json(
       {
-        opportunities: rows,
+        // الجولة 70: شفافية الرسوم — معاينة عامة للرسوم مع كل فرصة منشورة
+        opportunities: rows.map((o) => ({
+          ...o,
+          feePreview: buildCandidateFeePreview(o.salaryAmount, o.salaryCurrency, feeSettings),
+        })),
         total,
         page,
         take,

@@ -12,6 +12,8 @@ import {
 } from '@/lib/forsah/server'
 import { evaluateOpportunityEligibility } from '@/lib/forsah/eligibility'
 import { FORSAH_MESSAGES } from '@/lib/forsah/constants'
+import { buildCandidateFeePreview } from '@/lib/forsah/finance'
+import { getSettings } from '@/lib/settings'
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { notify, notifyAdmins } from '@/lib/notifications'
 import { rateLimit } from '@/lib/rate-limit'
@@ -102,11 +104,15 @@ export async function GET(
       select: { id: true, status: true, coverNote: true, createdAt: true },
     })
 
+    // الجولة 70: شفافية الرسوم قبل التقديم — معاينة الرسوم لهذه الفرصة تحديداً
+    const feeSettings = await getSettings()
+
     return NextResponse.json({
       opportunity,
       viewer: 'worker',
       eligibility,
       myApplication,
+      feePreview: buildCandidateFeePreview(opportunity.salaryAmount, opportunity.salaryCurrency, feeSettings),
       canApply:
         eligibility.eligible && !myApplication && (opportunity.status === 'PUBLISHED' || opportunity.status === 'ACTIVE'),
     })

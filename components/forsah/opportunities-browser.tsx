@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Banknote,
   Briefcase,
   CalendarClock,
   CheckCircle2,
@@ -18,10 +19,12 @@ import {
   Sparkles,
   Stethoscope,
   Users,
+  Wallet,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiFetcher, apiPost } from '@/lib/api-client'
+import { apiFetcher, apiPatch, apiPost } from '@/lib/api-client'
+import { FORSAH_CURRENCY_SYMBOLS, OPPORTUNITY_PAYMENT_TIMING_LABELS } from '@/lib/forsah/constants'
 import { cn, formatDate, formatCurrency } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -54,6 +57,15 @@ import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
  * تبويب «فرصي»: كل طلباته بحالاته + خط زمني + دعوات المقابلة بتأكيد/اعتذار.
  */
 
+/** الجولة 70 — معاينة رسوم الخدمة المعروضة للمرشح قبل التقديم — شفافية كاملة */
+interface FeePreview {
+  feeType: 'PERCENTAGE' | 'FIXED'
+  feePercent: number | null
+  feeAmount: number
+  currency: string
+  hasSalary: boolean
+}
+
 interface OpportunityLite {
   id: string
   number: number
@@ -82,6 +94,7 @@ interface OpportunityLite {
   department: { name: string } | null
   qualification: { name: string } | null
   applications?: Array<{ id: string; status: string; createdAt: string }>
+  feePreview?: FeePreview | null
 }
 
 interface DetailPayload {
@@ -89,6 +102,7 @@ interface DetailPayload {
   viewer: string
   eligibility: { eligible: boolean; checks: Array<{ ok: boolean; blocking: boolean; text: string }> }
   myApplication: { id: string; status: string; createdAt: string } | null
+  feePreview?: FeePreview | null
   canApply: boolean
 }
 
@@ -122,9 +136,54 @@ interface MyApplication {
     notes: string | null
     response: string
   }>
+  /** الجولة 70 — بيانات الدفع بعد الاختيار — null = بلا رسوم (راتب حسب الاتفاق) */
+  payment?: {
+    feeAmount: number
+    currency: string
+    feeType: string
+    feePercent: number | null
+    status: string
+    statusLabel: string
+    paymentTiming: string | null
+    paymentTimingLabel: string | null
+    paymentTimingChosenAt: string | null
+    paymentDueAt: string | null
+  } | null
 }
 
 const GENDER_AR: Record<string, string> = { MALE: 'ذكور', FEMALE: 'إناث', ANY: 'الجنسان' }
+
+/** الجولة 70 — خيارات توقيت سداد الرسوم بعد الاختيار */
+const PAYMENT_TIMING_OPTIONS: Array<{
+  value: 'WITHIN_FIRST_TEN_DAYS' | 'DIRECT' | 'AFTER_THREE_DAYS'
+  label: string
+  hint: string
+}> = [
+  {
+    value: 'WITHIN_FIRST_TEN_DAYS',
+    label: OPPORTUNITY_PAYMENT_TIMING_LABELS.WITHIN_FIRST_TEN_DAYS,
+    hint: 'سداد مرن خلال أول 10 أيام من بدء الدوام',
+  },
+  {
+    value: 'DIRECT',
+    label: OPPORTUNITY_PAYMENT_TIMING_LABELS.DIRECT,
+    hint: 'يستحق فوراً عند الاختيار',
+  },
+  {
+    value: 'AFTER_THREE_DAYS',
+    label: OPPORTUNITY_PAYMENT_TIMING_LABELS.AFTER_THREE_DAYS,
+    hint: 'يستحق بعد ثلاثة أيام من لحظة الاختيار',
+  },
+]
+
+/** نص الرسوم المعروض للمرشح — نسبة أو ثابت مع الرمز */
+function feeText(fp: FeePreview): string {
+  const cur = FORSAH_CURRENCY_SYMBOLS[fp.currency] ?? fp.currency
+  if (fp.feeType === 'PERCENTAGE' && fp.feePercent != null) {
+    return `${fp.feePercent}٪ من الراتب ≈ ${fp.feeAmount.toLocaleString('ar-YE')} ${cur}`
+  }
+  return `${fp.feeAmount.toLocaleString('ar-YE')} ${cur}`
+}
 
 export function OpportunitiesBrowser({ basePath }: { basePath: '/nurse/opportunities' | '/doctor/opportunities' }) {
   const [tab, setTab] = useState<'matches' | 'mine'>('matches')
@@ -377,6 +436,10 @@ function OpportunityCard({
             </InfoChip>
           )}
           <InfoChip icon={Users}>{GENDER_AR[o.gender] ?? 'الجنسان'}</InfoChip>
+          {/* الجولة 70: شفافية الرسوم — تظهر قبل التقديم على كل بطاقة */}
+          {o.feePreview && o.feePreview.hasSalary && o.feePreview.feeAmount > 0 && (
+            <InfoChip icon={Banknote}>رسوم الخدمة: {feeText(o.feePreview)}</InfoChip>
+          )}
           {o.vacations && <InfoChip icon={CalendarClock}>{o.vacations.slice(0, 40)}</InfoChip>}
           {o.procedureSharePercent != null && (
             <InfoChip icon={Coins}>{o.procedureSharePercent}٪ من الإجراءات</InfoChip>
@@ -476,6 +539,38 @@ function DetailContent({
       {/* أهلية المستخدم */}
       <EligibilityPanel checks={data.eligibility.checks} eligible={data.eligibility.eligible} />
 
+      {/* الجولة 70: شفافية الرسوم قبل التقديم — صندوق مخصص واضح */}
+      {data.feePreview && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-800/60 dark:bg-amber-950/20">
+          <p className="flex items-center gap-1.5 text-xs font-black text-amber-800 dark:text-amber-200">
+            <Banknote className="size-4" />
+            رسوم الخدمة — شفافية كاملة قبل التقديم
+          </p>
+          {data.feePreview.hasSalary && data.feePreview.feeAmount > 0 ? (
+            <div className="mt-2 space-y-1 text-xs font-bold text-muted-foreground">
+              <p>
+                نوع الرسوم:{' '}
+                <span className="font-black text-foreground">
+                  {data.feePreview.feeType === 'PERCENTAGE' ? `نسبة من الراتب (${data.feePreview.feePercent}٪)` : 'مبلغ ثابت'}
+                </span>
+              </p>
+              <p>
+                المبلغ المطلوب منك لهذه الفرصة:{' '}
+                <span className="font-black text-foreground">{feeText(data.feePreview)}</span>
+              </p>
+              <p>
+                تُستحق الرسوم فقط عند اختيارك للفرصة، وتسدّد وفق التوقيت الذي تختاره بعد الاختيار:
+                أول 10 أيام من الدوام، أو دفع مباشر، أو بعد 3 أيام — من صفحة «فرصي».
+              </p>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-xs font-bold text-muted-foreground">
+              الراتب غير محدد (حسب الاتفاق) — تُحدد رسوم الخدمة وقت الاختيار وفق سياسة المنصة المعلنة.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* حالة التقديم السابق / زر التقديم */}
       {data.myApplication ? (
         <div className="flex items-center justify-between gap-2 rounded-2xl border bg-emerald-50/50 p-4 dark:bg-emerald-950/20">
@@ -492,14 +587,19 @@ function DetailContent({
           {o.status === 'PAUSED' ? 'الفرصة متوقفة مؤقتاً — لا تقديم حالياً' : 'هذه الفرصة مغلقة ولم تعد متاحة للتقديم.'}
         </div>
       ) : data.canApply ? (
-        <Button
-          className="h-12 w-full rounded-2xl bg-gradient-to-l from-violet-600 to-violet-500 text-base font-black text-white shadow-md hover:from-violet-700 hover:to-violet-600"
-          onClick={onApply}
-          disabled={applying}
-        >
-          <Send className="size-4.5" />
-          {applying ? 'جارٍ إرسال الطلب...' : 'قدّم الآن'}
-        </Button>
+        <div className="space-y-1.5">
+          <Button
+            className="h-12 w-full rounded-2xl bg-gradient-to-l from-violet-600 to-violet-500 text-base font-black text-white shadow-md hover:from-violet-700 hover:to-violet-600"
+            onClick={onApply}
+            disabled={applying}
+          >
+            <Send className="size-4.5" />
+            {applying ? 'جارٍ إرسال الطلب...' : 'قدّم الآن'}
+          </Button>
+          <p className="text-center text-[10px] font-bold text-muted-foreground">
+            بالضغط على «قدّم الآن» أنت توافق على رسوم الخدمة الموضحة أعلاه
+          </p>
+        </div>
       ) : (
         <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-center text-sm font-black text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           لا يمكنك التقديم على هذه الفرصة — راجع قائمة المطابقة أعلاه
@@ -567,6 +667,9 @@ function MyApplicationCard({
           </div>
         </div>
 
+        {/* الجولة 70: بيانات الدفع بعد الاختيار + اختيار توقيت السداد */}
+        {a.selected && <PaymentCard applicationId={a.id} payment={a.payment ?? null} />}
+
         {/* دعوة مقابلة بانتظار الرد */}
         {pendingInterview && (
           <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50/70 p-3.5 dark:border-violet-800 dark:bg-violet-950/30">
@@ -630,6 +733,90 @@ function MyApplicationCard({
         </div>
       </div>
     </article>
+  )
+}
+
+/* ---------------- بطاقة الدفع بعد الاختيار (الجولة 70) ---------------- */
+
+function PaymentCard({
+  applicationId,
+  payment,
+}: {
+  applicationId: string
+  payment: MyApplication['payment']
+}) {
+  const queryClient = useQueryClient()
+  const timingMutation = useMutation({
+    mutationFn: (timing: string) =>
+      apiPatch<{ message: string }>('/api/me/opportunity-payments', { applicationId, timing }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['forsah-mine'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-800 dark:bg-emerald-950/25">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-xs font-black text-emerald-800 dark:text-emerald-200">
+          <Wallet className="size-4" />
+          بيانات الدفع — رسوم الخدمة
+        </p>
+        <Badge
+          variant="secondary"
+          className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200"
+        >
+          {payment ? payment.statusLabel : 'بلا رسوم'}
+        </Badge>
+      </div>
+
+      {!payment ? (
+        <p className="mt-1.5 text-xs font-bold text-muted-foreground">
+          تم اختيارك لهذه الفرصة — لا توجد رسوم مسجلة عليك (راتب حسب الاتفاق).
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm font-black">
+            <span className="text-xs font-bold text-muted-foreground">المبلغ المطلوب: </span>
+            {payment.feeAmount.toLocaleString('ar-YE')}{' '}
+            {FORSAH_CURRENCY_SYMBOLS[payment.currency] ?? payment.currency}
+          </p>
+          {payment.paymentTimingLabel ? (
+            <p className="mt-1 text-xs font-bold text-muted-foreground">
+              توقيت السداد المعتمد:{' '}
+              <span className="font-black text-emerald-700 dark:text-emerald-300">
+                {payment.paymentTimingLabel}
+              </span>
+              {payment.paymentDueAt ? ` — يستحق ${formatDate(payment.paymentDueAt)}` : ''}
+            </p>
+          ) : (
+            <div className="mt-2.5 space-y-1.5">
+              <p className="text-xs font-black text-amber-700 dark:text-amber-300">
+                اختر توقيت سداد رسومك — قرارك يُسجل ويُعتمد للجهة:
+              </p>
+              <div className="grid gap-1.5">
+                {PAYMENT_TIMING_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={timingMutation.isPending}
+                    onClick={() => timingMutation.mutate(opt.value)}
+                    className="flex items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2 text-start transition-colors hover:border-emerald-400 hover:bg-emerald-50/60 disabled:opacity-50 dark:hover:bg-emerald-950/30"
+                  >
+                    <span>
+                      <span className="block text-xs font-black">{opt.label}</span>
+                      <span className="block text-[10px] font-bold text-muted-foreground">{opt.hint}</span>
+                    </span>
+                    <ChevronLeft className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

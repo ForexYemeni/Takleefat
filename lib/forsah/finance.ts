@@ -76,6 +76,38 @@ export function computeForsahFee(
   }
 }
 
+/** الجولة 70 — معاينة الرسوم المعروضة للمرشح قبل التقديم — شفافية كاملة */
+export interface ForsahFeePreview {
+  feeType: 'PERCENTAGE' | 'FIXED'
+  feePercent: number | null
+  feeAmount: number
+  currency: string
+  hasSalary: boolean
+}
+
+/**
+ * بناء معاينة الرسوم للمرشح من إعدادات جاهزة — نقية بلا كتابة.
+ * تُظهر للمرشح نوع الرسوم (نسبة/ثابتة) والمبلغ المتوقع من راتب هذه الفرصة حصراً —
+ * بلا أي تفاصيل داخلية (عمولة HR أو مستحق الإدارة) فهي بيانات إدارية سرية.
+ */
+export function buildCandidateFeePreview(
+  baseAmount: number | null | undefined,
+  currency: string,
+  settings: Pick<
+    PlatformSettings,
+    'forsahFeeType' | 'forsahFeeValue' | 'forsahHrCommissionPercent' | 'forsahFeeMin' | 'forsahFeeMax'
+  >
+): ForsahFeePreview {
+  const breakdown = computeForsahFee(baseAmount, settings)
+  return {
+    feeType: breakdown.feeType,
+    feePercent: breakdown.feePercent,
+    feeAmount: breakdown.feeAmount,
+    currency,
+    hasSalary: baseAmount != null && baseAmount > 0,
+  }
+}
+
 export interface SettleSelectionResult {
   created: boolean
   transactionId: string | null

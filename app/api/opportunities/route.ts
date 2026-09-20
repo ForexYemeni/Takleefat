@@ -5,6 +5,8 @@ import { opportunitySchema } from '@/lib/validations/forsah'
 import { OPPORTUNITY_INCLUDE, requireForsahPermission, buildCandidate, assertForsahEnabled, computeOpportunityTitle } from '@/lib/forsah/server'
 import { evaluateOpportunityEligibility } from '@/lib/forsah/eligibility'
 import { isOpportunityOpen, FORSAH_MESSAGES } from '@/lib/forsah/constants'
+import { buildCandidateFeePreview } from '@/lib/forsah/finance'
+import { getSettings } from '@/lib/settings'
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { rateLimit } from '@/lib/rate-limit'
 import { notify } from '@/lib/notifications'
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
         ]
       }
 
-      const [rows, total] = await Promise.all([
+      const [rows, total, feeSettings] = await Promise.all([
         db.opportunity.findMany({
           where,
           orderBy: [{ status: 'asc' }, { publishedAt: 'desc' }, { createdAt: 'desc' }],
@@ -62,6 +64,7 @@ export async function GET(req: NextRequest) {
           take: 200, // سقف أمان ثم فلترة أهلية وترقيم منطقي أدناه
         }),
         db.opportunity.count({ where }),
+        getSettings(),
       ])
 
       // فلترة الأهلية على مستوى الخادم — المؤهلون فقط يرون الفرصة (المواصفة 7)
@@ -79,8 +82,12 @@ export async function GET(req: NextRequest) {
       )
 
       const start = (page - 1) * take
+      // الجولة 70: شفافية الرسوم قبل التقديم — معاينة الرسوم لكل فرصة مؤهلة
       return NextResponse.json({
-        opportunities: eligibleRows.slice(start, start + take),
+        opportunities: eligibleRows.slice(start, start + take).map((o) => ({
+          ...o,
+          feePreview: buildCandidateFeePreview(o.salaryAmount, o.salaryCurrency, feeSettings),
+        })),
         total: eligibleRows.length,
         page,
         take,

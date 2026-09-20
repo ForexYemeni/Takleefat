@@ -92,7 +92,7 @@ interface SelectionsPayload {
     candidate: { id: string; name: string; phone: string; phoneMasked: string; photoUrl: string | null }
     note: string | null
     createdAt: string
-    transaction: { id: string; status: string; feeAmount: number; hrCommissionAmount: number; adminAmount: number; currency: string } | null
+    transaction: { id: string; status: string; feeAmount: number; hrCommissionAmount: number; adminAmount: number; currency: string; paymentTimingLabel?: string | null } | null
   }>
   positionsNeeded: number
 }
@@ -672,6 +672,11 @@ function SelectionsTab({ opportunityId }: { opportunityId: string }) {
               <p className="mt-1 text-[10px] font-bold text-muted-foreground">
                 رسوم: {s.transaction.feeAmount.toLocaleString('ar-YE')} — نصيبك: {s.transaction.hrCommissionAmount.toLocaleString('ar-YE')}
               </p>
+              {s.transaction.paymentTimingLabel && (
+                <p className="mt-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-300">
+                  توقيت سداد المرشح: {s.transaction.paymentTimingLabel}
+                </p>
+              )}
             </div>
           )}
         </article>

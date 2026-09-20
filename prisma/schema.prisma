@@ -205,6 +205,8 @@ enum NotificationType {
   OPPORTUNITY_CANDIDATE_SELECTED
   OPPORTUNITY_PAYMENT_PENDING
   OPPORTUNITY_PAYMENT_COMPLETED
+  /// الجولة 70 — اختار المرشح توقيت سداد رسوم الخدمة
+  OPPORTUNITY_PAYMENT_TIMING_SELECTED
   OPPORTUNITY_CLOSED
 }
 
@@ -1022,6 +1024,13 @@ enum OpportunityTransactionStatus {
   COMPLETED /// مكتملة
 }
 
+/// الجولة 70 — توقيت سداد رسوم الخدمة الذي يختاره المرشح بعد اختياره — شفافية كاملة
+enum OpportunityPaymentTiming {
+  WITHIN_FIRST_TEN_DAYS /// خلال أول 10 أيام من الدوام
+  DIRECT /// دفع مباشر (عند الاختيار)
+  AFTER_THREE_DAYS /// بعد ثلاثة أيام من الاختيار
+}
+
 /// الفرصة — وظيفة صحية معلنة يديرها حساب HR (أو الإدارة)
 model Opportunity {
   id             String             @id @default(cuid())
@@ -1208,6 +1217,12 @@ model OpportunityTransaction {
   /// مستحق الإدارة (feeAmount - hrCommissionAmount)
   adminAmount   Int
   status        OpportunityTransactionStatus @default(AWAITING_PAYMENT)
+  /// الجولة 70 — توقيت السداد الذي اختاره المرشح — null = لم يختر بعد
+  paymentTiming         OpportunityPaymentTiming?
+  /// لحظة اختيار المرشح للتوقيت
+  paymentTimingChosenAt DateTime?
+  /// موعد الاستحقاق التقديري المحسوب من التوقيت المختار — null = مرن (خلال أول 10 أيام من الدوام)
+  paymentDueAt          DateTime?
   /// مفتاح منع التكرار — فريد على مستوى القاعدة
   idempotencyKey String                     @unique
   note          String?

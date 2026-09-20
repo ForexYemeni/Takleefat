@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { forsahSelectionSchema } from '@/lib/validations/forsah'
 import { assertForsahEnabled, assertOpportunityOwnership, requireForsahPermission } from '@/lib/forsah/server'
-import { isOpportunityOpen, FORSAH_MESSAGES } from '@/lib/forsah/constants'
+import { isOpportunityOpen, FORSAH_MESSAGES, OPPORTUNITY_PAYMENT_TIMING_LABELS } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { settleOpportunitySelection, assertSelectionsAvailable } from '@/lib/forsah/finance'
 import { rateLimit } from '@/lib/rate-limit'
@@ -49,7 +49,11 @@ export async function GET(
     })
     const transactions = await db.opportunityTransaction.findMany({
       where: { opportunityId: id },
-      select: { id: true, selectionId: true, status: true, feeAmount: true, hrCommissionAmount: true, adminAmount: true, currency: true },
+      select: {
+        id: true, selectionId: true, status: true, feeAmount: true, hrCommissionAmount: true, adminAmount: true, currency: true,
+        // الجولة 70: توقيت السداد الذي اختاره المرشح
+        paymentTiming: true, paymentTimingChosenAt: true, paymentDueAt: true,
+      },
     })
     const txBySelection = new Map(transactions.map((t) => [t.selectionId, t]))
 
@@ -70,7 +74,15 @@ export async function GET(
         },
         note: s.note,
         createdAt: s.createdAt,
-        transaction: txBySelection.get(s.id) ?? null,
+        // الجولة 70: توقيت السداد الذي اختاره المرشح ليظهر لجهة التوظيف
+        transaction: (() => {
+          const t = txBySelection.get(s.id)
+          if (!t) return null
+          return {
+            ...t,
+            paymentTimingLabel: t.paymentTiming ? OPPORTUNITY_PAYMENT_TIMING_LABELS[t.paymentTiming] : null,
+          }
+        })(),
       })),
       positionsNeeded: opportunity.positionsNeeded,
       opportunity: { id: opportunity.id, title: opportunity.title },
@@ -156,6 +168,13 @@ export async function POST(
       settleResults.push(await settleOpportunitySelection(selection.id))
     }
 
+    // الجولة 70: بيانات الرسوم للإشعار — المرشح يعلم مقدمًا بالمبلغ المطلوب منه
+    const settledTxs = await db.opportunityTransaction.findMany({
+      where: { selectionId: { in: selections.map((s) => s.id) } },
+      select: { selectionId: true, feeAmount: true, currency: true },
+    })
+    const txBySelectionId = new Map(settledTxs.map((t) => [t.selectionId, t]))
+
     await logForsahAudit({
       actorId: actor.id,
       actorRole: actor.role,
@@ -168,14 +187,21 @@ export async function POST(
     // إشعارات الاختيار + إغلاق تلقائي إذا اكتمل العدد (سلوك عملي منطقي)
     const workerLink = opportunity.audience === 'DOCTOR' ? '/doctor/opportunities' : '/nurse/opportunities'
     await Promise.allSettled(
-      applications.map((app) =>
-        notify(app.userId, {
+      applications.map((app, idx) => {
+        // الجولة 70: بيانات الدفع في إشعار الاختيار نفسه — شفافية فورية
+        const selection = selections[idx]
+        const tx = selection ? txBySelectionId.get(selection.id) : undefined
+        const feeLine =
+          tx && tx.feeAmount > 0
+            ? ` — رسوم الخدمة المطلوبة: ${tx.feeAmount.toLocaleString('ar-YE')} ${tx.currency} — سدّدها وفق التوقيت الذي تختاره في صفحة «فرصي»`
+            : ''
+        return notify(app.userId, {
           title: 'تم اختيارك للفرصة',
-          body: `«${opportunity.title}» — مبروك! تواصل مع الجهة المعنية عبر بيانات الاتصال المفتوحة الآن في صفحة «فرصي»`,
+          body: `«${opportunity.title}» — مبروك! تواصل مع الجهة المعنية عبر بيانات الاتصال المفتوحة الآن في صفحة «فرصي»${feeLine}`,
           type: 'OPPORTUNITY_CANDIDATE_SELECTED',
           link: workerLink,
         })
-      )
+      })
     )
 
     const newSelectedCount = await db.opportunitySelection.count({ where: { opportunityId: id } })
