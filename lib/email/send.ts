@@ -6,6 +6,7 @@ import {
   isCategoryEnabled,
   parseEmailPreferences,
   absoluteAppLink,
+  resolveAppUrl,
   type EmailNotificationType,
   type EmailPreferences,
 } from '@/lib/email/config'
@@ -78,6 +79,8 @@ export async function queueEmail(params: QueueEmailParams): Promise<QueueEmailRe
     rows: params.rows ?? [],
     cta: params.cta ?? null,
     note: params.note,
+    // الجولة 69 (البند 6): أساس التطبيق لقالب الهوية الموحد — شعار المنصة في رأس كل رسالة
+    appUrl: resolveAppUrl() ?? '',
   }
   const payloadJson = JSON.stringify(payload)
 

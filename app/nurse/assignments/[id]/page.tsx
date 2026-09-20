@@ -6,7 +6,7 @@ import { DashboardSkeleton } from '@/components/shared/empty-state'
 
 /**
  * صفحة التكليف — الجيل الجديد (الجولة 58)
- * كادر التمريضي: /nurse/assignments/[id]
+ * كادر الصحيي: /nurse/assignments/[id]
  * التجربة الموحدة فوق /api/posts/[id] الحالي — صفر تغيير على القيود والمنطق
  */
 export default function NurseAssignmentDetailPage() {

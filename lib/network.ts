@@ -33,7 +33,7 @@ export const AFFILIATION_STATUS_LABELS: Record<string, string> = {
 
 /**
  * الجولتان 42/43 — خيارات الحالة المهنية لكادر الجهة التي يديرها مسؤول الجهة
- * (المستلم الإداري للكادر التمريضي / مشرف الأطباء للأطباء) في مسارين:
+ * (المستلم الإداري للكادر الصحيي / مشرف الأطباء للأطباء) في مسارين:
  * ① عند قبول طلب الانضمام يختار حالة الكادر في الجهة (الجولة 42)
  * ② وفي أي وقت بعدها يحوّل حالته بين هذه الخيارات الخمسة (الجولة 43)
  * الحالات الإدارية (قيد المراجعة/خارجي مؤهل/غير معتمد/موقوف) من حساب الإدارة حصراً.
@@ -270,7 +270,7 @@ export async function getAudiencePreview(opts: {
   department?: string | null
   gender?: Gender | null
   distribution?: string | null
-  /** جمهور التكليف — NURSE (كادر تمريضي) أو DOCTOR (أطباء — منظومة الأطباء) */
+  /** جمهور التكليف — NURSE (كادر صحي) أو DOCTOR (أطباء — منظومة الأطباء) */
   audience?: Audience | null
 }): Promise<AudiencePreviewResult> {
   const role = audienceRole(opts.audience)
@@ -485,7 +485,7 @@ function departmentGateApplies(distribution: DistributionMethod | null | undefin
 
 /**
  * البحث عن تكليف سارٍ للكادر يتقاطع وقته مع نافذة التكليف المُعلن — الجولة 49.
- * البلاغ الحرفي: «لا يتمكن الكادر التمريضي او الطبيب من التقديم في تكليف جديد
+ * البلاغ الحرفي: «لا يتمكن الكادر الصحي او الطبيب من التقديم في تكليف جديد
  * اذا كان بنفس التاريخ والوقت الذي هو يعمل فية».
  * - نافذة التكليف المُعلن: [startDate, endTime] — وقت الانتهاء يُحسب عند النشر من
  *   الساعات أو وقت الانتهاء؛ والتكليف بلا وقت محدد (لا ساعات ولا وقت انتهاء) لا
@@ -529,7 +529,7 @@ export interface PostVisibilityContext {
  * مطابقة الجمهور (تمريض/أطباء) + فلترة الجنس + خصوصية طريقة التوزيع + مراحل النشر التدريجي.
  */
 export async function canNurseSeePost(post: Post, ctx: PostVisibilityContext): Promise<boolean> {
-  // 0) فلتر الجمهور — حتمي: تكليف الأطباء لا يراه الكادر التمريضي والعكس (منظومة الأطباء)
+  // 0) فلتر الجمهور — حتمي: تكليف الأطباء لا يراه الكادر الصحي والعكس (منظومة الأطباء)
   if (audienceRole(post.audience) !== (ctx.role ?? 'NURSE')) return false
 
   // 1) فلتر الجنس — حتمي على مستوى المنطق وقاعدة البيانات
@@ -860,7 +860,7 @@ export interface MatchOptions {
   hospitalId?: string | null
   postGender?: Gender | null
   department?: string | null
-  /** دور الجمهور — NURSE: كادر تمريضي (افتراضي) | DOCTOR: أطباء (منظومة الأطباء) */
+  /** دور الجمهور — NURSE: كادر صحي (افتراضي) | DOCTOR: أطباء (منظومة الأطباء) */
   role?: 'NURSE' | 'DOCTOR'
   /** إظهار غير المطابقين للجنس؟ (لا — فلترة الجنس إلزامية دائماً) */
   favoritesOnly?: boolean
@@ -1061,7 +1061,7 @@ export async function findMatchingNurses(opts: MatchOptions): Promise<MatchedNur
 /**
  * «كوادر جهتي الصحية» — كل جهة صحية لها مجتمع كوادر خاص بها:
  *  - المعتمد: ارتباط مهني بحالة (يعمل حالياً WORKING / معتمد ENDORSED)
- *    وحسابه معتمد من الإدارة (APPROVED) وهو كادر تمريضي أو طبيب.
+ *    وحسابه معتمد من الإدارة (APPROVED) وهو كادر صحي أو طبيب.
  *  - المتاح الآن: من المعتمدين ولا يوجد عليه تكليف سارٍ (ACTIVE/RECEIVED).
  * الإحصاءات تُقرأ من قاعدة البيانات مباشرة في كل طلب — فوري دائماً.
  */

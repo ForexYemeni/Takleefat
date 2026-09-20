@@ -255,7 +255,7 @@ export function EntityCadreCommunity({
                     />
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                    <span>{c.role === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}</span>
+                    <span>{c.role === 'DOCTOR' ? 'طبيب' : 'كادر صحي'}</span>
                     {c.gender && <span>{GENDER_LABELS[c.gender] ?? c.gender}</span>}
                     {c.specialty && <span>{c.specialty}</span>}
                     {c.yearsOfExperience != null && c.yearsOfExperience > 0 && (

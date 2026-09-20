@@ -200,7 +200,7 @@ export function FullProfileDialog({
                           : 'bg-teal-600 text-white'
                       }`}
                     >
-                      {isDoctor ? 'طبيب' : 'كادر تمريضي'}
+                      {isDoctor ? 'طبيب' : 'كادر صحي'}
                     </Badge>
                   </p>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -301,7 +301,7 @@ export function FullProfileDialog({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] text-muted-foreground">
-                        {isDoctor ? 'المؤهل العلمي — قائمة الأطباء' : 'المؤهل العلمي — قائمة الكادر التمريضي'}
+                        {isDoctor ? 'المؤهل العلمي — قائمة الأطباء' : 'المؤهل العلمي — قائمة الكادر الصحي'}
                       </p>
                       <p className="truncate text-sm font-bold">
                         {profile.qualification ?? 'غير محدد بعد'}

@@ -1266,3 +1266,33 @@ model OpportunityViewLog {
   @@index([opportunityId])
   @@map("opportunity_view_logs")
 }
+
+/// الجولة 69 — أرشفة لقطة الحذف: الحذف النهائي للفرص المغلقة/المؤرشفة (إدارة حصراً)
+/// لا يضيع أي سجل مالي أو إداري أبداً: قبل حذف الفرصة تُخزَّن لقطة JSON كاملة
+/// (الفرصة + كل الطلبات + المقابلات + الاختيارات + العمليات المالية) هنا قابلة للاسترجاع.
+model OpportunityDeletionArchive {
+  id            String   @id @default(cuid())
+  /// معرف الفرصة المحذوفة — فريد (أرشفة واحدة لكل فرصة)
+  opportunityId String   @unique
+  /// الرقم التسلسلي والعنوان والجهة لحظة الحذف (عرض سريع بلا تحليل JSON)
+  number        Int
+  title         String
+  hospitalName  String
+  audience      String
+  status        String
+  createdByName String?
+  /// اللقطة الكاملة — JSON نصي مستقل يبقى بعد حذف الفرصة وسجلاتها
+  snapshotJson  String
+  /// عدادات ما حُذف مع الفرصة (cascade) — للعرض والتدقيق
+  applicationsCount Int    @default(0)
+  interviewsCount   Int    @default(0)
+  selectionsCount   Int    @default(0)
+  transactionsCount Int    @default(0)
+  /// من نفّذ الحذف (الإدارة المنفّذة حصراً)
+  deletedById   String
+  deletedByRole String
+  deletedAt     DateTime @default(now())
+
+  @@index([deletedAt])
+  @@map("opportunity_deletion_archives")
+}

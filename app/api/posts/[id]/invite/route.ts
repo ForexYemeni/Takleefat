@@ -6,7 +6,7 @@ import { notify } from '@/lib/notifications'
 import { genderMatches } from '@/lib/network'
 
 /**
- * POST /api/posts/[id]/invite — استدعاء مباشر لكوادر تمريضية لتكليف مُعلن
+ * POST /api/posts/[id]/invite — استدعاء مباشر لكوادر صحية لتكليف مُعلن
  * body: { nurseIds: string[], message?: string }
  * - المالك أو الإدارة فقط
  * - الاستدعاء للمطابقين للجنس فقط (فلترة الجنس إلزامية حتى في الاستدعاء)

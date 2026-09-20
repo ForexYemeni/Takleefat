@@ -69,7 +69,7 @@ export function ProfessionalCard({
               </div>
               <h2 className="text-2xl font-extrabold leading-snug">{name}</h2>
               <p className="text-sm font-bold opacity-90">
-                {specialty || 'كادر تمريضي معتمد'}
+                {specialty || 'كادر صحي معتمد'}
                 {gender && GENDER_LABELS[gender] ? ` — ${GENDER_LABELS[gender]}` : ''}
               </p>
             </div>

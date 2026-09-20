@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 
 /**
- * GET /api/me/documents — مستندات الكادر التمريضي الحالي
+ * GET /api/me/documents — مستندات الكادر الصحي الحالي
  */
 export async function GET() {
   try {

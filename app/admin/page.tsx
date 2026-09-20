@@ -65,7 +65,7 @@ export default function AdminOverviewPage() {
 
   const cards = [
     {
-      title: 'إجمالي الكادر التمريضي',
+      title: 'إجمالي الكادر الصحي',
       value: data?.totalNurses ?? 0,
       icon: Users,
       hint: `${data?.approvedNurses ?? 0} معتمد`,
@@ -236,7 +236,7 @@ export default function AdminOverviewPage() {
           <CardContent className="flex h-full flex-col justify-center p-6 text-center">
             <p className="text-sm font-bold">منصة تكليفات | Takleefat</p>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              يعمل النظام بموافقة الإدارة: لا يمكن للكادر التمريضي استلام التكليفات قبل اعتماد
+              يعمل النظام بموافقة الإدارة: لا يمكن للكادر الصحيي استلام التكليفات قبل اعتماد
               حسابه ومراجعة مستنداته.
             </p>
           </CardContent>

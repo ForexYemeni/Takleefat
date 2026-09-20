@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       return jsonError(
         exists.audience === audience
           ? 'هذا المؤهل مضاف مسبقاً في الكتالوج'
-          : `هذا المؤهل مضاف مسبقاً لجمهور ${exists.audience === 'DOCTOR' ? 'الأطباء' : 'الكادر التمريضي'}`,
+          : `هذا المؤهل مضاف مسبقاً لجمهور ${exists.audience === 'DOCTOR' ? 'الأطباء' : 'الكادر الصحي'}`,
         409
       )
     }
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        message: `تمت إضافة المؤهل «${name}» إلى كتالوج ${audience === 'DOCTOR' ? 'الأطباء' : 'الكادر التمريضي'} — أصبح متاحاً في كل النماذج`,
+        message: `تمت إضافة المؤهل «${name}» إلى كتالوج ${audience === 'DOCTOR' ? 'الأطباء' : 'الكادر الصحي'} — أصبح متاحاً في كل النماذج`,
         qualification,
       },
       { status: 201 }

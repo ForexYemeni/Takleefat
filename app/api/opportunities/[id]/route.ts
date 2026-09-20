@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
-import { opportunitySchema } from '@/lib/validations/forsah'
+import { opportunitySchema, hrDeleteSchema } from '@/lib/validations/forsah'
 import {
   OPPORTUNITY_INCLUDE,
   requireForsahPermission,
@@ -14,6 +14,8 @@ import { evaluateOpportunityEligibility } from '@/lib/forsah/eligibility'
 import { FORSAH_MESSAGES } from '@/lib/forsah/constants'
 import { logForsahAudit } from '@/lib/forsah/audit'
 import { notify, notifyAdmins } from '@/lib/notifications'
+import { rateLimit } from '@/lib/rate-limit'
+import bcrypt from 'bcryptjs'
 
 /**
  * مسار الفرصة الواحدة — الجولة 66 | ميزة «فرصة»
@@ -29,7 +31,12 @@ import { notify, notifyAdmins } from '@/lib/notifications'
  *  - HR: فقط بمنح صلاحية opportunity.close له وحصراً لفرصه هو.
  *  - بعد الإغلاق: لا تقديم جديد (يُرفض في مسار التقديم من القاعدة/المنطق)،
  *    تختفي من قوائم المؤهلين، وتبقى كل الطلبات والمقابلات والاختيارات
- *    والمالية وسجل التدقيق محفوظة — لا حذف إطلاقاً (No Hard Delete).
+ *    والمالية وسجل التدقيق محفوظة.
+ * DELETE /api/opportunities/[id] — حذف نهائي للفرص المغلقة/المؤرشفة (الجولة 69):
+ *  - الإدارة المنفّذة حصراً + تأكيد بكلمة مرورها + تحديد معدل.
+ *  - لا يضيع أي سجل: لقطة JSON كاملة (فرصة + طلبات + مقابلات + اختيارات + مالية)
+ *    تُخزَّن في opportunity_deletion_archives قبل الحذف داخل معاملة واحدة.
+ *  - سجل التدقيق يبقى محفوظاً (نصي بلا FK) — مع إدخال OPPORTUNITY_DELETED دائم.
  */
 
 async function loadOpportunity(id: string) {
@@ -383,6 +390,125 @@ export async function PATCH(
       meta: { number: opportunity.number },
     })
     return NextResponse.json({ message: 'أُرشفت الفرصة — البيانات محفوظة كاملة', opportunity: archived })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+/**
+ * DELETE /api/opportunities/[id] — حذف نهائي للفرص المغلقة/المؤرشفة (الجولة 69)
+ * ============================================================
+ * الإدارة المنفّذة حصراً + تأكيد إلزامي بكلمة مرورها (عملية لا رجعة فيها).
+ * حفاظاً على السجلات بلا أي فقد بيانات (قاعدة ADDITIVE):
+ * - الحذف مسموح حصراً للفرص CLOSED أو ARCHIVED — النشطة تُغلق أولاً.
+ * - لقطة JSON كاملة (الفرصة + الطلبات + المقابلات + الاختيارات + العمليات
+ *   المالية بكل حقولها) تُخزَّن في opportunity_deletion_archives قبل الحذف.
+ * - المعاملة واحدة: إما أرشفة + حذف معاً أو لا شيء.
+ * - سجل التدقيق نصي بلا FK — يبقى كاملاً مع إدخال OPPORTUNITY_DELETED دائم.
+ * - مالك الفرصة (HR) يُشعَر دائماً أن فرصته حُذفت من الإدارة.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireRole('ADMIN')
+    const { id } = await params
+    // الجولة 67: الإغلاق الكلي — الإدارة مستثناة دائماً
+    await assertForsahEnabled('ADMIN')
+
+    if (!rateLimit(`forsah:opp-delete:${session.user.id}`, 10, 60 * 60 * 1000)) {
+      return jsonError('محاولات كثيرة — انتقل دقيقة وأعد المحاولة', 429)
+    }
+
+    const parsed = hrDeleteSchema.safeParse(await req.json().catch(() => ({})))
+    if (!parsed.success) {
+      return jsonError(parsed.error.issues[0]?.message ?? 'كلمة مرور الإدارة مطلوبة لتأكيد الحذف', 422)
+    }
+
+    // الفرصة مع كل سجلاتها — للفحص ولقطة الأرشيف الكاملة
+    const opportunity = await db.opportunity.findUnique({
+      where: { id },
+      include: {
+        hospital: { select: { name: true } },
+        createdBy: { select: { name: true } },
+        applications: true,
+        interviews: true,
+        selections: true,
+        transactions: true,
+      },
+    })
+    if (!opportunity) return jsonError('الفرصة غير موجودة', 404)
+
+    // الحذف النهائي للمغلقة/المؤرشفة حصراً — النشطة تُغلق أولاً من التبويب نفسه
+    if (opportunity.status !== 'CLOSED' && opportunity.status !== 'ARCHIVED') {
+      return jsonError('الحذف النهائي يتم للفرص المغلقة أو المؤرشفة فقط — أغلق الفرصة أولاً', 409)
+    }
+
+    // التأكيد بكلمة مرور الإدارة المنفّذة — حصراً (نمط حذف HR — الجولة 68)
+    const admin = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { password: true },
+    })
+    if (!admin?.password) {
+      return jsonError('حسابك بلا كلمة مرور محلية — عيّن كلمة مرور أولاً لتأكيد عمليات الحذف', 403)
+    }
+    const ok = await bcrypt.compare(parsed.data.password, admin.password)
+    if (!ok) return jsonError('كلمة مرور الإدارة غير صحيحة — أُلغي الحذف', 403)
+
+    const counts = {
+      applications: opportunity.applications.length,
+      interviews: opportunity.interviews.length,
+      selections: opportunity.selections.length,
+      transactions: opportunity.transactions.length,
+    }
+
+    // معاملة الحذف الحفاظية: لقطة كاملة أولاً ثم الحذف — أو لا شيء
+    await db.$transaction(async (tx) => {
+      await tx.opportunityDeletionArchive.create({
+        data: {
+          opportunityId: opportunity.id,
+          number: opportunity.number,
+          title: opportunity.title,
+          hospitalName: opportunity.hospital.name,
+          audience: opportunity.audience,
+          status: opportunity.status,
+          createdByName: opportunity.createdBy?.name ?? null,
+          snapshotJson: JSON.stringify(opportunity),
+          applicationsCount: counts.applications,
+          interviewsCount: counts.interviews,
+          selectionsCount: counts.selections,
+          transactionsCount: counts.transactions,
+          deletedById: session.user.id,
+          deletedByRole: 'ADMIN',
+        },
+      })
+      await tx.opportunity.delete({ where: { id } })
+    })
+
+    await logForsahAudit({
+      actorId: session.user.id,
+      actorRole: 'ADMIN',
+      action: 'OPPORTUNITY_DELETED',
+      entityType: 'Opportunity',
+      entityId: id,
+      meta: { number: opportunity.number, title: opportunity.title, ...counts },
+    })
+
+    // إشعار مالك الفرصة إن كان غير المنفّذ — الفرصة السابقة حُذفت مع حفظ لقطتها
+    if (opportunity.createdById !== session.user.id) {
+      await notify(opportunity.createdById, {
+        title: 'حُذفت فرصة سابقة من الإدارة',
+        body: `«${opportunity.title}» (فرصة ${opportunity.number}) — حُذفت نهائياً من الإدارة بعد إغلاقها، ولقطتها الكاملة محفوظة في أرشيف الحذف.`,
+        type: 'OPPORTUNITY_CLOSED',
+        link: '/hr/opportunities',
+      })
+    }
+
+    return NextResponse.json({
+      message: `حُذفت «فرصة ${opportunity.number}» نهائياً — لقطة كاملة (${counts.applications} طلب، ${counts.transactions} عملية مالية) محفوظة في أرشيف الحذف`,
+      counts,
+    })
   } catch (error) {
     return handleApiError(error)
   }

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { PHONE_REGEX, PHONE_MESSAGE } from '@/lib/validations/auth'
 
 /**
- * حسابات يُنشئها مدير النظام (مستلم إداري / كادر تمريضي) ومستلم الجهة لكوادر جهته.
+ * حسابات يُنشئها مدير النظام (مستلم إداري / كادر صحي) ومستلم الجهة لكوادر جهته.
  * نفس قواعد التسجيل الذاتي — الجولة الثالثة عشرة:
  * الاسم في حقل واحد (الاسم مع اللقب) + هاتف 9 أرقام + مؤهل من 3 خيارات
  * + جنس إجباري للكادر + التخصص وسنوات الخبرة إجبارية للكادر.
@@ -200,7 +200,7 @@ export const qualificationCatalogSchema = z.object({
     .trim()
     .min(2, 'اسم المؤهل قصير جداً — مثال: دبلوم عالي')
     .max(80, 'اسم المؤهل طويل جداً'),
-  audience: z.enum(['NURSE', 'DOCTOR'], { error: 'جمهور المؤهل مطلوب — كادر تمريضي أو أطباء' }),
+  audience: z.enum(['NURSE', 'DOCTOR'], { error: 'جمهور المؤهل مطلوب — كادر صحي أو أطباء' }),
 })
 
 export const qualificationCatalogUpdateSchema = z.object({
@@ -284,7 +284,7 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 export type ChangePhoneInput = z.infer<typeof changePhoneSchema>
 
-// ---------- أقسام عمل الكادر التمريضي (تعدد أقسام من كتالوج الإدارة) ----------
+// ---------- أقسام عمل الكادر الصحي (تعدد أقسام من كتالوج الإدارة) ----------
 
 export const workDepartmentsSchema = z.object({
   // معرفات الأقسام المختارة من كتالوج الإدارة — استبدال كامل للمجموعة الحالية

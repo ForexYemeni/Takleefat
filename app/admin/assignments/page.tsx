@@ -287,7 +287,7 @@ export default function AdminAssignmentsPage() {
         <EmptyState
           icon={ClipboardList}
           title="لا توجد تكليفات"
-          description="ابدأ بإنشاء أول تكليف وإسناده للكادر التمريضي."
+          description="ابدأ بإنشاء أول تكليف وإسناده للكادر الصحيي."
           action={
             <Button onClick={() => setCreateOpen(true)} className="gap-2">
               <Plus className="size-4" />
@@ -354,7 +354,7 @@ export default function AdminAssignmentsPage() {
           {details && (
             <div className="space-y-4">
               <div className="grid gap-3 rounded-xl border bg-secondary/40 p-4 sm:grid-cols-2">
-                <InfoRow label="الكادر التمريضي" value={details.nurse.name} />
+                <InfoRow label="الكادر الصحي" value={details.nurse.name} />
                 <InfoRow label="التخصص" value={details.nurse.specialty ?? '—'} />
                 <InfoRow label="المستلم الإداري" value={details.receiver.name} />
                 <InfoRow label="القسم" value={details.department ?? '—'} />
@@ -961,7 +961,7 @@ function CreateAssignmentDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>الكادر التمريضي (معتمد)</Label>
+              <Label>الكادر الصحي (معتمد)</Label>
               <Select onValueChange={(v) => form.setValue('nurseId', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="اختر الكادر" />
@@ -1065,7 +1065,7 @@ function AdminPostsTab() {
       <EmptyState
         icon={ClipboardList}
         title="لا توجد تكليفات مُعلنة"
-        description="أضف تكليفاً مُعلناً يقدّم عليه الكادر التمريضي — الجهات والأقسام من قوائم الإدارة."
+        description="أضف تكليفاً مُعلناً يقدّم عليه الكادر الصحي — الجهات والأقسام من قوائم الإدارة."
         action={
           <Button onClick={() => setCreatePostOpen(true)} className="gap-2">
             <Plus className="size-4" />

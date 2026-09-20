@@ -7,8 +7,8 @@ import type { DocumentStatus } from '@prisma/client'
  * GET /api/admin/documents?status=PENDING&userId=...&audience=NURSE|DOCTOR
  * قائمة المستندات مع بيانات أصحابها — لمراجعة المستندات
  * userId (اختياري): مستندات كادر محدد — لبطاقة «كل مستندات الكادر»
- * audience (اختياري، الجولة 33): فصل الأطباء عن الكادر التمريضي
- *   NURSE → مستندات الكادر التمريضي فقط | DOCTOR → مستندات الأطباء فقط
+ * audience (اختياري، الجولة 33): فصل الأطباء عن الكادر الصحي
+ *   NURSE → مستندات الكادر الصحي فقط | DOCTOR → مستندات الأطباء فقط
  */
 export async function GET(req: NextRequest) {
   try {

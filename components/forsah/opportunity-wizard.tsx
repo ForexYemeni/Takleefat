@@ -345,7 +345,7 @@ export function OpportunityWizard({
                   <Select value={audienceState} onValueChange={(v) => setAudience(v as 'NURSE' | 'DOCTOR')}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="NURSE">كادر تمريضي</SelectItem>
+                      <SelectItem value="NURSE">كادر صحي</SelectItem>
                       <SelectItem value="DOCTOR">طبيب</SelectItem>
                     </SelectContent>
                   </Select>

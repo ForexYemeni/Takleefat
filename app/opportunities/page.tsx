@@ -16,7 +16,7 @@ export const revalidate = 120
 export const metadata: Metadata = {
   title: 'فرص العمل الصحية | فرصة — تكليفات Takleefat',
   description:
-    'فرص عمل صحية معلنة من المستشفيات والمراكز الطبية: أطباء وكوادر تمريضية بتخصصات وأقسام متعددة — منصة تكليفات الطبية الأولى',
+    'فرص عمل صحية معلنة من المستشفيات والمراكز الطبية: أطباء وكوادر صحية بتخصصات وأقسام متعددة — منصة تكليفات الطبية الأولى',
   keywords: ['فرص عمل صحية', 'وظائف طبية', 'وظائف تمريض', 'أطباء', 'تكليفات', 'فرصة', 'اليمن'],
   openGraph: {
     title: 'فرص العمل الصحية | فرصة — تكليفات',
@@ -122,7 +122,7 @@ export default async function PublicOpportunitiesPage() {
                     فرصة رقم {o.number}
                   </span>
                   <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-black text-muted-foreground">
-                    {o.audience === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}
+                    {o.audience === 'DOCTOR' ? 'طبيب' : 'كادر صحي'}
                   </span>
                 </div>
                 <h2 className="mt-2 text-base font-black leading-snug">{o.title}</h2>

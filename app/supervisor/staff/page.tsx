@@ -262,7 +262,7 @@ export default function ReceiverStaffPage() {
   const nurses = data?.nurses ?? []
   const orgPending = org?.status === 'PENDING'
   // الجولة 40: فصل طلبات انضمام الأطباء عن صفوف الكوادر — قرار قبول/رفض صريح
-  // المشرف يعتمد الأطباء حصراً، وطلبات الكادر التمريضي من اختصاص المستلم (الجولة 39)
+  // المشرف يعتمد الأطباء حصراً، وطلبات الكادر الصحي من اختصاص المستلم (الجولة 39)
   const joinRequests = nurses.filter((n) => n.isJoinRequest && n.nurse.role === 'DOCTOR')
   const staffRows = nurses.filter((n) => !(n.isJoinRequest && n.nurse.role === 'DOCTOR'))
 

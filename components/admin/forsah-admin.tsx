@@ -113,6 +113,8 @@ export function ForsahAdminManager() {
   })
 
   const [closeTarget, setCloseTarget] = useState<AdminOpportunity | null>(null)
+  // الجولة 69: الحذف النهائي للفرص المغلقة/المؤرشفة — بتأكيد كلمة مرور الإدارة
+  const [deleteTarget, setDeleteTarget] = useState<AdminOpportunity | null>(null)
   const [hrDialog, setHrDialog] = useState<{ mode: 'create' } | { mode: 'edit'; account: HrAccount } | null>(null)
 
   // ---------- الجولة 67: الإغلاق الكلي لنظام «فرصة» ----------
@@ -280,11 +282,23 @@ export function ForsahAdminManager() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {o.status === 'CLOSED' ? (
+                    {o.status === 'CLOSED' && (
                       <Button size="sm" variant="outline" className="h-8 rounded-lg text-[11px]" disabled={archive.isPending} onClick={() => archive.mutate(o.id)}>
                         أرشفة
                       </Button>
-                    ) : o.status !== 'ARCHIVED' && (
+                    )}
+                    {(o.status === 'CLOSED' || o.status === 'ARCHIVED') ? (
+                      // الجولة 69: الحذف النهائي — للمغلقة/المؤرشفة حصراً مع تأكيد كلمة المرور
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-lg text-[11px] text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
+                        onClick={() => setDeleteTarget(o)}
+                      >
+                        <Trash2 className="size-3.5" />
+                        حذف نهائي
+                      </Button>
+                    ) : (
                       <Button
                         size="sm"
                         variant="outline"
@@ -399,6 +413,15 @@ export function ForsahAdminManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* الجولة 69: حوار تأكيد الحذف النهائي للفرصة — خارج حوار الإدارة — Radix portals */}
+      {deleteTarget && (
+        <OpportunityDeleteDialog
+          opportunity={deleteTarget}
+          onOpenChange={(o) => !o && setDeleteTarget(null)}
+          onSaved={invalidate}
+        />
+      )}
 
       {/* حوار إنشاء/إدارة HR */}
       {hrDialog && (
@@ -798,6 +821,80 @@ function HrAccountDialog({
 
 /* ================= حوار تأكيد حذف حساب HR — الجولة 68 ================= */
 
+/* ================= حوار تأكيد حذف فرصة مغلقة/مؤرشفة — الجولة 69 ================= */
+
+function OpportunityDeleteDialog({
+  opportunity,
+  onOpenChange,
+  onSaved,
+}: {
+  opportunity: AdminOpportunity
+  onOpenChange: (o: boolean) => void
+  onSaved: () => void
+}) {
+  const [password, setPassword] = useState('')
+  const del = useMutation({
+    mutationFn: () =>
+      apiDelete<{ message: string; counts: { applications: number; interviews: number; selections: number; transactions: number } }>(
+        `/api/opportunities/${opportunity.id}`,
+        { password }
+      ),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      onOpenChange(false)
+      onSaved()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-3xl sm:max-w-sm" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-black text-rose-700 dark:text-rose-300">
+            <Trash2 className="size-4" />
+            حذف فرصة {opportunity.number}: {opportunity.title}
+          </DialogTitle>
+          <DialogDescription className="text-xs leading-relaxed">
+            حذف نهائي لا رجعة فيه لفرصة مغلقة/مؤرشفة. حفاظاً على السجلات: تُخزَّن لقطة كاملة للفرصة
+            وطلباتها ومقابلاتها واختياراتها وعملياتها المالية ({opportunity._count.applications} طلب،
+            {' '}{opportunity._count.interviews} مقابلة، {opportunity._count.transactions} عملية مالية)
+            في أرشيف الحذف قبل التنفيذ، ويبقى سجل التدقيق محفوظاً.
+            أكّد الحذف بكلمة مرور حسابك الإداري.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs font-black">كلمة مرور الإدارة *</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="كلمة مرور حسابك الإداري"
+              dir="ltr"
+              className="mt-1"
+              onKeyDown={(e) => e.key === 'Enter' && password.length > 0 && del.mutate()}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1 rounded-xl bg-rose-600 text-white hover:bg-rose-700"
+              disabled={del.isPending || password.length === 0}
+              onClick={() => del.mutate()}
+            >
+              <Trash2 className="size-4" />
+              {del.isPending ? 'جارٍ الحذف...' : 'حذف نهائي'}
+            </Button>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function HrDeleteDialog({
   account,
   onOpenChange,
@@ -897,6 +994,7 @@ const AUDIT_LABELS: Record<string, string> = {
   OPPORTUNITY_CLOSED_BY_HR: 'أغلق فرصة',
   OPPORTUNITY_CLOSED_BY_ADMIN: 'أغلق الإدارة فرصة',
   OPPORTUNITY_ARCHIVED: 'أرشف فرصة',
+  OPPORTUNITY_DELETED: 'حذف فرصة نهائياً (لقطة محفوظة)',
   APPLICANT_PROFILE_VIEWED: 'شاهد ملف متقدم',
   APPLICANT_DOCUMENTS_VIEWED: 'شاهد مستندات متقدم',
   APPLICANT_CONTACT_VIEWED: 'شاهد تواصل متقدم',
@@ -933,7 +1031,7 @@ interface AdminOpportunity {
   positionsNeeded: number
   hospital: { name: string }
   createdBy: { id: string; name: string; jobTitle: string | null }
-  _count: { applications: number; selections: number; interviews: number }
+  _count: { applications: number; selections: number; interviews: number; transactions: number }
 }
 
 interface AuditRow {

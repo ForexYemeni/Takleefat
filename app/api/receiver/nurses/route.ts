@@ -10,7 +10,7 @@ import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privac
  *   ?search= &gender=MALE|FEMALE|ANY &hospitalId= &affiliationStatus= &department=
  *   &minExperience= &specialty= &availableOnly=true &favoritesOnly=true
  *
- * المستلم الإداري → شبكة الكادر التمريضي | مشرف الأطباء → شبكة الأطباء (منظومة الأطباء)
+ * المستلم الإداري → شبكة الكادر الصحي | مشرف الأطباء → شبكة الأطباء (منظومة الأطباء)
  * النتائج مرتبة بأولوية المطابقة:
  * 5 المفضلون ← 4 العاملون حالياً بالجهة ← 3 المعتمدون ← 2 المتقابَل معهم ← 1 الخارجيون المؤهلون ← 0 مطابق أساسي
  * فلترة الجنس إلزامية إذا حُدد الجنس المطلوب.
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const genderParam = sp.get('gender')
     const gender = genderParam === 'MALE' || genderParam === 'FEMALE' || genderParam === 'ANY' ? genderParam : null
 
-    // دور الجمهور: مشرف الأطباء يبحث في شبكة الأطباء — غيره في شبكة الكادر التمريضي
+    // دور الجمهور: مشرف الأطباء يبحث في شبكة الأطباء — غيره في شبكة الكادر الصحي
     // الإدارة تختار الجمهور بمعامل audience=DOCTOR (نافذة إنشاء تكليف الأطباء)
     // الجولة 60 — الوضع النشط: البحث حسب اللوحة المفتوحة
     const audienceParam = sp.get('audience')

@@ -55,7 +55,7 @@ export const USER_STATUS_LABELS: Record<string, string> = {
 
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'مدير النظام',
-  NURSE: 'الكادر التمريضي',
+  NURSE: 'الكادر الصحي',
   RECEIVER: 'المستلم الإداري',
   DOCTOR: 'الطبيب',
   DOCTOR_SUPERVISOR: 'مشرف الأطباء',

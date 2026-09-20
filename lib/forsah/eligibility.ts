@@ -72,7 +72,7 @@ export function evaluateOpportunityEligibility(
     text: roleOk
       ? opportunity.audience === 'DOCTOR'
         ? 'أنت طبيب ونوع الفرصة للأطباء'
-        : 'أنت كادر تمريضي ونوع الفرصة للكادر التمريضي'
+        : 'أنت كادر صحي ونوع الفرصة للكادر الصحيي'
       : 'نوع الفرصة لا يطابق نوع حسابك',
   })
 

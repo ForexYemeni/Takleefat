@@ -8,7 +8,7 @@ import { isTrustedViewer, phoneView, revealedStaffIds } from '@/lib/phone-privac
 
 /**
  * المفضلة الخاصة بصاحب التكليف — واعية بالجمهور (منظومة الأطباء):
- * المستلم الإداري → يفضّل الكادر التمريضي | مشرف الأطباء → يفضّل الأطباء
+ * المستلم الإداري → يفضّل الكادر الصحي | مشرف الأطباء → يفضّل الأطباء
  *
  * GET /api/receiver/favorites?search=... — قائمة مفضلته مع البيانات المهنية والتقييم
  *   وحالة الارتباط بجهته والتوفر + بحث داخلي (بحسب جمهور صاحب الحساب)
@@ -24,7 +24,7 @@ function favoritesAudience(role: string): 'NURSE' | 'DOCTOR' {
 /// تسميات الجمهور — رسائل وإشعارات دقيقة بحسب نوع الحساب
 const AUDIENCE_LABELS = {
   NURSE: {
-    targetMissing: 'الكادر التمريضي غير موجود',
+    targetMissing: 'الكادر الصحي غير موجود',
     targetDuplicate: 'هذا الكادر ضمن مفضلتك مسبقاً',
     targetNotInFavorites: 'هذا الكادر ليس ضمن مفضلتك',
     notifyTitle: 'أُضفت إلى قائمة المفضلين',
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const search = req.nextUrl.searchParams.get('search')
     const audience = favoritesAudience(session.user.activeRole ?? session.user.role)
 
-    // قائمته الخاصة حصراً — بحسب جمهور حسابه (كادر تمريضي للمستلم / أطباء للمشرف)
+    // قائمته الخاصة حصراً — بحسب جمهور حسابه (كادر صحي للمستلم / أطباء للمشرف)
     // ثم تُرتب بالمطابقة الذكية (المفضلة أولاً بطبيعتها)
     const matched = await findMatchingNurses({
       receiverId: session.user.id,

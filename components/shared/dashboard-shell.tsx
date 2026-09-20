@@ -77,7 +77,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     profilePath: '/admin/profile',
     items: [
       { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
-      { href: '/admin/nurses', label: 'الكادر التمريضي', icon: Users },
+      { href: '/admin/nurses', label: 'الكادر الصحي', icon: Users },
       { href: '/admin/receivers', label: 'المستلمون الإداريون', icon: UserCog },
       { href: '/admin/doctors', label: 'الأطباء', icon: Stethoscope },
       { href: '/admin/supervisors', label: 'مشرفو الأطباء', icon: UserSquare2 },
@@ -96,7 +96,7 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
     ],
   },
   NURSE: {
-    roleLabel: 'الكادر التمريضي',
+    roleLabel: 'الكادر الصحي',
     profilePath: '/nurse/profile',
     items: [
       { href: '/nurse', label: 'نظرة عامة', icon: LayoutDashboard },

@@ -4,7 +4,7 @@ import { requireRole, handleApiError } from '@/lib/api-helpers'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 
 /**
- * GET /api/me/professional-profile — السجل المهني للكادر التمريضي
+ * GET /api/me/professional-profile — السجل المهني للكادر الصحيي
  * الارتباطات المهنية بكل الجهات وحالاتها + الإحصاءات:
  * التكليفات السابقة، معدل الإنجاز، معدل قبول التقديمات، التقييمات، حالة التوفر.
  */

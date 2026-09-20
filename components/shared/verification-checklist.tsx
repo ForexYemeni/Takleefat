@@ -3,7 +3,7 @@
 /**
  * رحلة توثيق الحساب + لافتة حالة الحساب — تكليفات | Takleefat
  * ------------------------------------------------------------
- * VerificationChecklist: قائمة تحقق تفاعلية ختامية للكادر التمريضي والطبيب
+ * VerificationChecklist: قائمة تحقق تفاعلية ختامية للكادر الصحيي والطبيب
  * — تعرض خطوات التوثيق الثلاث بحالة حية (منجز/جارٍ/معلّق) مع أزرار إجراء
  * مباشرة وشريط تقدم متحرك وقسم «ماذا يفتح لك الاعتماد».
  * تُستبدل بتنبيه «قيد المراجعة» النصي الثابت.
@@ -128,7 +128,7 @@ export function VerificationChecklist({
   resubmitting = false,
   className,
 }: VerificationChecklistProps) {
-  const staffLabel = role === 'DOCTOR' ? 'الطبيب' : 'الكادر التمريضي'
+  const staffLabel = role === 'DOCTOR' ? 'الطبيب' : 'الكادر الصحي'
   const docsUploaded = documents.uploaded > 0
 
   // شريط التقدم: الخطوة 1 منجزة دائماً (34٪) — رفع المستندات (33٪) — الاعتماد (33٪)

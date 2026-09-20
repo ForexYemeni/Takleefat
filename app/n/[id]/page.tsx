@@ -156,7 +156,7 @@ export default async function PublicNurseCardPage({
         <section className="rounded-2xl border bg-background p-4 text-xs leading-relaxed text-muted-foreground">
           <p className="font-bold text-foreground">لماذا هذه البطاقة موثوقة؟</p>
           <p className="mt-1">
-            تصدرها منصة تكليفات | Takleefat للكادر التمريضي المعتمد بعد مراجعة مستنداته من
+            تصدرها منصة تكليفات | Takleefat للكادر الصحيي المعتمد بعد مراجعة مستنداته من
             إدارة المنصة — والتقييمات المعروضة هنا تُجمع تلقائياً من جهات صحية حقيقية بعد
             إنهاء التكليفات فعلياً. امسح رمز QR للوصول إلى هذه البطاقة والتحقق منها في أي وقت.
           </p>

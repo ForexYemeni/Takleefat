@@ -39,7 +39,7 @@ export async function GET(
             select: {
               id: true, name: true, phone: true, gender: true, specialty: true,
               qualification: true, yearsOfExperience: true, status: true,
-              // الجولة 38: الدور لعرض «كادر تمريضي / طبيب» في مجتمع الجهة
+              // الجولة 38: الدور لعرض «كادر صحي / طبيب» في مجتمع الجهة
               role: true,
             },
           },

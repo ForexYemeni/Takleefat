@@ -125,7 +125,7 @@ export function CandidateCvDialog({
 function CandidateCv({ data }: { data: CvPayload }) {
   const c = data.candidate
   const isDoctor = data.opportunity.audience === 'DOCTOR'
-  const roleLabel = isDoctor ? 'طبيب' : 'كادر تمريضي'
+  const roleLabel = isDoctor ? 'طبيب' : 'كادر صحي'
   const workTags = [...c.workTags.specialties, ...c.workTags.departments]
 
   // متوسطات أبعاد التقييم الأربعة

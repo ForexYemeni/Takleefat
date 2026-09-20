@@ -53,7 +53,7 @@ import {
 
 const ROLE_TABS = [
   { value: 'ALL', label: 'الكل' },
-  { value: 'NURSE', label: 'الكادر التمريضي' },
+  { value: 'NURSE', label: 'الكادر الصحي' },
   { value: 'DOCTOR', label: 'الأطباء' },
 ] as const
 
@@ -158,7 +158,7 @@ export function QualificationsManager() {
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-18px_rgba(15,27,78,0.25)]">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-muted-foreground">مؤهلات الكادر التمريضي</p>
+              <p className="text-xs font-semibold text-muted-foreground">مؤهلات الكادر الصحي</p>
               <p className="mt-1.5 text-3xl font-black tracking-tight">{stats.nurse}</p>
             </div>
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-500/10">
@@ -348,7 +348,7 @@ function CatalogTab({
                     {q.name}
                   </h3>
                   <Badge variant={q.audience === 'DOCTOR' ? 'default' : 'secondary'} className="mt-1">
-                    {q.audience === 'DOCTOR' ? 'الأطباء' : 'الكادر التمريضي'}
+                    {q.audience === 'DOCTOR' ? 'الأطباء' : 'الكادر الصحي'}
                   </Badge>
                 </div>
               </div>
@@ -452,7 +452,7 @@ function CatalogTab({
                   <SelectValue placeholder="اختر الجمهور" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NURSE">الكادر التمريضي</SelectItem>
+                  <SelectItem value="NURSE">الكادر الصحي</SelectItem>
                   <SelectItem value="DOCTOR">الأطباء</SelectItem>
                 </SelectContent>
               </Select>
@@ -598,7 +598,7 @@ function AssignTab({
     <div className="space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          تعديل المؤهل العلمي لأي كادر تمريضي أو طبيب — الخيارات من كتالوج المؤهلات النشطة أعلاه
+          تعديل المؤهل العلمي لأي كادر صحي أو طبيب — الخيارات من كتالوج المؤهلات النشطة أعلاه
         </p>
         <div className="relative w-full sm:w-64">
           <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -664,7 +664,7 @@ function AssignTab({
                   </p>
                 </div>
                 <Badge variant={user.role === 'DOCTOR' ? 'default' : 'secondary'}>
-                  {user.role === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}
+                  {user.role === 'DOCTOR' ? 'طبيب' : 'كادر صحي'}
                 </Badge>
               </div>
 
@@ -737,7 +737,7 @@ function AssignTab({
             </DialogTitle>
             <DialogDescription>
               {editing
-                ? `المؤهل الحالي لـ (${editing.name}): ${editing.qualification ?? 'غير محدد'} — اختر المؤهل الجديد من كتالوج ${editing.role === 'DOCTOR' ? 'الأطباء' : 'الكادر التمريضي'} النشط`
+                ? `المؤهل الحالي لـ (${editing.name}): ${editing.qualification ?? 'غير محدد'} — اختر المؤهل الجديد من كتالوج ${editing.role === 'DOCTOR' ? 'الأطباء' : 'الكادر الصحي'} النشط`
                 : ''}
             </DialogDescription>
           </DialogHeader>
@@ -745,7 +745,7 @@ function AssignTab({
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-secondary/40 p-3 text-sm">
                 <span className="font-bold">{editing.name}</span>
-                <Badge variant="secondary">{editing.role === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}</Badge>
+                <Badge variant="secondary">{editing.role === 'DOCTOR' ? 'طبيب' : 'كادر صحي'}</Badge>
                 <StatusBadge status={editing.status} labels={USER_STATUS_LABELS} />
                 <span className="flex items-center gap-1 text-xs text-muted-foreground" dir="ltr">
                   <PhoneIcon className="size-3" />

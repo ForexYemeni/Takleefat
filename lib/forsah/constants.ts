@@ -131,7 +131,7 @@ export const FORSAH_CURRENCY_SYMBOLS: Record<string, string> = {
 
 /** جمهور الفرصة — يُعيد استخدام التعداد الحالي Audience */
 export const FORSAH_AUDIENCE_LABELS: Record<string, string> = {
-  NURSE: 'كادر تمريضي',
+  NURSE: 'كادر صحي',
   DOCTOR: 'طبيب',
 }
 
@@ -163,6 +163,8 @@ export const FORSAH_AUDIT_ACTIONS = {
   OPPORTUNITY_CLOSED_BY_HR: 'أغلق فرصة',
   OPPORTUNITY_CLOSED_BY_ADMIN: 'أغلق الإدارة فرصة',
   OPPORTUNITY_ARCHIVED: 'أرشف فرصة',
+  // الجولة 69: الحذف النهائي للفرص المغلقة/المؤرشفة — بلقطة كاملة في أرشيف الحذف
+  OPPORTUNITY_DELETED: 'حذفت الإدارة فرصة نهائياً (لقطة محفوظة)',
   OPPORTUNITY_VIEWED: 'شاهد فرصة',
   APPLICANT_PROFILE_VIEWED: 'شاهد ملف متقدم',
   APPLICANT_DOCUMENTS_VIEWED: 'شاهد مستندات متقدم',

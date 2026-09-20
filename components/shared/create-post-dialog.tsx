@@ -238,7 +238,7 @@ interface CreatePostDialogProps {
   nextNumber?: number
   /** جمهور التكليف الثابت حسب الدور — المستلم: NURSE | مشرف الأطباء: DOCTOR (منظومة الأطباء) */
   audience?: 'NURSE' | 'DOCTOR'
-  /** السماح بتغيير الجمهور (الإدارة فقط): منتقي كادر تمريضي / أطباء */
+  /** السماح بتغيير الجمهور (الإدارة فقط): منتقي كادر صحي / أطباء */
   allowAudienceChoice?: boolean
 }
 
@@ -460,12 +460,12 @@ export function CreatePostDialog({
               ? `سيظهر العنوان تلقائياً «التكليف رقم ${nextNumber}» (ويمكن الإدارة تعديله لاحقاً) — الجهة الصحية تُختار من مستشفيات الإدارة والموقع يُعبأ تلقائياً — بدون تاريخ انتهاء`
               : isDoctorAudience
                 ? 'يُنشر التكليف للأطباء للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'
-                : 'يُنشر التكليف للكادر التمريضي للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'}
+                : 'يُنشر التكليف للكادر الصحيي للتقديم — العنوان يُولَّد تلقائياً «التكليف رقم N» والموقع يُعبأ تلقائياً من الجهة الصحية المختارة'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(submitMutation, onInvalid)} className="space-y-4" noValidate>
-          {/* منتقي الجمهور — الإدارة فقط (كادر تمريضي / أطباء) */}
+          {/* منتقي الجمهور — الإدارة فقط (كادر صحي / أطباء) */}
           {allowAudienceChoice && (
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -481,7 +481,7 @@ export function CreatePostDialog({
                 }`}
               >
                 <Stethoscope className="size-4" />
-                تكليف كادر تمريضي
+                تكليف كادر صحي
               </button>
               <button
                 type="button"

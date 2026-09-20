@@ -155,7 +155,7 @@ export default function ReceiverOverviewPage() {
           tone="empty"
           eyebrow="التكليفات"
           title="لا توجد تكليفات جارية أو مُعلنة حالياً"
-          subtitle="أنشئ تكليفاً جديداً ليصل للكادر التمريضي المؤهل فوراً"
+          subtitle="أنشئ تكليفاً جديداً ليصل للكادر الصحيي المؤهل فوراً"
           href="/receiver/assignments"
           ctaLabel="إنشاء تكليف"
         />

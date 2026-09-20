@@ -59,10 +59,10 @@ interface DocOwner {
   docs: AdminDoc[]
 }
 
-/** الجولة 33: ألوان وهوية كل جمهور — تيل للكادر التمريضي ونيلي للأطباء */
+/** الجولة 33: ألوان وهوية كل جمهور — تيل للكادر الصحيي ونيلي للأطباء */
 const AUDIENCE_UI = {
   NURSE: {
-    label: 'كادر تمريضي',
+    label: 'كادر صحي',
     avatarClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
     icon: Users,
   },
@@ -169,12 +169,12 @@ export default function AdminDocumentsPage() {
       <div>
         <h1 className="text-2xl font-extrabold">مراجعة المستندات</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          فصل احترافي بين الأطباء والكادر التمريضي — بطاقة لكل صاحب حساب، اضغط عليها لعرض
+          فصل احترافي بين الأطباء والكادر الصحي — بطاقة لكل صاحب حساب، اضغط عليها لعرض
           جميع مستنداته واعتمادها أو رفضها
         </p>
       </div>
 
-      {/* ---------- الجولة 33: تبويبات الجمهور — فصل الأطباء عن الكادر التمريضي ---------- */}
+      {/* ---------- الجولة 33: تبويبات الجمهور — فصل الأطباء عن الكادر الصحي ---------- */}
       <Tabs value={audience} onValueChange={setAudience}>
         <TabsList className="h-auto flex-wrap justify-start gap-1">
           <TabsTrigger value="ALL" className="gap-1.5">
@@ -184,7 +184,7 @@ export default function AdminDocumentsPage() {
           </TabsTrigger>
           <TabsTrigger value="NURSE" className="gap-1.5">
             <Users className="size-3.5 text-teal-600" />
-            الكادر التمريضي
+            الكادر الصحي
             <span className="text-xs text-muted-foreground">{audienceCounts.NURSE}</span>
           </TabsTrigger>
           <TabsTrigger value="DOCTOR" className="gap-1.5">
@@ -235,7 +235,7 @@ export default function AdminDocumentsPage() {
             audience === 'DOCTOR'
               ? 'لا توجد مستندات أطباء ضمن هذا التصنيف — جرّب تبويباً آخر أو حالة أخرى.'
               : audience === 'NURSE'
-                ? 'لا توجد مستندات كادر تمريضي ضمن هذا التصنيف — جرّب تبويباً آخر أو حالة أخرى.'
+                ? 'لا توجد مستندات كادر صحي ضمن هذا التصنيف — جرّب تبويباً آخر أو حالة أخرى.'
                 : 'لا توجد مستندات ضمن هذا التصنيف حالياً.'
           }
         />
@@ -317,7 +317,7 @@ export default function AdminDocumentsPage() {
               {openUser && (
                 <Badge variant="outline" className="gap-1 text-[11px]">
                   {openUser.user.role === 'DOCTOR' ? <Stethoscope className="size-3 text-indigo-600" /> : <Users className="size-3 text-teal-600" />}
-                  {AUDIENCE_UI[openUser.user.role as 'NURSE' | 'DOCTOR']?.label ?? 'كادر تمريضي'}
+                  {AUDIENCE_UI[openUser.user.role as 'NURSE' | 'DOCTOR']?.label ?? 'كادر صحي'}
                 </Badge>
               )}
             </DialogTitle>

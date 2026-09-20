@@ -47,7 +47,7 @@ import {
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 
 /**
- * متصفح «فرصة» للكادر التمريضي والأطباء — الجولة 66 | تكليفات | Takleefat
+ * متصفح «فرصة» للكادر الصحيي والأطباء — الجولة 66 | تكليفات | Takleefat
  * ============================================================
  * تبويب «الفرص المناسبة لك»: فرص مؤهلة حصراً من الخادم (Eligibility Engine)
  * + بحث + تفاصيل Premium + التقديم مع منع التكرار.
@@ -366,7 +366,7 @@ function OpportunityCard({
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
           {o.audience && (
             <InfoChip icon={o.audience === 'DOCTOR' ? Stethoscope : Users}>
-              {o.audience === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}
+              {o.audience === 'DOCTOR' ? 'طبيب' : 'كادر صحي'}
             </InfoChip>
           )}
           {o.specialty && <InfoChip icon={HeartPulse}>{o.specialty.name}</InfoChip>}
@@ -435,7 +435,7 @@ function DetailContent({
       <div className="grid grid-cols-2 gap-2.5 text-xs">
         <DetailField label="الراتب" value={salary.suffix ? `${salary.main} ${salary.suffix}` : salary.main} strong />
         <DetailField label="الجنس المطلوب" value={GENDER_AR[o.gender] ?? 'الجنسان'} />
-        <DetailField label="نوع الكادر" value={o.audience === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'} />
+        <DetailField label="نوع الكادر" value={o.audience === 'DOCTOR' ? 'طبيب' : 'كادر صحي'} />
         <DetailField label="عدد الموظفين المطلوب" value={String(o.positionsNeeded)} />
         {o.specialty && <DetailField label="التخصص" value={o.specialty.name} />}
         {o.department && <DetailField label="القسم" value={o.department.name} />}

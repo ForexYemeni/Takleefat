@@ -48,7 +48,7 @@ import { WhatsAppNotificationModal } from '@/components/admin/whatsapp-notificat
 import type { AdminDocument, AdminUser } from '@/components/admin/nurse-review'
 
 /**
- * الجولة 63 — حوار «مراجعة الملف» الاحترافي لشاشة الكادر التمريضي/الأطباء:
+ * الجولة 63 — حوار «مراجعة الملف» الاحترافي لشاشة الكادر الصحي/الأطباء:
  * بيانات الكادر كاملة + قائمة توثيق المستندات (المرفوع/الناقص/المرفوض بسببه)
  * + سجل التواصل الإداري عبر واتساب + الإجراءات النهائية
  * (اعتماد / طلب تعديل عبر واتساب / رفض بسبب مع إمكانية إبلاغ الكادر).
@@ -125,7 +125,7 @@ export function NurseDetails({
   const approveMutation = useMutation({
     mutationFn: () => apiPatch<{ message?: string }>(`/api/admin/users/${userId}`, { status: 'APPROVED' }),
     onSuccess: () => {
-      toast.success(isDoctor ? 'تم اعتماد حساب الطبيب' : 'تم اعتماد حساب الكادر التمريضي')
+      toast.success(isDoctor ? 'تم اعتماد حساب الطبيب' : 'تم اعتماد حساب الكادر الصحي')
       setApproveOpen(false)
       refresh()
     },
@@ -452,7 +452,7 @@ export function NurseDetails({
       <ConfirmDialog
         open={approveOpen}
         onOpenChange={setApproveOpen}
-        title={isDoctor ? 'اعتماد حساب الطبيب' : 'اعتماد حساب الكادر التمريضي'}
+        title={isDoctor ? 'اعتماد حساب الطبيب' : 'اعتماد حساب الكادر الصحي'}
         description={`سيصبح حساب «${user?.name ?? ''}» معتمداً ويستطيع استلام التكليفات فوراً في منصة تكليفات.`}
         confirmLabel="نعم، اعتمد الحساب"
         tone="success"

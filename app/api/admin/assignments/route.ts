@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/assignments
- * إنشاء تكليف جديد وإسناده لكادر تمريضي ومستلم إداري
+ * إنشاء تكليف جديد وإسناده لكادر صحي ومستلم إداري
  */
 export async function POST(req: NextRequest) {
   try {
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     ])
 
     if (!nurse || nurse.role !== 'NURSE' || nurse.status !== 'APPROVED') {
-      return jsonError('الكادر التمريضي المختار غير موجود أو حسابه غير معتمد', 422)
+      return jsonError('الكادر الصحي المختار غير موجود أو حسابه غير معتمد', 422)
     }
     if (!receiver || receiver.role !== 'RECEIVER' || receiver.status !== 'APPROVED') {
       return jsonError('المستلم الإداري المختار غير موجود أو حسابه غير معتمد', 422)

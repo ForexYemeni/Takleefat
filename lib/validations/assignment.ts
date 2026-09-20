@@ -13,7 +13,7 @@ export const createAssignmentSchema = z.object({
   department: z.string().max(120).optional().or(z.literal('')),
   startDate: z.string({ error: 'تاريخ البدء مطلوب' }).min(1, 'تاريخ البدء مطلوب'),
   endDate: z.string().optional().or(z.literal('')),
-  nurseId: z.string({ error: 'يجب اختيار الكادر التمريضي' }).min(1, 'يجب اختيار الكادر التمريضي'),
+  nurseId: z.string({ error: 'يجب اختيار الكادر الصحي' }).min(1, 'يجب اختيار الكادر الصحي'),
   receiverId: z
     .string({ error: 'يجب اختيار المستلم الإداري' })
     .min(1, 'يجب اختيار المستلم الإداري'),

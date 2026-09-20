@@ -47,7 +47,7 @@ export async function POST(
       },
     })
 
-    // إشعار الكادر التمريضي والمدير
+    // إشعار الكادر الصحي والمدير
     await notify(assignment.nurseId, {
       title: 'تم استلام التكليف',
       body: `تم تأكيد استلام تكليف "${assignment.title}" من قبل المستلم الإداري`,

@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError } from '@/lib/api-helpers'
 
 /**
- * GET /api/me/ratings — تقييمات الكادر التمريضي (لملفي الشخصي)
+ * GET /api/me/ratings — تقييمات الكادر الصحي (لملفي الشخصي)
  * جميع التقييمات الممنوحة من المستلمين الإداريين + المتوسط العام.
  */
 export async function GET() {

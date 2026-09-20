@@ -352,7 +352,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
     setStatus('ALL')
   }
 
-  const roleLabel = isDoctor ? 'الأطباء' : 'الكادر التمريضي'
+  const roleLabel = isDoctor ? 'الأطباء' : 'الكادر الصحي'
   const RoleIcon = isDoctor ? Stethoscope : HeartPulse
 
   /* أداة فلاتر مشتركة — تُعرض داخل لوحة سطح المكتب وداخل Drawer الجوال */
@@ -435,7 +435,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
         <EcgLine />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            {/* مؤشر الموقع: الإدارة ← الكادر التمريضي */}
+            {/* مؤشر الموقع: الإدارة ← الكادر الصحي */}
             <nav
               aria-label="مسار التنقل"
               className="mb-2.5 inline-flex items-center gap-1 rounded-full border bg-background/70 px-3 py-1 text-[11px] font-semibold text-muted-foreground backdrop-blur"
@@ -582,7 +582,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
           description={
             isDoctor
               ? 'لم يتم العثور على حسابات أطباء ضمن هذا التصنيف.'
-              : 'لم يتم العثور على حسابات كادر تمريضي ضمن هذا التصنيف.'
+              : 'لم يتم العثور على حسابات كادر صحي ضمن هذا التصنيف.'
           }
         />
       ) : (
@@ -741,7 +741,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
       <Dialog open={!!detailsUser} onOpenChange={(open) => !open && setDetailsUser(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto grid-cols-1">
           <DialogHeader>
-            <DialogTitle>{isDoctor ? 'مراجعة ملف الطبيب' : 'مراجعة ملف الكادر التمريضي'}</DialogTitle>
+            <DialogTitle>{isDoctor ? 'مراجعة ملف الطبيب' : 'مراجعة ملف الكادر الصحي'}</DialogTitle>
             <DialogDescription>
               بيانات الحساب والمستندات وحالة التوثيق في منصة تكليفات
             </DialogDescription>
@@ -762,7 +762,7 @@ export function NurseReview({ role = 'NURSE' }: { role?: 'NURSE' | 'DOCTOR' }) {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{isDoctor ? 'إضافة طبيب جديد' : 'إضافة كادر تمريضي جديد'}</DialogTitle>
+            <DialogTitle>{isDoctor ? 'إضافة طبيب جديد' : 'إضافة كادر صحي جديد'}</DialogTitle>
             <DialogDescription>
               {isDoctor
                 ? 'يُنشأ الحساب معتمداً تلقائياً — المؤهل من خيارات الأطباء والتخصص الطبي من كتالوج التخصصات المُدار من الإدارة.'

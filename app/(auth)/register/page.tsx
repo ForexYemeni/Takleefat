@@ -76,7 +76,7 @@ const DOCTOR_QUALIFICATION_OPTIONS = [
 const ROLE_CARDS = [
   {
     id: 'NURSE' as const,
-    title: 'كادر تمريضي',
+    title: 'كادر صحي',
     desc: 'قدّم على التكليفات المعلنة وابنِ سجلك المهني الموثّق',
     icon: Stethoscope,
     chips: ['تكليفات معلنة', 'بطاقة مهنية', 'استدعاء مباشر'],
@@ -141,7 +141,7 @@ const PW_STRENGTH = [
 ]
 
 const ROLE_LABELS: Record<'NURSE' | 'RECEIVER' | 'DOCTOR', string> = {
-  NURSE: 'كادر تمريضي',
+  NURSE: 'كادر صحي',
   DOCTOR: 'طبيب',
   RECEIVER: 'مستلم إداري',
 }
@@ -191,7 +191,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
 
-  // حقول الكادر التمريضي
+  // حقول الكادر الصحي
   const [specialty, setSpecialty] = useState('') // إجباري — من أقسام الإدارة
   const [qualification, setQualification] = useState('')
   const [yearsOfExperience, setYearsOfExperience] = useState('') // إجباري — يبدأ فارغاً
@@ -766,7 +766,7 @@ export default function RegisterPage() {
           {/* ================= الخطوة ③ البيانات المهنية / الجهة الصحية ================= */}
           {step === 3 && (
             <div className="space-y-5">
-              {/* ---------- حقول الكادر التمريضي والطبيب (منظومة الأطباء) ---------- */}
+              {/* ---------- حقول الكادر الصحي والطبيب (منظومة الأطباء) ---------- */}
               {(role === 'NURSE' || role === 'DOCTOR') && (
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1194,7 +1194,7 @@ export default function RegisterPage() {
 
       <p className="text-center text-xs leading-relaxed text-muted-foreground">
         بإنشاء حسابك في تكليفات فإنك توافق على أن تتم مراجعة بياناتك ومستنداتك من قبل إدارة المنصة
-        قبل تفعيل الحساب — سواء كان حساب كادر تمريضي أو طبيب أو مستلم إداري.
+        قبل تفعيل الحساب — سواء كان حساب كادر صحي أو طبيب أو مستلم إداري.
       </p>
 
       <p className="auth-rise text-center text-sm text-muted-foreground" style={{ animationDelay: '200ms' }}>

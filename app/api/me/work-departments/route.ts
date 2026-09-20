@@ -4,7 +4,7 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 import { workDepartmentsSchema } from '@/lib/validations/user'
 
 /**
- * أقسام عمل الكادر التمريضي — تعدد أقسام من كتالوج الإدارة
+ * أقسام عمل الكادر الصحي — تعدد أقسام من كتالوج الإدارة
  * GET /api/me/work-departments — أقسامي الحالية + كل الأقسام النشطة (للاختيار)
  * PUT  /api/me/work-departments — استبدال كامل لمجموعة الأقسام { departmentIds: [] }
  *

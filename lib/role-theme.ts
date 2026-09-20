@@ -25,13 +25,13 @@ export interface RoleTheme {
 }
 
 export const ROLE_THEME: Record<RoleKey, RoleTheme> = {
-  // الكادر التمريضي — تركوازي طبي (رعاية واهتمام)
+  // الكادر الصحي — تركوازي طبي (رعاية واهتمام)
   NURSE: {
     accent: '#0D9488',
     accentStrong: '#0F766E',
     accentGlow: '#14B8A6',
     accentSoft: 'rgba(20, 184, 166, 0.12)',
-    label: 'الكادر التمريضي',
+    label: 'الكادر الصحي',
   },
   // الطبيب — أخضر طبي زمردي (اعتماد ومهنية)
   DOCTOR: {

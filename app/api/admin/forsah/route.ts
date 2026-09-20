@@ -23,7 +23,7 @@ export async function GET() {
         include: {
           hospital: { select: { name: true } },
           createdBy: { select: { id: true, name: true, jobTitle: true } },
-          _count: { select: { applications: true, selections: true, interviews: true } },
+          _count: { select: { applications: true, selections: true, interviews: true, transactions: true } },
         },
         take: 200,
       }),

@@ -4,7 +4,7 @@ import { requireRole, handleApiError, jsonError } from '@/lib/api-helpers'
 
 /**
  * DELETE /api/me/documents/[id]
- * حذف مستند قيد المراجعة (للكادر التمريضي المالك فقط)
+ * حذف مستند قيد المراجعة (للكادر الصحيي المالك فقط)
  */
 export async function DELETE(
   _req: NextRequest,

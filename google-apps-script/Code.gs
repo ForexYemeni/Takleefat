@@ -81,7 +81,18 @@ var TYPE_STYLES = {
   IMPORTANT_ALERT:      { color: '#DC2626', tint: '#FDECEC', icon: '🚨' },
   SYSTEM_NOTIFICATION:  { color: '#334155', tint: '#EEF2F7', icon: '⚙️' },
   GENERIC:              { color: '#0E7490', tint: '#E0F2F7', icon: '🔔' },
-  TEST:                 { color: '#059669', tint: '#E7F6EF', icon: '✅' }
+  TEST:                 { color: '#059669', tint: '#E7F6EF', icon: '✅' },
+  // الجولة 69 (البند 6): أنواع نظام «فرصة | Forsah» — كانت تسقط للحزمة الافتراضية
+  OPPORTUNITY_PUBLISHED:            { color: '#0D9488', tint: '#E6F5F3', icon: '📣' },
+  OPPORTUNITY_APPLICATION_RECEIVED: { color: '#7C3AED', tint: '#F1EAFD', icon: '📨' },
+  OPPORTUNITY_APPLICATION_REVIEWED: { color: '#0E7490', tint: '#E0F2F7', icon: '🔍' },
+  OPPORTUNITY_INTERVIEW_INVITED:    { color: '#B45309', tint: '#FCF3E3', icon: '📅' },
+  OPPORTUNITY_INTERVIEW_CONFIRMED:  { color: '#059669', tint: '#E7F6EF', icon: '✅' },
+  OPPORTUNITY_INTERVIEW_DECLINED:   { color: '#DC2626', tint: '#FDECEC', icon: '↩️' },
+  OPPORTUNITY_CANDIDATE_SELECTED:   { color: '#059669', tint: '#E7F6EF', icon: '🎯' },
+  OPPORTUNITY_PAYMENT_PENDING:      { color: '#B45309', tint: '#FCF3E3', icon: '💳' },
+  OPPORTUNITY_PAYMENT_COMPLETED:    { color: '#059669', tint: '#E7F6EF', icon: '💰' },
+  OPPORTUNITY_CLOSED:               { color: '#334155', tint: '#EEF2F7', icon: '🔒' }
 };
 
 /** الحزمة الافتراضية لأي نوع غير معروف — التوسع مستقبلاً بلا تعديل القالب */
@@ -207,6 +218,21 @@ function safeUrl_(u) {
   return /^https:\/\//i.test(s) ? s : '';
 }
 
+/** رأس الهوية — الجولة 69 (البند 6): شعار المنصة + الاسم — يتحلل لرأس نصي أنيق إن لم يوجد أساس */
+function brandHeader_(appUrl) {
+  var base = safeUrl_(appUrl);
+  var logoHtml = '';
+  if (base) {
+    logoHtml =
+      '<img src="' + esc_(base) + '/icons/icon-192.png" width="64" height="64" alt="' + esc_(BRAND_NAME) + '"' +
+      ' style="display:block;margin:0 auto 10px;width:64px;height:64px;border-radius:16px;border:2px solid rgba(255,255,255,0.35);">';
+  }
+  return logoHtml +
+    '<div style="font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:0.5px;">' + BRAND_NAME + '</div>' +
+    '<div style="font-size:10px;color:rgba(255,255,255,0.75);letter-spacing:3px;margin-top:2px;">' + BRAND_LATIN + '</div>' +
+    '<div style="font-size:10.5px;color:rgba(255,255,255,0.85);margin-top:6px;">' + BRAND_TAGLINE + '</div>';
+}
+
 /** رسالة حدود الاستخدام المجانية — بلا تفاصيل تقنية مبالغة */
 function quotaMessage_(err) {
   var m = String(err && err.message ? err.message : '');
@@ -215,6 +241,7 @@ function quotaMessage_(err) {
   }
   return 'تعذر إرسال الرسالة عبر Gmail';
 }
+
 
 // ---------- القالب الموحد (Email Template Engine) ----------
 
@@ -287,10 +314,9 @@ function baseEmailTemplate_(data) {
 
     '<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">' +
 
-    // الرأس — الهوية
+    // الرأس — الهوية الموحدة (شعار + اسم + وصف) — الجولة 69
     '<tr><td style="background:linear-gradient(135deg,#0E7490,#0D9488);border-radius:18px 18px 0 0;padding:22px 24px;text-align:center;">' +
-    '<div style="font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:0.5px;">' + BRAND_NAME + '</div>' +
-    '<div style="font-size:10px;color:rgba(255,255,255,0.75);letter-spacing:3px;margin-top:2px;">' + BRAND_LATIN + '</div>' +
+    brandHeader_(data.appUrl) +
     '</td></tr>' +
 
     // شريط عنوان الإشعار بلون النوع
@@ -307,11 +333,10 @@ function baseEmailTemplate_(data) {
     noteHtml +
     '</td></tr>' +
 
-    // التذييل
+    // التذييل — هوية موحدة
     '<tr><td style="background:#F8FAFC;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 18px 18px;padding:16px 24px;text-align:center;">' +
-    '<div style="font-size:13px;font-weight:bold;color:#0E7490;">تطبيق ' + BRAND_NAME + '</div>' +
-    '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">' + BRAND_TAGLINE + '</div>' +
-    '<div style="font-size:10px;color:#CBD5E1;margin-top:8px;">' + SUPPORT_FOOTER + '</div>' +
+    '<div style="font-size:13px;font-weight:bold;color:#0E7490;">تطبيق ' + BRAND_NAME + ' — ' + BRAND_LATIN + '</div>' +
+    '<div style="font-size:10px;color:#94A3B8;margin-top:8px;border-top:1px dashed #E2E8F0;padding-top:10px;">' + SUPPORT_FOOTER + '</div>' +
     '</td></tr>' +
 
     '</table>' +

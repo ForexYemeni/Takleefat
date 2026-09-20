@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
           profilePhotoBlobId: true,
           updatedAt: true,
           /// حالات المستندات (النوع + الحالة فقط — بلا ملفات) لعرض ملخص النواقص
-          /// في القائمة مباشرة دون فتح الملف — أعمدة الطلب من شاشة الكادر التمريضي
+          /// في القائمة مباشرة دون فتح الملف — أعمدة الطلب من شاشة الكادر الصحي
           documents: { select: { type: true, status: true } },
           // نِسَب الحصة والأذونات — للمستلمين ومشرفي الأطباء (الجولة 32)
           commissionPercent: true,
@@ -147,13 +147,13 @@ export async function POST(req: NextRequest) {
 
       await notify(user.id, {
         title: 'مرحباً بك في تكليفات',
-        body: 'تم إنشاء حسابك ككادر تمريضي. يمكنك الآن استعراض التكليفات المسندة إليك ورفع مستنداتك.',
+        body: 'تم إنشاء حسابك ككادر صحي. يمكنك الآن استعراض التكليفات المسندة إليك ورفع مستنداتك.',
         type: 'GENERIC',
         link: '/nurse',
       })
 
       return NextResponse.json(
-        { message: 'تم إنشاء حساب الكادر التمريضي بنجاح', user },
+        { message: 'تم إنشاء حساب الكادر الصحي بنجاح', user },
         { status: 201 }
       )
     }

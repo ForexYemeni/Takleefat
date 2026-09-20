@@ -7,7 +7,7 @@ import { notify } from '@/lib/notifications'
 import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
 
 /**
- * POST /api/auth/register — إنشاء حساب جديد (كادر تمريضي / مستلم إداري / طبيب)
+ * POST /api/auth/register — إنشاء حساب جديد (كادر صحي / مستلم إداري / طبيب)
  * يبقى الحساب قيد المراجعة حتى اعتماده من مدير النظام.
  *
  * منظومة الأطباء:
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     // إشعار جميع مديري النظام بوجود طلب تسجيل جديد (+ جهة جديدة بانتظار الاعتماد)
     const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
     const roleLabel =
-      role === 'DOCTOR' ? 'طبيب' : role === 'NURSE' ? 'كادر تمريضي' : 'مستلم إداري'
+      role === 'DOCTOR' ? 'طبيب' : role === 'NURSE' ? 'كادر صحي' : 'مستلم إداري'
     const reviewLink =
       role === 'DOCTOR' ? '/admin/doctors' : role === 'NURSE' ? '/admin/nurses' : '/admin/receivers'
     await Promise.all([
