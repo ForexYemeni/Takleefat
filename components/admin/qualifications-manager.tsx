@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   GraduationCap,
+  Hospital as HospitalIcon,
   Loader2,
   PencilLine,
   PhoneIcon,
@@ -49,14 +50,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 
 const ROLE_TABS = [
   { value: 'ALL', label: 'الكل' },
@@ -131,57 +124,85 @@ export function QualificationsManager() {
 
   return (
     <div className="space-y-4">
-      {/* ---------- الرأس ---------- */}
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-extrabold">
-            <GraduationCap className="size-6 text-primary" />
-            المؤهلات العلمية
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            كتالوج المؤهلات المُدار من حساب الإدارة — أضف مؤهلات جديدة وعدّلها وفعّلها
-            أو عطّلها، وأسندها للكوادر والأطباء
-          </p>
+      {/* ---------- الرأس — الترويسة الطبية الفاخرة بهوية تكليفات ---------- */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] sm:p-5">
+        <div aria-hidden className="pointer-events-none absolute -top-20 start-4 h-40 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 end-4 h-44 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="relative flex items-start gap-3">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-lg shadow-violet-500/25">
+            <GraduationCap className="size-6" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-black tracking-tight sm:text-2xl">المؤهلات العلمية</h1>
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+              كتالوج المؤهلات المُدار من حساب الإدارة — أضف مؤهلات جديدة وعدّلها وفعّلها
+              أو عطّلها، وأسندها للكوادر والأطباء
+            </p>
+          </div>
         </div>
       </div>
 
       {/* ---------- بطاقات الإحصاء ---------- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl border bg-card p-4">
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <GraduationCap className="size-3.5" /> إجمالي المؤهلات
-          </p>
-          <p className="mt-1 text-2xl font-extrabold text-primary">{stats.total}</p>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-18px_rgba(15,27,78,0.25)]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-muted-foreground">إجمالي المؤهلات</p>
+              <p className="mt-1.5 text-3xl font-black tracking-tight text-primary">{stats.total}</p>
+            </div>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-cyan-500/15 text-primary ring-1 ring-primary/10">
+              <GraduationCap className="size-4.5" />
+            </span>
+          </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
-          <p className="text-xs text-muted-foreground">مؤهلات الكادر التمريضي</p>
-          <p className="mt-1 text-2xl font-extrabold">{stats.nurse}</p>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-18px_rgba(15,27,78,0.25)]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-muted-foreground">مؤهلات الكادر التمريضي</p>
+              <p className="mt-1.5 text-3xl font-black tracking-tight">{stats.nurse}</p>
+            </div>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 ring-1 ring-teal-500/10">
+              <Users className="size-4.5" />
+            </span>
+          </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Stethoscope className="size-3.5" /> مؤهلات الأطباء
-          </p>
-          <p className="mt-1 text-2xl font-extrabold">{stats.doctor}</p>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-18px_rgba(15,27,78,0.25)]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-muted-foreground">مؤهلات الأطباء</p>
+              <p className="mt-1.5 text-3xl font-black tracking-tight">{stats.doctor}</p>
+            </div>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-500/10">
+              <Stethoscope className="size-4.5" />
+            </span>
+          </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
-          <p className="text-xs text-muted-foreground">موقوفة عن الاستخدام</p>
-          <p
-            className={`mt-1 text-2xl font-extrabold ${stats.inactive > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}
-          >
-            {stats.inactive}
-          </p>
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-18px_rgba(15,27,78,0.25)]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-muted-foreground">موقوفة عن الاستخدام</p>
+              <p
+                className={`mt-1.5 text-3xl font-black tracking-tight ${stats.inactive > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}
+              >
+                {stats.inactive}
+              </p>
+            </div>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 ring-1 ring-amber-500/10">
+              <Power className="size-4.5" />
+            </span>
+          </div>
         </div>
       </div>
 
       {/* ---------- التبويبات ---------- */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'catalog' | 'assign')}>
-        <TabsList className="h-auto flex-wrap justify-start gap-1">
-          <TabsTrigger value="catalog" className="gap-1.5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1 rounded-2xl border border-border/60 bg-secondary/50 p-1 shadow-[0_1px_3px_rgba(15,27,78,0.05)]">
+          <TabsTrigger value="catalog" className="gap-1.5 rounded-xl font-bold">
             <GraduationCap className="size-3.5" />
             كتالوج المؤهلات
             <span className="text-xs text-muted-foreground">{catalog.length}</span>
           </TabsTrigger>
-          <TabsTrigger value="assign" className="gap-1.5">
+          <TabsTrigger value="assign" className="gap-1.5 rounded-xl font-bold">
             <Users className="size-3.5" />
             إسناد المؤهلات
             <span className="text-xs text-muted-foreground">{users.length}</span>
@@ -280,12 +301,15 @@ function CatalogTab({
           <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="بحث في الكتالوج..."
-            className="ps-9"
+            className="h-11 rounded-xl border-border/70 bg-background ps-9 shadow-sm transition-shadow focus-visible:ring-primary/25"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button onClick={() => setAddOpen(true)} className="shrink-0 gap-2">
+        <Button
+          onClick={() => setAddOpen(true)}
+          className="h-11 shrink-0 gap-2 rounded-xl bg-gradient-to-l from-primary to-cyan-600 px-5 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-transform hover:scale-[1.02]"
+        >
           <PlusCircle className="size-4" />
           إضافة مؤهل جديد
         </Button>
@@ -298,99 +322,99 @@ function CatalogTab({
           description="أضف مؤهلاً علمياً جديداً من الزر أعلاه — سيظهر فوراً في كل نماذج التسجيل والإسناد."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-secondary/60 hover:bg-secondary/60">
-                  <TableHead>اسم المؤهل</TableHead>
-                  <TableHead>الجمهور</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="hidden md:table-cell">الحاملون</TableHead>
-                  <TableHead className="hidden md:table-cell">أُضيف في</TableHead>
-                  <TableHead className="text-start">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((q) => (
-                  <TableRow key={q.id}>
-                    <TableCell className="font-bold">
-                      <span className="flex items-center gap-1.5">
-                        <GraduationCap className="size-4 text-primary" />
-                        {q.name}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={q.audience === 'DOCTOR' ? 'default' : 'secondary'}>
-                        {q.audience === 'DOCTOR' ? 'الأطباء' : 'الكادر التمريضي'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {q.isActive ? (
-                        <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
-                          نشط
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">موقوف</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <Badge variant="secondary" className="gap-1">
-                        <Users className="size-3" />
-                        {q.usersCount} حساب
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
-                      {formatDate(q.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => {
-                            setEditing(q)
-                            setNewName(q.name)
-                          }}
-                        >
-                          <PencilLine className="size-3.5" />
-                          تعديل
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={toggleMutation.isPending}
-                          onClick={() =>
-                            toggleMutation.mutate({ id: q.id, isActive: !q.isActive })
-                          }
-                        >
-                          <Power className="size-3.5" />
-                          {q.isActive ? 'تعطيل' : 'تفعيل'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={`gap-1.5 ${q.usersCount > 0 ? 'opacity-50' : 'text-red-600 focus:text-red-600'}`}
-                          disabled={q.usersCount > 0}
-                          title={
-                            q.usersCount > 0
-                              ? `لا يمكن الحذف — ${q.usersCount} حساب يحمله (عطّله بدلاً من الحذف)`
-                              : 'حذف نهائي من الكتالوج'
-                          }
-                          onClick={() => setDeleting(q)}
-                        >
-                          <Trash2 className="size-3.5" />
-                          حذف
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((q) => (
+            <article
+              key={q.id}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_16px_36px_-20px_rgba(15,27,78,0.28)]"
+            >
+              {/* شريط هوية علوي رقيق يتلوّن بحسب حالة المؤهل */}
+              <div
+                aria-hidden
+                className={
+                  q.isActive
+                    ? 'h-1 w-full bg-gradient-to-l from-primary via-sky-500 to-cyan-400'
+                    : 'h-1 w-full bg-gradient-to-l from-red-500 to-red-300'
+                }
+              />
+
+              {/* رأس البطاقة — المؤهل وجمهوره */}
+              <div className="flex items-start gap-3 p-4 pb-2.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/15 to-cyan-500/15 text-violet-700 ring-1 ring-violet-500/10 dark:text-violet-300">
+                  <GraduationCap className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-[15px] font-extrabold leading-6" title={q.name}>
+                    {q.name}
+                  </h3>
+                  <Badge variant={q.audience === 'DOCTOR' ? 'default' : 'secondary'} className="mt-1">
+                    {q.audience === 'DOCTOR' ? 'الأطباء' : 'الكادر التمريضي'}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* الحالة والحاملون وتاريخ الإضافة */}
+              <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4">
+                {q.isActive ? (
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    نشط
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive">موقوف</Badge>
+                )}
+                <Badge variant="secondary" className="gap-1">
+                  <Users className="size-3" />
+                  {q.usersCount} حساب
+                </Badge>
+                <span className="ms-auto text-[11px] font-semibold text-muted-foreground">
+                  {formatDate(q.createdAt)}
+                </span>
+              </div>
+
+              {/* الإجراءات الموجودة — تعديل / تعطيل-تفعيل / حذف */}
+              <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-border/50 bg-secondary/30 px-4 py-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-lg bg-background"
+                  onClick={() => {
+                    setEditing(q)
+                    setNewName(q.name)
+                  }}
+                >
+                  <PencilLine className="size-3.5" />
+                  تعديل
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-lg bg-background"
+                  disabled={toggleMutation.isPending}
+                  onClick={() =>
+                    toggleMutation.mutate({ id: q.id, isActive: !q.isActive })
+                  }
+                >
+                  <Power className="size-3.5" />
+                  {q.isActive ? 'تعطيل' : 'تفعيل'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`gap-1.5 rounded-lg bg-background ${q.usersCount > 0 ? 'opacity-50' : 'text-red-600 focus:text-red-600'}`}
+                  disabled={q.usersCount > 0}
+                  title={
+                    q.usersCount > 0
+                      ? `لا يمكن الحذف — ${q.usersCount} حساب يحمله (عطّله بدلاً من الحذف)`
+                      : 'حذف نهائي من الكتالوج'
+                  }
+                  onClick={() => setDeleting(q)}
+                >
+                  <Trash2 className="size-3.5" />
+                  حذف
+                </Button>
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
@@ -573,14 +597,14 @@ function AssignTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           تعديل المؤهل العلمي لأي كادر تمريضي أو طبيب — الخيارات من كتالوج المؤهلات النشطة أعلاه
         </p>
         <div className="relative w-full sm:w-64">
           <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="بحث بالاسم أو الهاتف..."
-            className="ps-9"
+            className="h-11 rounded-xl border-border/70 bg-background ps-9 shadow-sm transition-shadow focus-visible:ring-primary/25"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -588,9 +612,9 @@ function AssignTab({
       </div>
 
       <Tabs value={roleFilter} onValueChange={setRoleFilter}>
-        <TabsList className="h-auto flex-wrap justify-start gap-1">
+        <TabsList className="h-auto flex-wrap justify-start gap-1 rounded-2xl border border-border/60 bg-secondary/50 p-1 shadow-[0_1px_3px_rgba(15,27,78,0.05)]">
           {ROLE_TABS.map((tabItem) => (
-            <TabsTrigger key={tabItem.value} value={tabItem.value} className="gap-1.5">
+            <TabsTrigger key={tabItem.value} value={tabItem.value} className="gap-1.5 rounded-xl font-bold">
               {tabItem.label}
               <span className="text-xs text-muted-foreground">
                 {tabItem.value === 'ALL'
@@ -609,71 +633,97 @@ function AssignTab({
           description="لم يتم العثور على كوادر أو أطباء ضمن هذا التصنيف."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-secondary/60 hover:bg-secondary/60">
-                  <TableHead>الاسم</TableHead>
-                  <TableHead className="hidden md:table-cell">الهاتف</TableHead>
-                  <TableHead>الدور</TableHead>
-                  <TableHead className="hidden lg:table-cell">التخصص</TableHead>
-                  <TableHead>المؤهل العلمي</TableHead>
-                  <TableHead className="hidden lg:table-cell">الجهة الصحية</TableHead>
-                  <TableHead className="hidden md:table-cell">تاريخ التسجيل</TableHead>
-                  <TableHead className="text-start">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-bold">{user.name}</TableCell>
-                    <TableCell className="hidden md:table-cell" dir="ltr">
-                      <span className="text-start">{user.phone}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.role === 'DOCTOR' ? 'default' : 'secondary'}>
-                        {user.role === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {user.specialty ?? <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      {user.qualification ? (
-                        <Badge variant="outline" className="gap-1">
-                          <GraduationCap className="size-3" />
-                          {user.qualification}
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">غير محدد</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {user.affiliations[0]?.hospital.name ??
-                        user.hospitalName ?? (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
-                      {formatDate(user.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={() => openEdit(user)}
-                      >
-                        <PencilLine className="size-3.5" />
-                        تعديل المؤهل
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((user) => (
+            <article
+              key={user.id}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_16px_36px_-20px_rgba(15,27,78,0.28)]"
+            >
+              {/* شريط هوية علوي رقيق يتلوّن بحسب الدور */}
+              <div
+                aria-hidden
+                className={
+                  user.role === 'DOCTOR'
+                    ? 'h-1 w-full bg-gradient-to-l from-violet-600 via-sky-500 to-cyan-400'
+                    : 'h-1 w-full bg-gradient-to-l from-teal-500 to-cyan-300'
+                }
+              />
+
+              {/* رأس البطاقة — الاسم والدور */}
+              <div className="flex items-start gap-3 p-4 pb-2">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/15 to-cyan-500/15 text-violet-700 ring-1 ring-violet-500/10 dark:text-violet-300">
+                  <GraduationCap className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-[15px] font-extrabold leading-6" title={user.name}>
+                    {user.name}
+                  </h3>
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground" dir="ltr">
+                    <PhoneIcon className="size-3 shrink-0" />
+                    <span className="tracking-wide">{user.phone}</span>
+                  </p>
+                </div>
+                <Badge variant={user.role === 'DOCTOR' ? 'default' : 'secondary'}>
+                  {user.role === 'DOCTOR' ? 'طبيب' : 'كادر تمريضي'}
+                </Badge>
+              </div>
+
+              {/* المؤهل العلمي الحالي */}
+              <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2">
+                {user.qualification ? (
+                  <Badge variant="outline" className="max-w-full gap-1">
+                    <GraduationCap className="size-3 shrink-0" />
+                    <span className="truncate" title={user.qualification}>
+                      {user.qualification}
+                    </span>
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive">غير محدد</Badge>
+                )}
+              </div>
+
+              {/* التخصص والجهة الصحية وتاريخ التسجيل */}
+              <div className="space-y-1 px-4 pb-4 text-xs text-muted-foreground">
+                {(user.specialty || user.affiliations[0]?.hospital.name || user.hospitalName) && (
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    {user.specialty && (
+                      <span className="flex items-center gap-1">
+                        <Stethoscope className="size-3 shrink-0" />
+                        <span className="truncate" title={user.specialty}>
+                          {user.specialty}
+                        </span>
+                      </span>
+                    )}
+                    {(user.affiliations[0]?.hospital.name || user.hospitalName) && (
+                      <span className="flex items-center gap-1">
+                        <HospitalIcon className="size-3 shrink-0" />
+                        <span
+                          className="truncate"
+                          title={user.affiliations[0]?.hospital.name ?? user.hospitalName ?? ''}
+                        >
+                          {user.affiliations[0]?.hospital.name ?? user.hospitalName}
+                        </span>
+                      </span>
+                    )}
+                  </p>
+                )}
+                <p className="font-semibold">{formatDate(user.createdAt)}</p>
+              </div>
+
+              {/* الإجراء الموجود — تعديل المؤهل */}
+              <div className="mt-auto border-t border-border/50 bg-secondary/30 px-4 py-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5 rounded-lg bg-background"
+                  onClick={() => openEdit(user)}
+                >
+                  <PencilLine className="size-3.5" />
+                  تعديل المؤهل
+                </Button>
+              </div>
+            </article>
+          ))}
         </div>
       )}
 

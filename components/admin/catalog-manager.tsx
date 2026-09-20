@@ -358,19 +358,20 @@ export function DepartmentManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-1.5">
           <Label htmlFor="d-name">اسم القسم الطبي</Label>
           <Input
             id="d-name"
             placeholder="مثال: عناية، طوارئ، رقود، حضانة، قبالة، مختبر"
+            className="h-11 rounded-xl shadow-sm transition-shadow focus-visible:ring-primary/25"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <div className="flex items-end">
+        <div className="sm:pb-0">
           <Button
-            className="gap-2"
+            className="h-11 w-full gap-2 rounded-xl bg-gradient-to-l from-primary to-cyan-600 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-transform hover:scale-[1.02] sm:w-auto"
             disabled={!name.trim() || addMutation.isPending}
             onClick={() => addMutation.mutate()}
           >
@@ -391,9 +392,9 @@ export function DepartmentManager() {
           {departments.map((d) => (
             <span
               key={d.id}
-              className="flex items-center gap-1.5 rounded-full border bg-card py-1.5 pe-1.5 ps-3 text-sm"
+              className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card py-1.5 pe-1.5 ps-3 text-sm shadow-[0_1px_2px_rgba(15,27,78,0.05)] transition-all duration-200 hover:border-primary/40 hover:shadow-[0_8px_18px_-12px_rgba(15,27,78,0.35)]"
             >
-              <Stethoscope className="size-3.5 text-muted-foreground" />
+              <Stethoscope className="size-3.5 shrink-0 text-primary" />
               <span className={d.isActive ? 'font-bold' : 'font-bold text-muted-foreground line-through'}>
                 {d.name}
               </span>
@@ -411,7 +412,7 @@ export function DepartmentManager() {
                 aria-label={d.isActive ? `إخفاء ${d.name}` : `إظهار ${d.name}`}
                 onClick={() => toggleMutation.mutate({ id: d.id, isActive: !d.isActive })}
                 disabled={toggleMutation.isPending}
-                className="rounded-full p-1 text-amber-600 hover:bg-amber-50"
+                className="rounded-full p-1.5 text-amber-600 transition-colors hover:bg-amber-50"
               >
                 {d.isActive ? <X className="size-3.5" /> : <Check className="size-3.5 text-emerald-600" />}
               </button>
@@ -420,7 +421,7 @@ export function DepartmentManager() {
                 aria-label={`حذف ${d.name}`}
                 onClick={() => setPendingDelete(d)}
                 disabled={deleteMutation.isPending}
-                className="rounded-full p-1 text-muted-foreground hover:bg-red-50 hover:text-destructive"
+                className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive"
               >
                 <Trash2 className="size-3.5" />
               </button>

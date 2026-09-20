@@ -67,38 +67,55 @@ export function SpecialtiesManager() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-extrabold">التخصصات الطبية</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Medical Specialties — كتالوج مستقل لمنظومة الأطباء (باطنية، جراحة عامة، أطفال، نساء
-          وولادة...) يُبنى عليه اختيار التخصص في تكليفات الأطباء، ويصرح به الطبيب ضمن تخصصات
-          عمله ليصل التكليف الموجّه إلى أهله
-        </p>
+      {/* الترويسة الطبية الفاخرة — نفس العناصر بهوية تكليفات */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] sm:p-5">
+        <div aria-hidden className="pointer-events-none absolute -top-20 start-4 h-40 w-64 rounded-full bg-primary/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 end-4 h-44 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="relative flex items-start gap-3">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-lg shadow-teal-500/25">
+            <HeartPulse className="size-6" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-black tracking-tight sm:text-2xl">التخصصات الطبية</h1>
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+              Medical Specialties — كتالوج مستقل لمنظومة الأطباء (باطنية، جراحة عامة، أطفال، نساء
+              وولادة...) يُبنى عليه اختيار التخصص في تكليفات الأطباء، ويصرح به الطبيب ضمن تخصصات
+              عمله ليصل التكليف الموجّه إلى أهله
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* بطاقات الإحصاء الحية — تتحدث فورياً مع كل إضافة أو إخفاء */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="flex items-start justify-between p-5">
-              <div>
-                <p className="text-sm text-muted-foreground">{s.label}</p>
-                <p className="mt-1 text-3xl font-extrabold">{s.value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{s.hint}</p>
+          <Card
+            key={s.label}
+            className="relative overflow-hidden rounded-2xl border-border/60 shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-18px_rgba(15,27,78,0.25)]"
+          >
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-muted-foreground">{s.label}</p>
+                  <p className="mt-1.5 text-3xl font-black tracking-tight">{s.value}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">{s.hint}</p>
+                </div>
+                <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${s.tone}`}>
+                  <s.icon className="size-4.5" />
+                </span>
               </div>
-              <span className={`rounded-xl p-2.5 ${s.tone}`}>
-                <s.icon className="size-5" />
-              </span>
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* مدير التخصصات — مع شارة «أطباء مرتبطون» لكل تخصص */}
-      <Card>
+      <Card className="rounded-2xl border-border/60 shadow-[0_1px_3px_rgba(15,27,78,0.05)]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
-            <HeartPulse className="size-4 text-primary" />
+            <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary/15 to-cyan-500/15 text-primary ring-1 ring-primary/10">
+              <HeartPulse className="size-4" />
+            </span>
             إدارة التخصصات الطبية
           </CardTitle>
           <CardDescription>

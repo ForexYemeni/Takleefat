@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, MoreHorizontal, PhoneIcon, Search, UserPlus, UserCog } from 'lucide-react'
+import { Lock, PhoneIcon, Search, UserPlus, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { apiFetcher, apiPost } from '@/lib/api-client'
-import { formatDate, USER_STATUS_LABELS } from '@/lib/utils'
+import { cn, formatDate, USER_STATUS_LABELS } from '@/lib/utils'
 import { createReceiverSchema, type CreateReceiverInput } from '@/lib/validations/user'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { UserActionsMenu } from '@/components/admin/user-actions'
@@ -21,14 +21,6 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -36,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Eye, EyeOff, Hospital, Percent, PhoneCall, ShieldCheck } from 'lucide-react'
+import { ClipboardList, Eye, EyeOff, Hospital, Percent, PhoneCall, ShieldCheck } from 'lucide-react'
 
 interface ReceiverUser {
   id: string
@@ -97,27 +89,40 @@ export default function AdminReceiversPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-extrabold">المستلمون الإداريون</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            إدارة حسابات الجهات المستقبِلة للتكليفات في منصة تكليفات
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative w-full sm:w-56">
-            <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="بحث..."
-              className="ps-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+      {/* الترويسة الطبية الفاخرة — نفس العناصر بهوية تكليفات */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-[0_1px_3px_rgba(15,27,78,0.05)] sm:p-5">
+        <div aria-hidden className="pointer-events-none absolute -top-20 start-4 h-40 w-64 rounded-full bg-primary/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 end-4 h-44 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-cyan-600 text-white shadow-lg shadow-primary/25">
+              <UserCog className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-xl font-black tracking-tight sm:text-2xl">المستلمون الإداريون</h1>
+              <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+                إدارة حسابات الجهات المستقبِلة للتكليفات في منصة تكليفات
+              </p>
+            </div>
           </div>
-          <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">
-            <UserPlus className="size-4" />
-            إضافة مستلم
-          </Button>
+          <div className="flex w-full items-center gap-2.5 lg:w-auto">
+            <div className="relative flex-1 sm:w-56 sm:flex-none">
+              <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="بحث..."
+                className="h-11 rounded-xl border-border/70 bg-background ps-9 shadow-sm transition-shadow focus-visible:ring-primary/25"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className="h-11 shrink-0 gap-2 rounded-xl bg-gradient-to-l from-primary to-cyan-600 px-5 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-transform hover:scale-[1.02]"
+            >
+              <UserPlus className="size-4" />
+              إضافة مستلم
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -127,114 +132,129 @@ export default function AdminReceiversPage() {
           title="لا يوجد مستلمون إداريون"
           description="أضف أول حساب مستلم إداري ليتمكن من استلام التكليفات."
           action={
-            <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className="gap-2 rounded-xl bg-gradient-to-l from-primary to-cyan-600 text-white shadow-lg shadow-primary/25"
+            >
               <UserPlus className="size-4" />
               إضافة مستلم
             </Button>
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-secondary/60 hover:bg-secondary/60">
-                  <TableHead>الاسم</TableHead>
-                  <TableHead className="hidden md:table-cell">الهاتف</TableHead>
-                  <TableHead className="hidden lg:table-cell">الجهة الصحية</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>الحصة والأذونات</TableHead>
-                  <TableHead className="hidden md:table-cell">تكليفات</TableHead>
-                  <TableHead className="hidden md:table-cell">تاريخ الإنشاء</TableHead>
-                  <TableHead className="text-start">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {receivers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-bold">{user.name}</TableCell>
-                    <TableCell className="hidden md:table-cell" dir="ltr">
-                      <span className="text-start">{user.phone}</span>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {user.hospitalName ? (
-                        <Badge variant="outline" className="gap-1">
-                          <Hospital className="size-3" />
-                          {user.hospitalName}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={user.status} labels={USER_STATUS_LABELS} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Badge
-                          variant={user.commissionPercent != null ? 'default' : 'outline'}
-                          className="gap-1"
-                        >
-                          <Percent className="size-3" />
-                          {user.commissionPercent != null
-                            ? `${user.commissionPercent}٪ مخصصة`
-                            : `تلقائي ${autoSharePercent}٪`}
-                        </Badge>
-                        {user.fullProfileAccess && (
-                          <Badge
-                            variant="outline"
-                            className="gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
-                          >
-                            <ShieldCheck className="size-3" />
-                            أذونات كاملة
-                          </Badge>
-                        )}
-                        {user.trustedContactViewer && (
-                          <Badge
-                            variant="outline"
-                            className="gap-1 border-teal-500/40 bg-teal-50 text-teal-700 dark:border-teal-500/40 dark:bg-teal-950/40 dark:text-teal-300"
-                          >
-                            <PhoneCall className="size-3" />
-                            موثوق جداً
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <Badge variant="secondary">{user._count.assignments} تكليف</Badge>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {formatDate(user.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <UserActionsMenu
-                        user={{
-                          ...user,
-                          documentsCount: user._count.documents,
-                          autoSharePercent,
-                        }}
-                        onChanged={() => {
-                          queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-                          queryClient.invalidateQueries({ queryKey: ['stats'] })
-                        }}
-                      >
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setDetailsUserId(user.id)
-                            setDetailsOpen(true)
-                          }}
-                          className="gap-2"
-                        >
-                          <Eye className="size-4" />
-                          عرض البيانات الكاملة
-                        </DropdownMenuItem>
-                      </UserActionsMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {receivers.map((user) => (
+            <article
+              key={user.id}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_3px_rgba(15,27,78,0.05)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_16px_36px_-20px_rgba(15,27,78,0.28)]"
+            >
+              {/* شريط هوية علوي رقيق يتلوّن بحسب حالة الحساب */}
+              <div
+                aria-hidden
+                className={cn(
+                  'h-1 w-full',
+                  user.status === 'APPROVED'
+                    ? 'bg-gradient-to-l from-emerald-500 to-emerald-300'
+                    : user.status === 'PENDING'
+                      ? 'bg-gradient-to-l from-amber-500 to-amber-300'
+                      : user.status === 'REJECTED'
+                        ? 'bg-gradient-to-l from-red-500 to-red-300'
+                        : 'bg-gradient-to-l from-muted-foreground/40 to-muted-foreground/10'
+                )}
+              />
+
+              {/* رأس البطاقة — الهوية + قائمة الإجراءات */}
+              <div className="flex items-start gap-3 p-4 pb-2.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-cyan-500/15 text-primary ring-1 ring-primary/10">
+                  <UserCog className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-[15px] font-extrabold leading-6" title={user.name}>
+                    {user.name}
+                  </h3>
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground" dir="ltr">
+                    <PhoneIcon className="size-3 shrink-0" />
+                    <span className="tracking-wide">{user.phone}</span>
+                  </p>
+                </div>
+                <UserActionsMenu
+                  user={{
+                    ...user,
+                    documentsCount: user._count.documents,
+                    autoSharePercent,
+                  }}
+                  onChanged={() => {
+                    queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+                    queryClient.invalidateQueries({ queryKey: ['stats'] })
+                  }}
+                >
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setDetailsUserId(user.id)
+                      setDetailsOpen(true)
+                    }}
+                    className="gap-2"
+                  >
+                    <Eye className="size-4" />
+                    عرض البيانات الكاملة
+                  </DropdownMenuItem>
+                </UserActionsMenu>
+              </div>
+
+              {/* الحالة والجهة الصحية */}
+              <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2">
+                <StatusBadge status={user.status} labels={USER_STATUS_LABELS} />
+                {user.hospitalName && (
+                  <Badge variant="outline" className="max-w-full gap-1">
+                    <Hospital className="size-3 shrink-0" />
+                    <span className="truncate" title={user.hospitalName}>
+                      {user.hospitalName}
+                    </span>
+                  </Badge>
+                )}
+              </div>
+
+              {/* الحصة والأذونات */}
+              <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4">
+                <Badge
+                  variant={user.commissionPercent != null ? 'default' : 'outline'}
+                  className="gap-1"
+                >
+                  <Percent className="size-3" />
+                  {user.commissionPercent != null
+                    ? `${user.commissionPercent}٪ مخصصة`
+                    : `تلقائي ${autoSharePercent}٪`}
+                </Badge>
+                {user.fullProfileAccess && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+                  >
+                    <ShieldCheck className="size-3" />
+                    أذونات كاملة
+                  </Badge>
+                )}
+                {user.trustedContactViewer && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-teal-500/40 bg-teal-50 text-teal-700 dark:border-teal-500/40 dark:bg-teal-950/40 dark:text-teal-300"
+                  >
+                    <PhoneCall className="size-3" />
+                    موثوق جداً
+                  </Badge>
+                )}
+              </div>
+
+              {/* تذييل البطاقة — التكليفات وتاريخ الإنشاء */}
+              <div className="mt-auto flex items-center justify-between border-t border-border/50 bg-secondary/30 px-4 py-2.5 text-xs text-muted-foreground">
+                <Badge variant="secondary" className="gap-1">
+                  <ClipboardList className="size-3" />
+                  {user._count.assignments} تكليف
+                </Badge>
+                <span className="font-semibold">{formatDate(user.createdAt)}</span>
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
