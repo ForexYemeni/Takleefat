@@ -92,6 +92,10 @@ var TYPE_STYLES = {
   OPPORTUNITY_CANDIDATE_SELECTED:   { color: '#059669', tint: '#E7F6EF', icon: '🎯' },
   OPPORTUNITY_PAYMENT_PENDING:      { color: '#B45309', tint: '#FCF3E3', icon: '💳' },
   OPPORTUNITY_PAYMENT_COMPLETED:    { color: '#059669', tint: '#E7F6EF', icon: '💰' },
+  OPPORTUNITY_PAYMENT_TIMING_SELECTED: { color: '#B45309', tint: '#FCF3E3', icon: '🕐' },
+  OPPORTUNITY_PAYMENT_PROOF_SUBMITTED: { color: '#B45309', tint: '#FCF3E3', icon: '🧾' },
+  OPPORTUNITY_PAYMENT_CONFIRMED:    { color: '#059669', tint: '#E7F6EF', icon: '✅' },
+  OPPORTUNITY_PAYMENT_PROOF_REJECTED: { color: '#DC2626', tint: '#FDECEC', icon: '↩️' },
   OPPORTUNITY_CLOSED:               { color: '#334155', tint: '#EEF2F7', icon: '🔒' }
 };
 

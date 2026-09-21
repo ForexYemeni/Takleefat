@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Banknote,
+  Ban,
   Briefcase,
   CalendarClock,
   CheckCircle2,
@@ -12,6 +13,8 @@ import {
   Clock,
   Coins,
   HeartPulse,
+  Hourglass,
+  ImagePlus,
   Inbox,
   MapPin,
   Search,
@@ -148,6 +151,11 @@ interface MyApplication {
     paymentTimingLabel: string | null
     paymentTimingChosenAt: string | null
     paymentDueAt: string | null
+    // الجولة 71: حالة إثبات الدفع — مرفوع/بانتظار تأكيد الإدارة/مرفوض بسبب
+    paymentProofUrl: string | null
+    paymentProofFileName: string | null
+    paymentProofUploadedAt: string | null
+    paymentProofRejectionNote: string | null
   } | null
 }
 
@@ -752,6 +760,9 @@ function PaymentCard({
     onSuccess: (res) => {
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['forsah-mine'] })
+      // الجولة 71: تفعيل البوابة الإلزامية فوراً بعد اختيار التوقيت —
+      // بيانات حساب الإدارة ثم البطاقة الحاجبة (لا إغلاق إلا برفع الإثبات وتأكيد الإدارة)
+      queryClient.invalidateQueries({ queryKey: ['forsah-payment-gate'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -783,13 +794,39 @@ function PaymentCard({
             {FORSAH_CURRENCY_SYMBOLS[payment.currency] ?? payment.currency}
           </p>
           {payment.paymentTimingLabel ? (
-            <p className="mt-1 text-xs font-bold text-muted-foreground">
-              توقيت السداد المعتمد:{' '}
-              <span className="font-black text-emerald-700 dark:text-emerald-300">
-                {payment.paymentTimingLabel}
-              </span>
-              {payment.paymentDueAt ? ` — يستحق ${formatDate(payment.paymentDueAt)}` : ''}
-            </p>
+            <div className="mt-1 space-y-1.5">
+              <p className="text-xs font-bold text-muted-foreground">
+                توقيت السداد المعتمد:{' '}
+                <span className="font-black text-emerald-700 dark:text-emerald-300">
+                  {payment.paymentTimingLabel}
+                </span>
+                {payment.paymentDueAt ? ` — يستحق ${formatDate(payment.paymentDueAt)}` : ''}
+              </p>
+              {/* الجولة 71: حالة بوابة السداد الإلزامية بعد اختيار التوقيت */}
+              {payment.status === 'PAID' || payment.status === 'COMPLETED' ? (
+                <p className="flex items-center gap-1.5 rounded-xl bg-emerald-100/80 px-3 py-2 text-[11px] font-black text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                  <CheckCircle2 className="size-3.5" />
+                  تأكدت إدارة المنصة استلام الرسوم — سُددت كامل التزاماتك لهذه الفرصة
+                </p>
+              ) : payment.paymentProofUrl ? (
+                <p className="flex items-center gap-1.5 rounded-xl bg-amber-100/80 px-3 py-2 text-[11px] font-black text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  <Hourglass className="size-3.5" />
+                  رُفع إثبات الدفع {payment.paymentProofUploadedAt ? `(${formatDate(payment.paymentProofUploadedAt)})` : ''} — بانتظار تأكيد إدارة المنصة
+                </p>
+              ) : payment.paymentProofRejectionNote ? (
+                <p className="flex items-start gap-1.5 rounded-xl bg-red-100/80 px-3 py-2 text-[11px] font-black text-red-800 dark:bg-red-900/40 dark:text-red-200">
+                  <Ban className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    رُفض إثبات الدفع — السبب: {payment.paymentProofRejectionNote} — أعد الدفع إن لم يصل وارفع إثباتاً جديداً من البطاقة الإلزامية
+                  </span>
+                </p>
+              ) : (
+                <p className="flex items-center gap-1.5 rounded-xl bg-amber-100/80 px-3 py-2 text-[11px] font-black text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  <ImagePlus className="size-3.5" />
+                  البطاقة الإلزامية مفعّلة — سدد المبلغ عبر حساب إدارة المنصة وأرفق إثبات الدفع منها (لا تُغلق إلا بتأكيد الإدارة)
+                </p>
+              )}
+            </div>
           ) : (
             <div className="mt-2.5 space-y-1.5">
               <p className="text-xs font-black text-amber-700 dark:text-amber-300">

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BadgeCheck,
+  Banknote,
   Briefcase,
   Building2,
   ClipboardList,
@@ -49,6 +50,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ForsahBadge, formatSalary } from '@/components/forsah/opportunity-visuals'
+import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { FORSAH_PERMISSIONS, DEFAULT_HR_PERMISSIONS } from '@/lib/forsah/constants'
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -255,6 +257,7 @@ export function ForsahAdminManager() {
           <TabsTrigger value="opportunities" className="gap-1 text-xs"><Briefcase className="size-3.5" />الفرص</TabsTrigger>
           <TabsTrigger value="hr" className="gap-1 text-xs"><UserCog className="size-3.5" />الموارد البشرية</TabsTrigger>
           <TabsTrigger value="fees" className="gap-1 text-xs"><BadgeCheck className="size-3.5" />الرسوم والعمولات</TabsTrigger>
+          <TabsTrigger value="payments" className="gap-1 text-xs"><Banknote className="size-3.5" />تأكيدات الدفع</TabsTrigger>
           <TabsTrigger value="audit" className="gap-1 text-xs"><ScrollText className="size-3.5" />سجل التدقيق</TabsTrigger>
         </TabsList>
 
@@ -359,6 +362,11 @@ export function ForsahAdminManager() {
         {/* ---------- الرسوم والعمولات ---------- */}
         <TabsContent value="fees">
           {data ? <FeesForm settings={data.feeSettings} onSaved={invalidate} /> : <Skeleton className="h-72 rounded-3xl" />}
+        </TabsContent>
+
+        {/* ---------- الجولة 71: تأكيدات دفع رسوم «فرصة» ---------- */}
+        <TabsContent value="payments" className="space-y-3">
+          <PaymentConfirmationsTab />
         </TabsContent>
 
         {/* ---------- سجل التدقيق ---------- */}
@@ -1007,6 +1015,10 @@ const AUDIT_LABELS: Record<string, string> = {
   CANDIDATE_SELECTED: 'اختار مرشحاً',
   TRANSACTION_CREATED: 'أُنشئت عملية مالية',
   TRANSACTION_UPDATED: 'عُدّلت عملية مالية',
+  PAYMENT_TIMING_SELECTED: 'اختار المرشح توقيت سداد الرسوم',
+  PAYMENT_PROOF_SUBMITTED: 'رفع المرشح إثبات دفع الرسوم',
+  PAYMENT_CONFIRMED: 'أكدت الإدارة وصول دفعة الرسوم',
+  PAYMENT_PROOF_REJECTED: 'رفضت الإدارة إثبات دفع الرسوم',
   FEE_SETTINGS_CHANGED: 'غيّر رسوم الفرصة',
   HR_CREATED: 'أنشأ حساب HR',
   HR_UPDATED: 'عدّل حساب HR',
@@ -1041,4 +1053,249 @@ interface AuditRow {
   entityType: string
   createdAt: string
   actor: { name: string } | null
+}
+
+/* ---------------- الجولة 71: تأكيدات دفع رسوم «فرصة» ---------------- */
+
+interface PaymentConfirmationItem {
+  id: string
+  opportunity: { id: string; title: string; number: number }
+  feeAmount: number
+  currency: string
+  status: string
+  statusLabel: string
+  paymentTimingLabel: string | null
+  paymentProofUrl: string | null
+  paymentProofFileName: string | null
+  paymentProofUploadedAt: string | null
+  candidate: { id: string; name: string; phone: string } | null
+}
+
+function PaymentConfirmationsTab() {
+  const queryClient = useQueryClient()
+  const [viewProof, setViewProof] = useState<ViewableDocument | null>(null)
+  const [confirmItem, setConfirmItem] = useState<PaymentConfirmationItem | null>(null)
+  const [rejectItem, setRejectItem] = useState<PaymentConfirmationItem | null>(null)
+  const [rejectNote, setRejectNote] = useState('')
+
+  const list = useQuery({
+    queryKey: ['forsah-payment-confirmations'],
+    queryFn: () =>
+      apiFetcher<{ items: PaymentConfirmationItem[]; total: number }>(
+        '/api/forsah/payment-confirmations'
+      ),
+    refetchInterval: 60_000,
+    staleTime: 15_000,
+    retry: 1,
+  })
+
+  const decide = useMutation({
+    mutationFn: ({
+      transactionId,
+      action,
+      note,
+    }: {
+      transactionId: string
+      action: 'CONFIRM' | 'REJECT'
+      note?: string
+    }) => apiPatch<{ message: string }>('/api/forsah/payment-confirmations', { transactionId, action, note }),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      setConfirmItem(null)
+      setRejectItem(null)
+      setRejectNote('')
+      queryClient.invalidateQueries({ queryKey: ['forsah-payment-confirmations'] })
+      queryClient.invalidateQueries({ queryKey: ['forsah-admin'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const items = list.data?.items ?? []
+
+  if (list.isLoading) {
+    return <Skeleton className="h-64 rounded-3xl" />
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed bg-card/60 px-6 py-14 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-950/50">
+          <Banknote className="size-7 text-emerald-600 dark:text-emerald-300" />
+        </span>
+        <p className="text-sm font-black">لا توجد إثباتات بانتظار التأكيد</p>
+        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+          عند رفع أي مرشح إثبات دفع رسوم «فرصة» يظهر هنا فوراً — راجع الصورة وأكد وصول
+          الدفعة ليرفع عنه المرشح بطاقة السداد الإلزامية، أو ارفضه بسبب معلن لإتاحة إعادة الرفع.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="rounded-2xl bg-muted/60 px-4 py-2.5 text-xs font-bold text-muted-foreground">
+        الإثباتات المرفوعة من المرشحين المختارين — «تأكيد الدفعة» يسدد العملية ويرفع بطاقة
+        السداد الحاجبة عن المرشح فوراً، و«رفض الإثبات» يمسح الصورة ويترك البوابة مفعلة بإتاحة إعادة الرفع.
+      </p>
+      {items.map((item) => (
+        <div key={item.id} className="rounded-3xl border bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black">
+                #{item.opportunity.number} — {item.opportunity.title}
+              </p>
+              <p className="mt-0.5 text-xs font-bold text-muted-foreground">
+                المرشح: {item.candidate?.name ?? '—'}
+                {item.candidate?.phone ? ` — ${item.candidate.phone}` : ''}
+              </p>
+              <p className="mt-0.5 text-xs font-bold text-muted-foreground">
+                المبلغ:{' '}
+                <span className="font-black text-foreground" dir="ltr">
+                  {item.feeAmount.toLocaleString('ar-YE')} {item.currency}
+                </span>
+                {item.paymentTimingLabel ? ` — التوقيت: ${item.paymentTimingLabel}` : ''}
+              </p>
+              {item.paymentProofUploadedAt && (
+                <p className="mt-0.5 text-[10px] font-bold text-muted-foreground">
+                  رُفع الإثبات: {formatDate(item.paymentProofUploadedAt)}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setViewProof({
+                    fileUrl: item.paymentProofUrl!,
+                    fileName: item.paymentProofFileName ?? 'إثبات الدفع',
+                    title: `إثبات دفع — ${item.opportunity.title}`,
+                    mimeType: 'image/*',
+                  })
+                }
+                className="flex items-center gap-2 rounded-xl border p-1.5 transition-colors hover:bg-accent"
+                title="عرض صورة الإثبات بالتكبير"
+              >
+                <img
+                  src={item.paymentProofUrl!}
+                  alt="إثبات الدفع"
+                  className="size-14 rounded-lg border object-cover"
+                />
+              </button>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  size="sm"
+                  className="gap-1 rounded-xl bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                  disabled={decide.isPending}
+                  onClick={() => setConfirmItem(item)}
+                >
+                  <ShieldCheck className="size-3.5" />
+                  تأكيد الدفعة
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 rounded-xl border-red-300 text-xs text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                  disabled={decide.isPending}
+                  onClick={() => {
+                    setRejectNote('')
+                    setRejectItem(item)
+                  }}
+                >
+                  <XCircle className="size-3.5" />
+                  رفض الإثبات
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {/* عارض صورة الإثبات */}
+      <DocumentViewer
+        document={viewProof}
+        open={!!viewProof}
+        onOpenChange={(open) => !open && setViewProof(null)}
+      />
+
+      {/* حوار تأكيد الدفعة */}
+      <Dialog open={!!confirmItem} onOpenChange={(open) => !open && setConfirmItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>تأكيد وصول دفعة رسوم الخدمة</DialogTitle>
+            <DialogDescription>
+              {confirmItem && (
+                <>
+                  تأكيد استلام{' '}
+                  <span className="font-black" dir="ltr">
+                    {confirmItem.feeAmount.toLocaleString('ar-YE')} {confirmItem.currency}
+                  </span>{' '}
+                  من المرشح «{confirmItem.candidate?.name ?? '—'}» لفرصة «{confirmItem.opportunity.title}».
+                  <br />
+                  تُسوّى العملية («مسددة») ويُشعر المرشح ويرتفع عنه قفل السداد فوراً.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={decide.isPending}
+              onClick={() =>
+                confirmItem && decide.mutate({ transactionId: confirmItem.id, action: 'CONFIRM' })
+              }
+            >
+              <ShieldCheck className="size-4" />
+              {decide.isPending ? 'جارٍ التأكيد...' : 'تأكيد الاستلام'}
+            </Button>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmItem(null)}>
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* حوار رفض الإثبات — السبب إلزامي ويظهر للمرشح */}
+      <Dialog open={!!rejectItem} onOpenChange={(open) => !open && setRejectItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>رفض إثبات الدفع</DialogTitle>
+            <DialogDescription>
+              {rejectItem && (
+                <>
+                  رفض إثبات المرشح «{rejectItem.candidate?.name ?? '—'}» لفرصة «{rejectItem.opportunity.title}».
+                  <br />
+                  اذكر السبب بوضوح — يظهر للمرشح ويتيح له إعادة الرفع، وتبقى بطاقة السداد الإلزامية مفعلة عنده.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="reject-note">سبب الرفض (إلزامي)</Label>
+            <Input
+              id="reject-note"
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              placeholder="مثال: الصورة غير واضحة / المبلغ غير مطابق / الحوالة غير واصلة"
+              maxLength={300}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1 rounded-xl bg-red-600 text-white hover:bg-red-700"
+              disabled={decide.isPending || !rejectNote.trim()}
+              onClick={() =>
+                rejectItem && decide.mutate({ transactionId: rejectItem.id, action: 'REJECT', note: rejectNote.trim() })
+              }
+            >
+              <XCircle className="size-4" />
+              {decide.isPending ? 'جارٍ الرفض...' : 'رفض الإثبات'}
+            </Button>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setRejectItem(null)}>
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }

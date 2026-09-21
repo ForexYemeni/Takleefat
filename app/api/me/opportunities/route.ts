@@ -53,6 +53,10 @@ export async function GET(_req: NextRequest) {
             paymentTiming: true,
             paymentTimingChosenAt: true,
             paymentDueAt: true,
+            paymentProofUrl: true,
+            paymentProofFileName: true,
+            paymentProofUploadedAt: true,
+            paymentProofRejectionNote: true,
           },
         })
       : []
@@ -97,6 +101,11 @@ export async function GET(_req: NextRequest) {
             paymentTimingLabel: tx.paymentTiming ? OPPORTUNITY_PAYMENT_TIMING_LABELS[tx.paymentTiming] : null,
             paymentTimingChosenAt: tx.paymentTimingChosenAt,
             paymentDueAt: tx.paymentDueAt,
+            // الجولة 71: حالة إثبات الدفع في «فرصي» — مرفوع/بانتظار التأكيد/مرفوض بسبب
+            paymentProofUrl: tx.paymentProofUrl,
+            paymentProofFileName: tx.paymentProofFileName,
+            paymentProofUploadedAt: tx.paymentProofUploadedAt,
+            paymentProofRejectionNote: tx.paymentProofRejectionNote,
           }
         })(),
         interviews: a.interviews.map((i) => ({

@@ -73,7 +73,29 @@ export async function GET(
     })
     const ownerId = document?.userId
 
-    if (session.user.role !== 'ADMIN' && ownerId !== session.user.id) {
+    // ---------- الجولة 71 — صور إثبات دفع رسوم «فرصة» ----------
+    // صاحبها (المرشح صاحب الطلب المختار) والإدارة حصراً — بلا أي منح تلقائي
+    // لغيرهما، ولا تخضع لطلبات الوصول (المسار الإداري الوحيد: تأكيد/رفض الإثبات).
+    const proofTx = document
+      ? null
+      : await db.opportunityTransaction.findFirst({
+          where: { paymentProofUrl: { contains: blobId } },
+          select: { selectionId: true },
+        })
+    const proofOwnerId = proofTx
+      ? (
+          await db.opportunitySelection.findUnique({
+            where: { id: proofTx.selectionId },
+            select: { candidateId: true },
+          })
+        )?.candidateId ?? null
+      : null
+
+    if (
+      session.user.role !== 'ADMIN' &&
+      ownerId !== session.user.id &&
+      proofOwnerId !== session.user.id
+    ) {
       // الجولة 61 — بدل المنح التلقائي لصاحب التكليف المُعلن (الجولات 45-46-60):
       // محتوى مستندات الكادر يُفتح لغير صاحبها حصراً بمنح إداري صريح قائم
       // (طلب رؤية بسبب معلن أقرّته الإدارة — والسحب الإداري يسري فوراً

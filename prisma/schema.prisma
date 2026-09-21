@@ -207,6 +207,12 @@ enum NotificationType {
   OPPORTUNITY_PAYMENT_COMPLETED
   /// الجولة 70 — اختار المرشح توقيت سداد رسوم الخدمة
   OPPORTUNITY_PAYMENT_TIMING_SELECTED
+  /// الجولة 71 — رفع المرشح إثبات دفع رسوم الخدمة
+  OPPORTUNITY_PAYMENT_PROOF_SUBMITTED
+  /// الجولة 71 — أكدت الإدارة وصول دفعة رسوم الخدمة
+  OPPORTUNITY_PAYMENT_CONFIRMED
+  /// الجولة 71 — رفضت الإدارة إثبات دفع رسوم الخدمة
+  OPPORTUNITY_PAYMENT_PROOF_REJECTED
   OPPORTUNITY_CLOSED
 }
 
@@ -1223,6 +1229,13 @@ model OpportunityTransaction {
   paymentTimingChosenAt DateTime?
   /// موعد الاستحقاق التقديري المحسوب من التوقيت المختار — null = مرن (خلال أول 10 أيام من الدوام)
   paymentDueAt          DateTime?
+  /// الجولة 71 — إثبات دفع الرسوم المرفوع من المرشح (صورة مخزنة في قاعدة البيانات) — null = لم يرفع بعد
+  paymentProofUrl         String?
+  paymentProofFileName    String?
+  paymentProofUploadedAt  DateTime?
+  /// الجولة 71 — رفض الإدارة للإثبات: تُمسح حقول الإثبات وتُسجّل هذه الحقول للشفافية ويمكن إعادة الرفع
+  paymentProofRejectedAt    DateTime?
+  paymentProofRejectionNote String?
   /// مفتاح منع التكرار — فريد على مستوى القاعدة
   idempotencyKey String                     @unique
   note          String?

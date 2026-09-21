@@ -188,6 +188,10 @@ export const FORSAH_AUDIT_ACTIONS = {
   TRANSACTION_UPDATED: 'عُدّلت عملية مالية',
   // الجولة 70: اختيار المرشح توقيت سداد رسومه بعد الاختيار — شفافية كاملة
   PAYMENT_TIMING_SELECTED: 'اختار المرشح توقيت سداد الرسوم',
+  // الجولة 71: بوابة سداد رسوم «فرصة» الإلزامية — إثبات المرشح وتأكيد الإدارة
+  PAYMENT_PROOF_SUBMITTED: 'رفع المرشح إثبات دفع الرسوم',
+  PAYMENT_CONFIRMED: 'أكدت الإدارة وصول دفعة الرسوم',
+  PAYMENT_PROOF_REJECTED: 'رفضت الإدارة إثبات دفع الرسوم',
   FEE_SETTINGS_CHANGED: 'غيّر رسوم الفرصة',
   HR_CREATED: 'أنشأ الإدارة حساب موارد بشرية',
   HR_UPDATED: 'عدّلت الإدارة حساب موارد بشرية',
