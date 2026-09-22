@@ -13,19 +13,18 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
-  Command,
   FileCheck2,
-  FileText,
+  Gauge,
   Gift,
+  House,
   Inbox,
-  LayoutDashboard,
-  MailPlus,
   Plus,
   Send,
   Sparkles,
   Stethoscope,
   UserRound,
   Users,
+  UsersRound,
   Wallet,
   XCircle,
 } from 'lucide-react'
@@ -43,17 +42,20 @@ import {
 } from '@/components/ui/drawer'
 
 /**
- * شريط التنقل الذكي العائم — الجولة 58 · تصميم مطوَّر — الجولة 72
+ * شريط التنقل الذكي العائم — الجولة 58 · تصميم مطوَّر — الجولة 73
  * =====================================================
  * زجاج سائل عائم فوق المحتوى مع مسافة عن الحافة السفلية:
  * - يتغير حسب الدور (عناصر لا يحتاجها المستخدم لا تُعرض إطلاقاً)
- * - زر مركزي دائري مرتفع (FAB) يتغير وظيفته حسب الدور:
+ * - زر مركزي مرتفع (Squircle) يتغير وظيفته حسب الدور:
  *     كادر/طبيب → «تكلي AI» (لوحة ذكية بالمطابقات الحقيقية)
- *     مستلم إداري → «إنشاء تكليف» / مشرف → «إدارة الأطباء»
- *     مدير → «غرفة العمليات» / موارد بشرية → «نشر فرصة»
- * - الجولة 72: كبسولة نشاط بنمط Material 3 خلف أيقونة التبويب
- *   + نقطة مؤشر متوهجة تنزلق بين التبويبات + شارات بحلقة تباين
- *   + دخول متدرج للتبويبات + عمق ثلاثي الطبقات للزجاج + هالة ضوئية للزر المركزي
+ *     مستلم إداري → «إنشاء تكليف» / مشرف → «الأطباء»
+ *     مدير → «العمليات» / موارد بشرية → «نشر فرصة»
+ * - الجولة 73 (مراجعة احترافية):
+ *   · أسماء دائمة واضحة 11px تحت كل أيقونة (النشط أثقل وزناً بلون الدور)
+ *   · أيقونات دلالية احترافية: House للرئيسية + UsersRound لإدارة الكادر
+ *     + Gauge للعمليات + ClipboardList الموحدة لتبويبات التكليفات
+ *   · كبسولة نشاط هادئة (بلا نقطة متوهجة منزلقة)
+ *   · زر مركزي بلا هالة ضوئية ولا نبض — طابع مؤسسي هادئ
  * - شارات حقيقية من البيانات (إشعارات غير مقروءة + تكليفات جديدة/بانتظارك)
  * - على الشاشات الكبيرة يبقى الشريط الجانبي وحده (hidden lg:مخفي)
  */
@@ -63,7 +65,7 @@ type NavRole = RoleKey
 interface NavTab {
   key: string
   label: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   href?: string
   kind: 'link' | 'notifications'
   badge?: 'notifications' | 'assignments'
@@ -72,7 +74,7 @@ interface NavTab {
 interface CenterAction {
   kind: 'ai' | 'create' | 'link'
   label: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   href?: string
   /** جمهور الإنشاء — للمستلم NURSE وللمشرف DOCTOR */
   audience?: 'NURSE' | 'DOCTOR'
@@ -83,7 +85,7 @@ function roleConfig(role: NavRole): { tabs: NavTab[]; center: CenterAction } {
     case 'NURSE':
       return {
         tabs: [
-          { key: 'home', label: 'الرئيسية', icon: LayoutDashboard, href: '/nurse', kind: 'link' },
+          { key: 'home', label: 'الرئيسية', icon: House, href: '/nurse', kind: 'link' },
           { key: 'assignments', label: 'التكليفات', icon: ClipboardList, href: '/nurse/assignments', kind: 'link', badge: 'assignments' },
           { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
           { key: 'profile', label: 'الملف', icon: UserRound, href: '/nurse/profile', kind: 'link' },
@@ -93,7 +95,7 @@ function roleConfig(role: NavRole): { tabs: NavTab[]; center: CenterAction } {
     case 'DOCTOR':
       return {
         tabs: [
-          { key: 'home', label: 'الرئيسية', icon: LayoutDashboard, href: '/doctor', kind: 'link' },
+          { key: 'home', label: 'الرئيسية', icon: House, href: '/doctor', kind: 'link' },
           { key: 'assignments', label: 'التكليفات', icon: ClipboardList, href: '/doctor/assignments', kind: 'link', badge: 'assignments' },
           { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
           { key: 'profile', label: 'الملف', icon: UserRound, href: '/doctor/profile', kind: 'link' },
@@ -103,8 +105,8 @@ function roleConfig(role: NavRole): { tabs: NavTab[]; center: CenterAction } {
     case 'RECEIVER':
       return {
         tabs: [
-          { key: 'home', label: 'الرئيسية', icon: LayoutDashboard, href: '/receiver', kind: 'link' },
-          { key: 'assignments', label: 'التكليفات', icon: Inbox, href: '/receiver/assignments', kind: 'link', badge: 'assignments' },
+          { key: 'home', label: 'الرئيسية', icon: House, href: '/receiver', kind: 'link' },
+          { key: 'assignments', label: 'التكليفات', icon: ClipboardList, href: '/receiver/assignments', kind: 'link', badge: 'assignments' },
           { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
           { key: 'profile', label: 'الملف', icon: UserRound, href: '/receiver/profile', kind: 'link' },
         ],
@@ -113,30 +115,30 @@ function roleConfig(role: NavRole): { tabs: NavTab[]; center: CenterAction } {
     case 'DOCTOR_SUPERVISOR':
       return {
         tabs: [
-          { key: 'home', label: 'الرئيسية', icon: LayoutDashboard, href: '/supervisor', kind: 'link' },
-          { key: 'assignments', label: 'التكليفات', icon: Inbox, href: '/supervisor/assignments', kind: 'link', badge: 'assignments' },
+          { key: 'home', label: 'الرئيسية', icon: House, href: '/supervisor', kind: 'link' },
+          { key: 'assignments', label: 'التكليفات', icon: ClipboardList, href: '/supervisor/assignments', kind: 'link', badge: 'assignments' },
           { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
           { key: 'profile', label: 'الملف', icon: UserRound, href: '/supervisor/profile', kind: 'link' },
         ],
-        center: { kind: 'link', label: 'إدارة الأطباء', icon: Stethoscope, href: '/supervisor/staff' },
+        center: { kind: 'link', label: 'الأطباء', icon: Stethoscope, href: '/supervisor/staff' },
       }
     case 'ADMIN':
     default:
       return {
         tabs: [
           { key: 'assignments', label: 'التكليفات', icon: ClipboardList, href: '/admin/assignments', kind: 'link', badge: 'assignments' },
-          { key: 'manage', label: 'الإدارة', icon: UserRound, href: '/admin/nurses', kind: 'link' },
+          { key: 'manage', label: 'الكادر', icon: UsersRound, href: '/admin/nurses', kind: 'link' },
           { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
           { key: 'profile', label: 'الملف', icon: UserRound, href: '/admin/profile', kind: 'link' },
         ],
-        center: { kind: 'link', label: 'غرفة العمليات', icon: Command, href: '/admin' },
+        center: { kind: 'link', label: 'العمليات', icon: Gauge, href: '/admin' },
       }
     case 'HR':
       // الجولة 66 — لوحة الموارد البشرية (ميزة «فرصة»): إضافي بحت كلياً —
       // لا مساس بحالات الأدوار القائمة، والشارة على الفرص = متقدمون بانتظار المراجعة
       return {
         tabs: [
-          { key: 'home', label: 'الرئيسية', icon: LayoutDashboard, href: '/hr', kind: 'link' },
+          { key: 'home', label: 'الرئيسية', icon: House, href: '/hr', kind: 'link' },
           { key: 'opportunities', label: 'الفرص', icon: Briefcase, href: '/hr/opportunities', kind: 'link', badge: 'assignments' },
           { key: 'notifications', label: 'الإشعارات', icon: Bell, kind: 'notifications', badge: 'notifications' },
           { key: 'profile', label: 'الملف', icon: UserRound, href: '/hr/profile', kind: 'link' },
@@ -188,7 +190,7 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
       // وتبقى الشارة على الرئيسية إن وُجد متقدمون (البيانات محفوظة)
       return {
         tabs: baseConfig.tabs.filter((t) => t.key !== 'opportunities'),
-        center: { kind: 'link' as const, label: 'الرئيسية', icon: LayoutDashboard, href: '/hr' },
+        center: { kind: 'link' as const, label: 'الرئيسية', icon: House, href: '/hr' },
       }
     }
     return baseConfig
@@ -250,16 +252,14 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
     return pathname === tab.href || pathname.startsWith(tab.href + '/')
   }
 
-  // الجولة 72 — التبويب: كبسولة M3 خلف الأيقونة + نقطة مؤشر منزلقة + دخول متدرج
+  // الجولة 73 — التبويب: أيقونة دلالية + اسم واضح دائم + كبسولة نشاط هادئة
   const tabButton = (tab: NavTab, index = 0) => {
     const active = isActive(tab)
     const count = badgeFor(tab)
     const Icon = tab.icon
     const inner = (
       <motion.span
-        whileTap={{ scale: 0.88 }}
-        animate={{ y: active ? -1 : 0 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+        whileTap={{ scale: 0.92 }}
         className={cn(
           'relative flex min-w-14 flex-col items-center gap-1 rounded-2xl px-2 pb-1 transition-colors',
           active
@@ -272,30 +272,13 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
           <motion.span
             layoutId="smart-nav-active"
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-            className="absolute inset-x-0.5 top-0 h-8 rounded-2xl"
-            style={{
-              background: 'var(--role-accent-soft)',
-              boxShadow:
-                'inset 0 0 0 1px var(--role-accent-soft), 0 6px 16px -8px var(--role-accent-glow)',
-            }}
+            className="absolute inset-x-1 top-0 h-8 rounded-xl"
+            style={{ background: 'var(--role-accent-soft)' }}
             aria-hidden
           />
         )}
-        {active && (
-          <span className="absolute inset-x-0 -top-1 flex justify-center" aria-hidden>
-            <motion.span
-              layoutId="smart-nav-indicator"
-              transition={{ type: 'spring', stiffness: 480, damping: 36 }}
-              className="h-[3px] w-6 rounded-full"
-              style={{
-                background: 'linear-gradient(90deg, var(--role-accent-glow), var(--role-accent))',
-                boxShadow: '0 0 10px 1px var(--role-accent-glow)',
-              }}
-            />
-          </span>
-        )}
         <span className="relative flex h-8 items-center justify-center">
-          <Icon className={cn('size-5 transition-transform duration-300', active && 'scale-110')} />
+          <Icon className="size-[22px]" strokeWidth={active ? 2.2 : 2} />
           {count > 0 && (
             <span
               key={count}
@@ -308,7 +291,14 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
             </span>
           )}
         </span>
-        <span className="relative text-[10px] font-bold leading-none">{tab.label}</span>
+        <span
+          className={cn(
+            'relative text-[11px] leading-none',
+            active ? 'font-extrabold' : 'font-semibold'
+          )}
+        >
+          {tab.label}
+        </span>
       </motion.span>
     )
     if (tab.kind === 'notifications') {
@@ -338,7 +328,7 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
     )
   }
 
-  // الجولة 72 — الزر المركزي: FAB دائري بأيقونة بارزة + تسمية أسفله + هالة ضوئية + حلقة نشاط
+  // الجولة 73 — الزر المركزي: Squircle هادئ احترافي — بلا هالة ولا نبض، مع حلقة نشاط
   const centerButton = () => {
     const Icon = center.icon
     const centerActive =
@@ -348,21 +338,21 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
         ? pathname === '/admin'
         : pathname === center.href || pathname.startsWith(center.href + '/'))
     const shared = cn(
-      'center-action-pulse relative flex size-14 items-center justify-center rounded-full text-white transition-transform',
-      '-mt-8',
+      'relative flex size-14 items-center justify-center rounded-[18px] text-white transition-transform',
+      '-mt-7',
       centerActive && 'nav-center-active'
     )
     const style = {
-      background: 'linear-gradient(140deg, var(--role-accent-glow), var(--role-accent))',
+      background: 'linear-gradient(150deg, var(--role-accent-glow), var(--role-accent))',
       boxShadow:
-        '0 12px 28px -8px var(--role-accent-glow), 0 4px 12px -4px rgba(14, 27, 78, 0.3), inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 8px rgba(0, 0, 0, 0.1)',
+        '0 10px 22px -10px var(--role-accent-glow), 0 3px 10px -4px rgba(14, 27, 78, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.12)',
     }
     const labelEl = (
-      <span className="mt-1 block max-w-[64px] truncate text-center text-[9px] font-black leading-none text-[var(--role-accent-strong)] dark:text-[var(--role-accent-glow)]">
+      <span className="mt-1 block max-w-[68px] truncate text-center text-[10px] font-bold leading-none text-[var(--role-accent-strong)] dark:text-[var(--role-accent-glow)]">
         {center.label}
       </span>
     )
-    const iconEl = <Icon className="size-6" />
+    const iconEl = <Icon className="size-[22px]" strokeWidth={2.1} />
 
     if (center.kind === 'ai') {
       return (
@@ -421,16 +411,11 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
         <nav className="nav-rise mx-auto w-full max-w-md select-none px-4" aria-label="التنقل الرئيسي">
           <div className="liquid-glass nav-bar-glass flex touch-manipulation items-end justify-around gap-0.5 rounded-[26px] px-3 pb-2 pt-2.5">
             {sideStart.map((tab, i) => tabButton(tab, i))}
-            {/* الجولة 72 — عمود الزر المركزي: هالة ضوئية خلف الـFAB + دخول متدرج */}
+            {/* الجولة 73 — عمود الزر المركزي: دخول متدرج (أُزيلت الهالة الضوئية) */}
             <div
               className="nav-stagger relative flex w-16 shrink-0 flex-col items-center"
               style={{ animationDelay: '100ms' }}
             >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -top-9 left-1/2 size-16 -translate-x-1/2 rounded-full opacity-35 blur-xl"
-                style={{ background: 'var(--role-accent-glow)' }}
-              />
               {centerButton()}
             </div>
             {sideEnd.map((tab, i) => tabButton(tab, i + 3))}

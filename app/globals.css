@@ -584,29 +584,7 @@
   animation: nav-badge-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* نبض هادئ حول الزر المركزي — عمق ثلاثي الطبقات + هالة تتنفس (الجولة 72) */
-@keyframes center-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 12px 28px -8px var(--role-accent-glow, rgba(20, 184, 166, 0.55)),
-      0 4px 12px -4px rgba(14, 27, 78, 0.3),
-      0 0 0 0 var(--role-accent-soft, rgba(20, 184, 166, 0.35)),
-      inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.1);
-  }
-  50% {
-    box-shadow:
-      0 14px 32px -8px var(--role-accent-glow, rgba(20, 184, 166, 0.55)),
-      0 4px 12px -4px rgba(14, 27, 78, 0.3),
-      0 0 0 10px transparent,
-      inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.1);
-  }
-}
-.center-action-pulse {
-  animation: center-pulse 2.8s ease-in-out infinite;
-}
+/* الجولة 73: أُزيل نبض الزر المركزي (center-pulse / .center-action-pulse) — زر مركزي هادئ احترافي بلا نبض */
 
 /* الجولة 72 — حلقة تمييز حول الزر المركزي عندما يكون مساره نشطاً (مستقبلاً/الغرفة/الفرص) */
 .nav-center-active {
@@ -670,7 +648,6 @@
 @media (prefers-reduced-motion: reduce) {
   .nav-rise,
   .nav-badge,
-  .center-action-pulse,
   .cta-rise,
   .status-dot-pulse,
   .nav-stagger,
