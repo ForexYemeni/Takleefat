@@ -43,16 +43,18 @@ import {
 } from '@/components/ui/drawer'
 
 /**
- * شريط التنقل الذكي العائم — الجولة 58
+ * شريط التنقل الذكي العائم — الجولة 58 · تصميم مطوَّر — الجولة 72
  * =====================================================
  * زجاج سائل عائم فوق المحتوى مع مسافة عن الحافة السفلية:
  * - يتغير حسب الدور (عناصر لا يحتاجها المستخدم لا تُعرض إطلاقاً)
- * - زر مركزي مرتفع يتغير وظيفته حسب الدور:
+ * - زر مركزي دائري مرتفع (FAB) يتغير وظيفته حسب الدور:
  *     كادر/طبيب → «تكلي AI» (لوحة ذكية بالمطابقات الحقيقية)
- *     مستلم إداري/مشرف → «إنشاء تكليف» / «إدارة الأطباء»
- *     مدير → «غرفة العمليات»
+ *     مستلم إداري → «إنشاء تكليف» / مشرف → «إدارة الأطباء»
+ *     مدير → «غرفة العمليات» / موارد بشرية → «نشر فرصة»
+ * - الجولة 72: كبسولة نشاط بنمط Material 3 خلف أيقونة التبويب
+ *   + نقطة مؤشر متوهجة تنزلق بين التبويبات + شارات بحلقة تباين
+ *   + دخول متدرج للتبويبات + عمق ثلاثي الطبقات للزجاج + هالة ضوئية للزر المركزي
  * - شارات حقيقية من البيانات (إشعارات غير مقروءة + تكليفات جديدة/بانتظارك)
- * - مؤشر نشط متحرك بنعومة + توهج بلون الدور
  * - على الشاشات الكبيرة يبقى الشريط الجانبي وحده (hidden lg:مخفي)
  */
 
@@ -248,16 +250,21 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
     return pathname === tab.href || pathname.startsWith(tab.href + '/')
   }
 
-  const tabButton = (tab: NavTab) => {
+  // الجولة 72 — التبويب: كبسولة M3 خلف الأيقونة + نقطة مؤشر منزلقة + دخول متدرج
+  const tabButton = (tab: NavTab, index = 0) => {
     const active = isActive(tab)
     const count = badgeFor(tab)
     const Icon = tab.icon
     const inner = (
       <motion.span
-        whileTap={{ scale: 0.86 }}
+        whileTap={{ scale: 0.88 }}
+        animate={{ y: active ? -1 : 0 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
         className={cn(
-          'relative flex min-w-14 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 transition-colors',
-          active ? 'text-[var(--role-accent-strong)] dark:text-[var(--role-accent-glow)]' : 'text-muted-foreground'
+          'relative flex min-w-14 flex-col items-center gap-1 rounded-2xl px-2 pb-1 transition-colors',
+          active
+            ? 'text-[var(--role-accent-strong)] dark:text-[var(--role-accent-glow)]'
+            : 'text-muted-foreground'
         )}
         aria-current={active ? 'page' : undefined}
       >
@@ -265,20 +272,35 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
           <motion.span
             layoutId="smart-nav-active"
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-            className="absolute inset-0 rounded-2xl"
+            className="absolute inset-x-0.5 top-0 h-8 rounded-2xl"
             style={{
               background: 'var(--role-accent-soft)',
-              boxShadow: 'inset 0 0 0 1px var(--role-accent-soft), 0 4px 14px -6px var(--role-accent-glow)',
+              boxShadow:
+                'inset 0 0 0 1px var(--role-accent-soft), 0 6px 16px -8px var(--role-accent-glow)',
             }}
+            aria-hidden
           />
         )}
-        <span className="relative">
-          <Icon className={cn('size-5 transition-transform', active && 'scale-110')} />
+        {active && (
+          <span className="absolute inset-x-0 -top-1 flex justify-center" aria-hidden>
+            <motion.span
+              layoutId="smart-nav-indicator"
+              transition={{ type: 'spring', stiffness: 480, damping: 36 }}
+              className="h-[3px] w-6 rounded-full"
+              style={{
+                background: 'linear-gradient(90deg, var(--role-accent-glow), var(--role-accent))',
+                boxShadow: '0 0 10px 1px var(--role-accent-glow)',
+              }}
+            />
+          </span>
+        )}
+        <span className="relative flex h-8 items-center justify-center">
+          <Icon className={cn('size-5 transition-transform duration-300', active && 'scale-110')} />
           {count > 0 && (
             <span
               key={count}
               className={cn(
-                'nav-badge absolute -top-1.5 -end-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black leading-none text-white shadow-sm',
+                'nav-badge absolute -top-1.5 -end-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black leading-none text-white shadow-md ring-2 ring-white/75 dark:ring-white/15',
                 tab.badge === 'notifications' ? 'bg-red-500' : 'bg-[var(--role-accent)]'
               )}
             >
@@ -296,7 +318,8 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
           type="button"
           onClick={() => setNotifOpen(true)}
           aria-label={`${tab.label}${unreadCount ? ` — ${unreadCount} غير مقروءة` : ''}`}
-          className="flex-1 outline-none focus-visible:ring-2 focus-visible:ring-[var(--role-accent)] rounded-2xl"
+          className="nav-stagger flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--role-accent)]"
+          style={{ animationDelay: `${index * 50}ms` }}
         >
           {inner}
         </button>
@@ -307,66 +330,80 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
         key={tab.key}
         href={tab.href ?? '#'}
         aria-label={tab.label}
-        className="flex-1 outline-none focus-visible:ring-2 focus-visible:ring-[var(--role-accent)] rounded-2xl"
+        className="nav-stagger flex-1 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--role-accent)]"
+        style={{ animationDelay: `${index * 50}ms` }}
       >
         {inner}
       </Link>
     )
   }
 
+  // الجولة 72 — الزر المركزي: FAB دائري بأيقونة بارزة + تسمية أسفله + هالة ضوئية + حلقة نشاط
   const centerButton = () => {
     const Icon = center.icon
+    const centerActive =
+      center.kind === 'link' &&
+      !!center.href &&
+      (center.href === '/admin'
+        ? pathname === '/admin'
+        : pathname === center.href || pathname.startsWith(center.href + '/'))
     const shared = cn(
-      'center-action-pulse flex size-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-white transition-transform',
-      '-mt-8 shadow-lg'
+      'center-action-pulse relative flex size-14 items-center justify-center rounded-full text-white transition-transform',
+      '-mt-8',
+      centerActive && 'nav-center-active'
     )
     const style = {
       background: 'linear-gradient(140deg, var(--role-accent-glow), var(--role-accent))',
-      boxShadow: '0 8px 22px -6px var(--role-accent-glow), inset 0 1px 0 rgba(255,255,255,0.35)',
+      boxShadow:
+        '0 12px 28px -8px var(--role-accent-glow), 0 4px 12px -4px rgba(14, 27, 78, 0.3), inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 8px rgba(0, 0, 0, 0.1)',
     }
-    const labelEl = <span className="text-[9px] font-black leading-none opacity-95">{center.label}</span>
+    const labelEl = (
+      <span className="mt-1 block max-w-[64px] truncate text-center text-[9px] font-black leading-none text-[var(--role-accent-strong)] dark:text-[var(--role-accent-glow)]">
+        {center.label}
+      </span>
+    )
+    const iconEl = <Icon className="size-6" />
 
     if (center.kind === 'ai') {
       return (
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setAiOpen(true)}
-          aria-label={center.label}
-          className={shared}
-          style={style}
-        >
-          <Icon className="size-5" />
+        <>
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.92 }}
+            onClick={() => setAiOpen(true)}
+            aria-label={center.label}
+            className={shared}
+            style={style}
+          >
+            {iconEl}
+          </motion.button>
           {labelEl}
-        </motion.button>
+        </>
       )
     }
     if (center.kind === 'create') {
       return (
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setCreateOpen(true)}
-          aria-label={center.label}
-          className={shared}
-          style={style}
-        >
-          <Icon className="size-5" />
+        <>
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.92 }}
+            onClick={() => setCreateOpen(true)}
+            aria-label={center.label}
+            className={shared}
+            style={style}
+          >
+            {iconEl}
+          </motion.button>
           {labelEl}
-        </motion.button>
+        </>
       )
     }
     return (
-      <motion.div whileTap={{ scale: 0.9 }} className="shrink-0">
-        <Link
-          href={center.href ?? '#'}
-          aria-label={center.label}
-          className={cn(shared, 'block')}
-          style={style}
-        >
-          <Icon className="size-5" />
-          {labelEl}
+      <motion.div whileTap={{ scale: 0.92 }} className="flex w-full flex-col items-center">
+        <Link href={center.href ?? '#'} aria-label={center.label} className={cn(shared, 'block')} style={style}>
+          {iconEl}
         </Link>
+        {labelEl}
       </motion.div>
     )
   }
@@ -381,11 +418,22 @@ export function SmartBottomNav({ role }: { role: NavRole }) {
         className="fixed inset-x-0 bottom-0 z-50 lg:hidden"
         style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom, 0px))' }}
       >
-        <nav className="nav-rise mx-auto w-full max-w-md px-4" aria-label="التنقل الرئيسي">
-          <div className="liquid-glass flex items-end justify-around gap-1 rounded-3xl px-2.5 pt-2 pb-2">
-            {sideStart.map(tabButton)}
-            <div className="w-16 shrink-0">{centerButton()}</div>
-            {sideEnd.map(tabButton)}
+        <nav className="nav-rise mx-auto w-full max-w-md select-none px-4" aria-label="التنقل الرئيسي">
+          <div className="liquid-glass nav-bar-glass flex touch-manipulation items-end justify-around gap-0.5 rounded-[26px] px-3 pb-2 pt-2.5">
+            {sideStart.map((tab, i) => tabButton(tab, i))}
+            {/* الجولة 72 — عمود الزر المركزي: هالة ضوئية خلف الـFAB + دخول متدرج */}
+            <div
+              className="nav-stagger relative flex w-16 shrink-0 flex-col items-center"
+              style={{ animationDelay: '100ms' }}
+            >
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-9 left-1/2 size-16 -translate-x-1/2 rounded-full opacity-35 blur-xl"
+                style={{ background: 'var(--role-accent-glow)' }}
+              />
+              {centerButton()}
+            </div>
+            {sideEnd.map((tab, i) => tabButton(tab, i + 3))}
           </div>
         </nav>
       </div>

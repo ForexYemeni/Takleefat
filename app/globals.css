@@ -536,6 +536,24 @@
   box-shadow: 0 8px 28px -14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* الجولة 72 — عمق مضاعف لشريط التنقل السفلي (يُركّب فوق liquid-glass) */
+.nav-bar-glass {
+  box-shadow:
+    0 22px 55px -18px rgba(14, 27, 78, 0.38),
+    0 8px 20px -10px rgba(14, 27, 78, 0.22),
+    0 2px 6px -2px rgba(14, 27, 78, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.25);
+}
+.dark .nav-bar-glass {
+  box-shadow:
+    0 22px 55px -16px rgba(0, 0, 0, 0.65),
+    0 8px 20px -10px rgba(0, 0, 0, 0.45),
+    0 2px 6px -2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
 /* ---------- 3) حركات شريط التنقل الذكي ---------- */
 @keyframes nav-rise {
   from {
@@ -566,18 +584,49 @@
   animation: nav-badge-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* نبض هادئ حول الزر المركزي — يوحي بالحيوية دون مبالغة */
+/* نبض هادئ حول الزر المركزي — عمق ثلاثي الطبقات + هالة تتنفس (الجولة 72) */
 @keyframes center-pulse {
   0%,
   100% {
-    box-shadow: 0 6px 20px -6px var(--role-accent-glow, rgba(20, 184, 166, 0.55)), 0 0 0 0 var(--role-accent-soft, rgba(20, 184, 166, 0.3));
+    box-shadow:
+      0 12px 28px -8px var(--role-accent-glow, rgba(20, 184, 166, 0.55)),
+      0 4px 12px -4px rgba(14, 27, 78, 0.3),
+      0 0 0 0 var(--role-accent-soft, rgba(20, 184, 166, 0.35)),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.1);
   }
   50% {
-    box-shadow: 0 6px 22px -6px var(--role-accent-glow, rgba(20, 184, 166, 0.55)), 0 0 0 8px transparent;
+    box-shadow:
+      0 14px 32px -8px var(--role-accent-glow, rgba(20, 184, 166, 0.55)),
+      0 4px 12px -4px rgba(14, 27, 78, 0.3),
+      0 0 0 10px transparent,
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.1);
   }
 }
 .center-action-pulse {
   animation: center-pulse 2.8s ease-in-out infinite;
+}
+
+/* الجولة 72 — حلقة تمييز حول الزر المركزي عندما يكون مساره نشطاً (مستقبلاً/الغرفة/الفرص) */
+.nav-center-active {
+  outline: 3px solid var(--role-accent-soft, rgba(20, 184, 166, 0.3));
+  outline-offset: 2px;
+}
+
+/* الجولة 72 — دخول متدرج للتبويبات عند أول ظهور للشريط */
+@keyframes nav-stagger {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.nav-stagger {
+  animation: nav-stagger 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* ---------- 4) شريط CTA الثابت لصفحة التكليف (فوق شريط التنقل) ---------- */
@@ -617,13 +666,14 @@
   animation: ecg-travel 6s linear infinite;
 }
 
-/* احترام تفضيل تقليل الحركة — للجولة 58 بالكامل */
+/* احترام تفضيل تقليل الحركة — للجولة 58 والجولة 72 بالكامل */
 @media (prefers-reduced-motion: reduce) {
   .nav-rise,
   .nav-badge,
   .center-action-pulse,
   .cta-rise,
   .status-dot-pulse,
+  .nav-stagger,
   .assignment-ecg-bright {
     animation: none !important;
   }
