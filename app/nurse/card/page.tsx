@@ -8,6 +8,7 @@ import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import { apiFetcher } from '@/lib/api-client'
 import { ProfessionalCard, type ProfessionalCardProps } from '@/components/nurse/professional-card'
+import { MyCvDialog } from '@/components/shared/my-cv-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -149,12 +150,16 @@ export default function NurseCardPage() {
           </p>
         </div>
         {approved && publicUrl && (
-          <Link href={publicUrl} target="_blank" className="shrink-0">
-            <Button variant="outline" size="sm" className="gap-2">
-              <SquareArrowOutUpRight className="size-4" />
-              فتح الصفحة العامة
-            </Button>
-          </Link>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* الجولة 74: السيرة الذاتية الكاملة لصاحبها — احترافية مع طباعة PDF */}
+            <MyCvDialog approved={approved} />
+            <Link href={publicUrl} target="_blank">
+              <Button variant="outline" size="sm" className="gap-2">
+                <SquareArrowOutUpRight className="size-4" />
+                فتح الصفحة العامة
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -202,7 +207,15 @@ export default function NurseCardPage() {
           جارٍ تحضير البطاقة...
         </div>
       ) : cardProps ? (
-        <ProfessionalCard {...cardProps} />
+        <>
+          <ProfessionalCard {...cardProps} />
+          {/* الجولة 74: السيرة الذاتية متاحة لصاحبها دائماً حتى قبل الاعتماد (معاينة خاصة) */}
+          {!approved && (
+            <div className="flex justify-center">
+              <MyCvDialog approved={approved} />
+            </div>
+          )}
+        </>
       ) : (
         <p className="py-10 text-center text-sm text-muted-foreground">تعذر تحميل بيانات البطاقة</p>
       )}

@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Coins,
   FileCheck2,
+  FilePenLine,
   GraduationCap,
   Headset,
   HeartPulse,
@@ -90,6 +91,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/admin/assignments', label: 'التكليفات', icon: ClipboardList },
       { href: '/admin/documents', label: 'مراجعة المستندات', icon: FileCheck2 },
       { href: '/admin/document-access', label: 'طلبات رؤية المستندات', icon: KeyRound },
+      // الجولة 74 — طلبات تعديل الملف المهني (إضافي بحت)
+      { href: '/admin/profile-edits', label: 'طلبات تعديل الملفات', icon: FilePenLine },
       { href: '/admin/settings', label: 'الرسوم وطرق الدفع', icon: Settings2 },
       { href: '/admin/contact', label: 'التواصل', icon: Headset },
       { href: '/admin/profile', label: 'الملف الشخصي', icon: UserRound },
@@ -158,6 +161,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/hr/opportunities', label: 'الفرص', icon: Briefcase },
       { href: '/hr/applicants', label: 'المتقدمون', icon: Users },
       { href: '/hr/interviews', label: 'المقابلات', icon: CalendarClock },
+      // الجولة 74 — طلبات تعديل الملف المهني (إضافي بحت)
+      { href: '/hr/profile-edits', label: 'طلبات تعديل الملفات', icon: FilePenLine },
       { href: '/hr/financials', label: 'المالية والعمولات', icon: Wallet },
       { href: '/hr/profile', label: 'الملف الشخصي', icon: UserRound },
     ],

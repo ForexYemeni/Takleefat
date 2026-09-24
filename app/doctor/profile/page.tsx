@@ -15,6 +15,7 @@ import { DoctorDepartmentsAlert } from '@/components/shared/departments-complete
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmailAccountCard } from '@/components/shared/email-account-card'
+import { ProfileEditRequestCard } from '@/components/shared/profile-edit-request-card'
 import { ProfilePhotoManager } from '@/components/shared/profile-photo-manager'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -116,6 +117,9 @@ export default function NurseProfilePage() {
 
       {/* الجولة 51: بطاقة البريد الإلكتروني — إضافة/تأكيد/إعدادات الإشعارات (قناة إشعارات رسمية إضافية) */}
       <EmailAccountCard />
+
+      {/* الجولة 74: طلب تعديل الملف المهني — التخصص/المؤهل/سنوات الخبرة بطلب مُراجَع من الإدارة أو الموارد البشرية */}
+      <ProfileEditRequestCard />
 
 
       <Card>

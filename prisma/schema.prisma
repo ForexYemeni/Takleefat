@@ -214,139 +214,195 @@ enum NotificationType {
   /// الجولة 71 — رفضت الإدارة إثبات دفع رسوم الخدمة
   OPPORTUNITY_PAYMENT_PROOF_REJECTED
   OPPORTUNITY_CLOSED
+  // ---------- الجولة 74: طلبات تعديل الملف المهني (إضافي بحت — قيمتان جديدتان فقط) ----------
+  /// أرسل الكادر/الطبيب طلب تعديل ملفه المهني — يُشعَر به الإدارة والموارد البشرية
+  PROFILE_EDIT_REQUESTED
+  /// حُسم طلب تعديل الملف المهني (اعتماد أو رفض) — يُشعَر به صاحب الطلب
+  PROFILE_EDIT_DECIDED
+}
+
+/// حالة طلب تعديل الملف المهني (الجولة 74 — إضافي بحت)
+enum ProfileEditStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ---------- النماذج (Models) ----------
 
 /// المستخدم: مدير النظام / الكادر التمريضي / المستلم الإداري
 model User {
-  id                String     @id @default(cuid())
-  name              String
-  phone             String     @unique
-  password          String
-  role              Role       @default(NURSE)
-  status            UserStatus @default(PENDING)
+  id                      String                  @id @default(cuid())
+  name                    String
+  phone                   String                  @unique
+  password                String
+  role                    Role                    @default(NURSE)
+  status                  UserStatus              @default(PENDING)
   // حقول خاصة بالكادر التمريضي
-  specialty         String?
-  qualification     String?
-  yearsOfExperience Int?
-  gender            Gender?
+  specialty               String?
+  qualification           String?
+  yearsOfExperience       Int?
+  gender                  Gender?
   // ملاحظة الرفض في حال عدم اعتماد الحساب
-  rejectNote        String?
+  rejectNote              String?
   // نِسَب الحصة من قيمة كل تكليف (٪) — للمستلم الإداري ومشرف الأطباء فقط.
   // null = تلقائي: نصف نسبة الإدارة (adminPercentage / 2) — والإدارة قد تخصّصها لكل حساب (0..100)
-  commissionPercent Float?
+  commissionPercent       Float?
   // إذن رؤية البيانات الكاملة (السيرة الذاتية + المستندات + كل البيانات) للكادر/الأطباء —
   // يُفتح من حساب الإدارة حصراً لبعض المستلمين الإداريين ومشرفي الأطباء
-  fullProfileAccess Boolean    @default(false)
+  fullProfileAccess       Boolean                 @default(false)
   // «موثوق جداً» — الجولة 36: إذن رؤية بيانات الاتصال (أرقام الهواتف) لأي كادر تمريضي
   // أو طبيب في أي وقت — حتى بعد إنهاء التكليفات — يُمنح من حساب الإدارة حصراً
-  trustedContactViewer Boolean @default(false)
+  trustedContactViewer    Boolean                 @default(false)
   // ---------- الجولة 60: الصلاحيات المركّبة — إضافي بحت ولا يمس أي بيانات سابقة ----------
   /// أدوار إضافية ممنوحة فوق الدور الأساسي (role يبقى الدور الأساسي دون أي تغيير):
   /// مثال: مستلم إداري (RECEIVER) + صلاحية DOCTOR_SUPERVISOR → يدخل اللوحتين.
   /// قيم مسموحة: NURSE | RECEIVER | DOCTOR | DOCTOR_SUPERVISOR — ADMIN مستثنى نهائياً.
   /// فارغة [] = حساب عادي بدور واحد كما كان — كل الحسابات القائمة تعمل كما هي بلا أي تغيير.
-  extraRoles           String[] @default([])
+  extraRoles              String[]                @default([])
   /// الوضع النشط الحالي للعمل (أي لوحة يستخدم الآن) — null = الدور الأساسي.
   /// يُثبَّت تلقائياً عند دخول أي لوحة يملك صلاحيتها (أساسية أو مركّبة) ويتحقق
   /// في كل جلسة: إن لم يعد ضمن الصلاحيات الفعالة يُتجاهل ويعود للدور الأساسي (تراجع آمن).
-  activeRole           String?
+  activeRole              String?
   // ---------- الجولة 61: صورة البروفايل (الأيقونة) — إضافي بحت ولا يمس أي بيانات سابقة ----------
   /// صورة أيقونة يختارها الكادر من ملفه الشخصي — تظهر للمستلمين الإداريين
   /// ومشرفي الأطباء والإدارة وفي البطاقة المهنية العامة والتقديمات.
   /// null = بلا صورة (تظهر الصورة الرمزية بالحرف الأول كما كان تماماً).
   /// إجبارية للكادر الذكور (NURSE/DOCTOR + gender MALE) واختيارية للإناث —
   /// يُفرض ذلك في الواجهات ومسار الرفع دون أي مساس بالبيانات القائمة.
-  profilePhotoBlobId String?
+  profilePhotoBlobId      String?
   /// الجولة 61: طلبات رؤية المستندات — يطلبها المستلم/المشرف بسبب معلن وتقررها الإدارة وتسحبها متى شاءت
   documentAccessRequested DocumentAccessRequest[] @relation("DocAccessRequester")
   documentAccessReceived  DocumentAccessRequest[] @relation("DocAccessTarget")
   documentAccessReviewed  DocumentAccessRequest[] @relation("DocAccessReviewer")
   // ---------- الجولة 66: ميزة «فرصة» — حقول HR (إضافي بحت، كلها nullable/افتراضية) ----------
   /// المسمى الوظيفي — لحسابات الموارد البشرية (مثال: مدير التوظيف) — null لبقية الأدوار
-  jobTitle String?
+  jobTitle                String?
   /// صلاحيات «فرصة» الممنوحة للحساب (مفاتيح opportunity.*) — فارغة = بلا صلاحيات فرصة
   /// الإدارة تملك كل الصلاحيات دائماً بغض النظر عن هذه القائمة
-  forsahPermissions String[] @default([])
+  forsahPermissions       String[]                @default([])
   /// نسبة عمولة HR من رسوم الفرصة (٪) — تتجاوز الإعداد العام إن عُينت — null = الإعداد العام
   forsahCommissionPercent Float?
   // الجهة الصحية (المستشفى) — يُدخلها المستلم الإداري عند التسجيل
-  hospitalName      String?
+  hospitalName            String?
   // الجولة 44: الجهات الصحية المرتبطة بالمسؤول (المستلم/المشرف) — الجهة
   // الأساسية من hospitalName، والإضافية تُطلب من ملفه وتُعتمد من الإدارة
-  orgLinks          ReceiverOrgLink[] @relation("ReceiverOrgLinks")
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  orgLinks                ReceiverOrgLink[]       @relation("ReceiverOrgLinks")
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
 
-  documents            Document[]
-  assignments          Assignment[]       @relation("NurseAssignments")
-  receivedAssignments  Assignment[]       @relation("ReceiverAssignments")
-  createdAssignments   Assignment[]       @relation("AssignmentCreator")
-  notifications        Notification[]
+  documents                  Document[]
+  assignments                Assignment[]             @relation("NurseAssignments")
+  receivedAssignments        Assignment[]             @relation("ReceiverAssignments")
+  createdAssignments         Assignment[]             @relation("AssignmentCreator")
+  notifications              Notification[]
   // ---------- الجولة 55: الإشعارات الأصلية لتطبيق أندرويد ----------
   // أجهزة الهاتف المرتبطة بالحساب لاستقبال تنبيهات أصلية حتى مع إغلاق التطبيق
-  deviceRegistrations  DeviceRegistration[]
-  assignmentLogs       AssignmentLog[]
-  documentsReviewed    Document[]         @relation("DocumentReviewer")
-  posts                Post[]
-  applications         Application[]
-  applicationsReviewed Application[]      @relation("ApplicationReviewer")
+  deviceRegistrations        DeviceRegistration[]
+  assignmentLogs             AssignmentLog[]
+  documentsReviewed          Document[]               @relation("DocumentReviewer")
+  posts                      Post[]
+  applications               Application[]
+  applicationsReviewed       Application[]            @relation("ApplicationReviewer")
   // أقسام العمل التي يعمل بها الكادر (رقود/طوارئ/عناية/مختبر...) — تعدد أقسام من كتالوج الإدارة
-  workDepartments      WorkDepartment[]   @relation("NurseWorkDepartments")
+  workDepartments            WorkDepartment[]         @relation("NurseWorkDepartments")
   // ---------- الجولة 51: البريد الإلكتروني — قناة إشعارات رسمية إضافية ----------
   // الدخول يبقى هاتف + كلمة مرور حصراً — البريد للإشعارات والتنبيهات والأمان فقط
-  email                     String?
-  emailVerified             Boolean   @default(false)
+  email                      String?
+  emailVerified              Boolean                  @default(false)
   /// رمز التحقق من 6 أرقام — يُخزن مؤقتاً حتى التأكيد ولا يُعاد أبداً في أي استجابة برمجية
-  emailVerificationCode     String?
+  emailVerificationCode      String?
   /// صلاحية رمز التحقق — افتراضياً 15 دقيقة من الإرسال
-  emailVerificationExpires  DateTime?
+  emailVerificationExpires   DateTime?
   /// آخر وقت إرسال رمز — للحد من طلب الرموز المتكرر (60 ثانية بين الطلبات)
-  emailVerificationSentAt   DateTime?
+  emailVerificationSentAt    DateTime?
   /// المفتاح الرئيس لإشعارات البريد — يُفعّل تلقائياً عند تأكيد البريد
-  emailNotificationEnabled  Boolean   @default(true)
+  emailNotificationEnabled   Boolean                  @default(true)
   /// تفضيلات أقسام الإشعارات JSON: {assignments,requests,updates,documents,admin,account,important}
   /// أقسام الأمان (security) مقفلة دائماً ولا تُخزن هنا
-  emailPreferences          String?
+  emailPreferences           String?
   // تخصصات عمل الطبيب — تعدد تخصصات من كتالوج التخصصات الطبية (منظومة الأطباء)
-  workSpecialties      DoctorSpecialty[]  @relation("DoctorWorkSpecialties")
+  workSpecialties            DoctorSpecialty[]        @relation("DoctorWorkSpecialties")
   // شبكة الكوادر: الارتباط المهني + المفضلة + الاستدعاءات
-  affiliations         NurseAffiliation[] @relation("NurseAffiliations")
-  affiliationsReviewed NurseAffiliation[] @relation("AffiliationReviewer")
-  affiliationRequests  NurseAffiliation[] @relation("AffiliationRequester")
-  favoritesGiven       FavoriteNurse[]    @relation("ReceiverFavorites")
-  favoritedBy          FavoriteNurse[]    @relation("NurseFavoritedBy")
-  invitationsReceived  NurseInvitation[]  @relation("InvitedNurse")
-  invitationsSent      NurseInvitation[]  @relation("InvitingReceiver")
+  affiliations               NurseAffiliation[]       @relation("NurseAffiliations")
+  affiliationsReviewed       NurseAffiliation[]       @relation("AffiliationReviewer")
+  affiliationRequests        NurseAffiliation[]       @relation("AffiliationRequester")
+  favoritesGiven             FavoriteNurse[]          @relation("ReceiverFavorites")
+  favoritedBy                FavoriteNurse[]          @relation("NurseFavoritedBy")
+  invitationsReceived        NurseInvitation[]        @relation("InvitedNurse")
+  invitationsSent            NurseInvitation[]        @relation("InvitingReceiver")
   // حقول خاصة بالمستلم الإداري — بيانات السحب (تُحفظ بشكل رئيسي للسحب)
-  walletAddress        String?
-  accountNumber        String?
-  ratingsReceived      NurseRating[]      @relation("RatingNurse")
-  ratingsGiven         NurseRating[]      @relation("RatingReceiver")
-  earnings             ReceiverEarning[]
-  withdrawals          Withdrawal[]
-  pushSubscriptions    PushSubscription[]
+  walletAddress              String?
+  accountNumber              String?
+  ratingsReceived            NurseRating[]            @relation("RatingNurse")
+  ratingsGiven               NurseRating[]            @relation("RatingReceiver")
+  earnings                   ReceiverEarning[]
+  withdrawals                Withdrawal[]
+  pushSubscriptions          PushSubscription[]
   // ---------- الجولة 66: ميزة «فرصة» — علاقات المستخدم (إضافي بحت) ----------
   /// الفرص التي أنشأها حساب HR
-  forsahOpportunitiesCreated Opportunity[]             @relation("OpportunityCreator")
+  forsahOpportunitiesCreated Opportunity[]            @relation("OpportunityCreator")
   /// تقديمات المستخدم على فرص العمل الصحية
   forsahApplications         OpportunityApplication[]
   /// دعوات المقابلة التي أنشأها (HR/الإدارة)
-  forsahInterviewsCreated    OpportunityInterview[]    @relation("OpportunityInterviewCreator")
+  forsahInterviewsCreated    OpportunityInterview[]   @relation("OpportunityInterviewCreator")
   /// دعوات المقابلة الموجهة له كمرشح
-  forsahInterviewsReceived   OpportunityInterview[]    @relation("OpportunityInterviewCandidate")
+  forsahInterviewsReceived   OpportunityInterview[]   @relation("OpportunityInterviewCandidate")
   /// اختيارات الموظفين التي أجراها (HR/الإدارة)
-  forsahSelectionsCreated    OpportunitySelection[]    @relation("OpportunitySelectionCreator")
+  forsahSelectionsCreated    OpportunitySelection[]   @relation("OpportunitySelectionCreator")
   /// الاختيارات الموجهة له كمرشح
-  forsahSelectionsReceived   OpportunitySelection[]    @relation("OpportunitySelectionCandidate")
+  forsahSelectionsReceived   OpportunitySelection[]   @relation("OpportunitySelectionCandidate")
   /// سجلات التدقيق التي نفّذها
-  forsahAuditLogs            OpportunityAuditLog[]     @relation("ForsahAuditActor")
+  forsahAuditLogs            OpportunityAuditLog[]    @relation("ForsahAuditActor")
   /// مشاهدات الملفات المهنية التي أجراها (خصوصية فرصة)
-  forsahViewLogs             OpportunityViewLog[]      @relation("ForsahViewViewer")
+  forsahViewLogs             OpportunityViewLog[]     @relation("ForsahViewViewer")
+  // ---------- الجولة 74: طلبات تعديل الملف المهني (إضافي بحت) ----------
+  /// الطلبات التي أرسلها الكادر/الطبيب لتعديل بياناته المهنية
+  profileEditRequests        ProfileEditRequest[]     @relation("ProfileEditRequester")
+  /// الطلبات التي راجعها (الإدارة أو الموارد البشرية)
+  profileEditsReviewed       ProfileEditRequest[]     @relation("ProfileEditReviewer")
 
   @@index([role, status])
   @@map("users")
+}
+
+/// الجولة 74 — طلب تعديل الملف المهني من الكادر الصحي/الطبيب (إضافي بحت كلياً)
+/// ------------------------------------------------------------------
+/// كان تعديل التخصص/المؤهل/سنوات الخبرة حصراً بيد الإدارة — الآن يطلب الكادر
+/// التعديل بنفسه ويُراجعه الإدارة أو الموارد البشرية: عند الاعتماد تُطبَّق القيم
+/// على حساب صاحب الطلب وتُوثَّق القيم المطبقة داخل الطلب نفسه (شفافية كاملة)،
+/// وعند الرفض تُعرض ملاحظة المراجع على صاحب الطلب. لا يُمس أي سلوك قائم.
+model ProfileEditRequest {
+  id     String            @id @default(cuid())
+  userId String
+  status ProfileEditStatus @default(PENDING)
+
+  // القيم المطلوبة — null = لا طلب تغيير لهذا الحقل (تُرسل من نموذج واحد تحقق واحد على الأقل)
+  requestedSpecialty         String?
+  requestedQualification     String?
+  requestedYearsOfExperience Int?
+
+  // ملاحظة صاحب الطلب (سبب/تفسير — اختياري)
+  note String?
+
+  // القيم المطبقة فعلياً عند الاعتماد — توثيق دائم حتى لو تغيرت بيانات الحساب لاحقاً
+  appliedSpecialty         String?
+  appliedQualification     String?
+  appliedYearsOfExperience Int?
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User  @relation("ProfileEditRequester", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ProfileEditReviewer", fields: [reviewedById], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("profile_edit_requests")
 }
 
 /// مستندات الكادر التمريضي (يُحفظ رابط الملف فقط في قاعدة البيانات)
@@ -518,9 +574,9 @@ model Hospital {
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
 
-  affiliations NurseAffiliation[]
-  posts        Post[]
-  orgLinks     ReceiverOrgLink[] @relation("ReceiverOrgHospitals")
+  affiliations        NurseAffiliation[]
+  posts               Post[]
+  orgLinks            ReceiverOrgLink[]  @relation("ReceiverOrgHospitals")
   // الجولة 66: فرص العمل الصحية المرتبطة بالجهة (ميزة «فرصة» — إضافي بحت)
   forsahOpportunities Opportunity[]
 
@@ -557,7 +613,7 @@ model Department {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  nurses WorkDepartment[] @relation("DepartmentNurses")
+  nurses              WorkDepartment[] @relation("DepartmentNurses")
   // الجولة 66: الفرص المطلوب بها هذا القسم (ميزة «فرصة» — إضافي بحت)
   forsahOpportunities Opportunity[]
 
@@ -589,7 +645,7 @@ model Specialty {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  doctors DoctorSpecialty[] @relation("SpecialtyDoctors")
+  doctors             DoctorSpecialty[] @relation("SpecialtyDoctors")
   // الجولة 66: الفرص المطلوب بها هذا التخصص (ميزة «فرصة» — إضافي بحت)
   forsahOpportunities Opportunity[]
 
@@ -806,24 +862,24 @@ model PushSubscription {
 /// أصلية من التطبيق نفسه (بلا وسيط متصفح) عبر خدمة التنبيهات الأمامية
 /// التي تعمل حتى لو كان التطبيق مغلق تماماً — إضافي بحت ولا يمس أي نظام قائم
 model DeviceRegistration {
-  id       String @id @default(cuid())
+  id              String   @id @default(cuid())
   /// معرف الجهاز الفريد — UUID يولّده التطبيق ويخزنه محلياً
-  deviceId String @unique
+  deviceId        String   @unique
   /// سر التحقق الخاص بالجهاز — يُنشأ على الجهاز ويُطابق عند كل استعلام
-  secret   String
-  userId   String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secret          String
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// موديل الجهاز (للتشخيص والإحصاء)
-  model      String?
+  model           String?
   /// إصدار تطبيق أندرويد المثبت
-  appVersion String?
-  platform   String  @default("android")
+  appVersion      String?
+  platform        String   @default("android")
   /// مؤشر التسليم — لا تُسلّم الإشعارات الأقدم منه (يُدار من مسار poll)
   lastDeliveredAt DateTime @default(now())
   /// غير مفعّل عند تسجيل الخروج أو فصل الجهاز
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([userId])
   @@map("device_registrations")
@@ -1039,74 +1095,74 @@ enum OpportunityPaymentTiming {
 
 /// الفرصة — وظيفة صحية معلنة يديرها حساب HR (أو الإدارة)
 model Opportunity {
-  id             String             @id @default(cuid())
+  id                    String                @id @default(cuid())
   /// الرقم التسلسلي الاحترافي «فرصة رقم N» — يُولَّد تلقائياً
-  number         Int                @default(0)
-  title          String
+  number                Int                   @default(0)
+  title                 String
   /// الجهة الصحية — من كتالوج الجهات الحالي (FK — لا نسخ)
-  hospitalId     String
+  hospitalId            String
   /// نوع الكادر المستهدف — يُعيد استخدام تعداد الجمهور الحالي
-  audience       Audience
+  audience              Audience
   /// التخصص الطبي المطلوب — من كتالوج التخصصات الحالي (FK — لا نسخ) — null = بلا قيد
-  specialtyId    String?
+  specialtyId           String?
   /// القسم الطبي المطلوب — من كتالوج الأقسام الحالي (FK — لا نسخ) — null = بلا قيد
-  departmentId   String?
+  departmentId          String?
   /// المؤهل المطلوب — من كتالوج المؤهلات الحالي (FK — لا نسخ) — null = بلا قيد
-  qualificationId String?
+  qualificationId       String?
   /// قيمة الراتب — null = غير محدد (مع NEGOTIABLE مثلاً)
-  salaryAmount   Int?
-  salaryType     OpportunitySalaryType @default(MONTHLY)
+  salaryAmount          Int?
+  salaryType            OpportunitySalaryType @default(MONTHLY)
   /// عملة الراتب — YER | SAR | USD
-  salaryCurrency String             @default("YER")
+  salaryCurrency        String                @default("YER")
   /// بداية الدوام (HH:mm 24 ساعة)
-  workStartTime  String?
+  workStartTime         String?
   /// نهاية الدوام (HH:mm 24 ساعة)
-  workEndTime    String?
+  workEndTime           String?
   /// عدد الموظفين المطلوبين — يُحترم عند الاختيار
-  positionsNeeded Int               @default(1)
+  positionsNeeded       Int                   @default(1)
   /// الجنس المطلوب — يُعيد استخدام التعداد الحالي
-  gender         Gender             @default(ANY)
+  gender                Gender                @default(ANY)
   /// نظام الإجازات (نص حر — مثال: «جمعة أسبوعياً + إجازة سنوية 21 يوماً»)
-  vacations      String?
+  vacations             String?
   /// النسبة من الفحوصات والإجراءات إن وجدت (٪)
   procedureSharePercent Float?
   /// سنوات الخبرة الدنيا المطلوبة — null = بلا قيد
-  minYearsExperience Int?
+  minYearsExperience    Int?
   /// هل الترخيص المهني الساري شرط للتقديم؟
-  licenseRequired Boolean           @default(false)
+  licenseRequired       Boolean               @default(false)
   /// المستندات المطلوبة — أسماء معروضة على المتقدم (مصطلحات عامة)
-  requiredDocuments String[]        @default([])
+  requiredDocuments     String[]              @default([])
   /// وصف الفرصة
-  description    String?
+  description           String?
   /// المهام والمسؤوليات
-  responsibilities String?
+  responsibilities      String?
   /// المزايا
-  benefits       String?
+  benefits              String?
   /// ملاحظات
-  notes          String?
-  status         OpportunityStatus @default(DRAFT)
+  notes                 String?
+  status                OpportunityStatus     @default(DRAFT)
   /// حساب HR المالك — منشئ الفرصة
-  createdById    String
-  publishedAt    DateTime?
-  pausedAt       DateTime?
+  createdById           String
+  publishedAt           DateTime?
+  pausedAt              DateTime?
   /// من أغلق الفرصة (HR المصرح أو الإدارة)
-  closedAt       DateTime?
-  closedById     String?
+  closedAt              DateTime?
+  closedById            String?
   /// دور مَن أغلق — HR | ADMIN (سجل تدقيق دائم)
-  closedByRole   String?
-  archivedAt     DateTime?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  closedByRole          String?
+  archivedAt            DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
-  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
-  specialty    Specialty?   @relation(fields: [specialtyId], references: [id])
-  department   Department?  @relation(fields: [departmentId], references: [id])
-  qualification Qualification? @relation(fields: [qualificationId], references: [id])
-  createdBy    User         @relation("OpportunityCreator", fields: [createdById], references: [id])
-  applications OpportunityApplication[]
-  interviews   OpportunityInterview[]
-  selections   OpportunitySelection[]
-  transactions OpportunityTransaction[]
+  hospital      Hospital                 @relation(fields: [hospitalId], references: [id])
+  specialty     Specialty?               @relation(fields: [specialtyId], references: [id])
+  department    Department?              @relation(fields: [departmentId], references: [id])
+  qualification Qualification?           @relation(fields: [qualificationId], references: [id])
+  createdBy     User                     @relation("OpportunityCreator", fields: [createdById], references: [id])
+  applications  OpportunityApplication[]
+  interviews    OpportunityInterview[]
+  selections    OpportunitySelection[]
+  transactions  OpportunityTransaction[]
 
   @@index([status])
   @@index([createdById])
@@ -1118,21 +1174,21 @@ model Opportunity {
 /// طلب تقديم كادر/طبيب على فرصة — يرتبط بـ User ID الحالي حصراً
 /// (ممنوع إنشاء حساب أو ملف جديد — البيانات المهنية تُقرأ من الملف القائم)
 model OpportunityApplication {
-  id            String                         @id @default(cuid())
+  id            String                       @id @default(cuid())
   opportunityId String
   userId        String
-  status        OpportunityApplicationStatus   @default(PENDING)
+  status        OpportunityApplicationStatus @default(PENDING)
   /// رسالة التقديم الاختيارية من المتقدم
   coverNote     String?
   /// لقطة JSON لنتيجة Eligibility لحظة التقديم (شفافية تاريخية)
   matchSnapshot String?
   reviewedById  String?
   reviewedAt    DateTime?
-  createdAt     DateTime                       @default(now())
-  updatedAt     DateTime                       @updatedAt
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
 
-  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity            @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   interviews  OpportunityInterview[]
   selection   OpportunitySelection?
 
@@ -1144,27 +1200,27 @@ model OpportunityApplication {
 
 /// دعوة مقابلة لمرشح — HR يرسل دفعة دعوات لعدة متقدمين
 model OpportunityInterview {
-  id             String                       @id @default(cuid())
-  opportunityId  String
-  applicationId  String
+  id            String                       @id @default(cuid())
+  opportunityId String
+  applicationId String
   /// المرشح (معرف تكرار للقراءة السريعة — نفس مستخدم الطلب)
-  candidateId    String
-  scheduledDate  DateTime
+  candidateId   String
+  scheduledDate DateTime
   /// وقت المقابلة HH:mm
-  scheduledTime  String
-  mode           OpportunityInterviewMode    @default(ONSITE)
+  scheduledTime String
+  mode          OpportunityInterviewMode     @default(ONSITE)
   /// مكان المقابلة (حضورية) — مثال: «مبنى الإدارة — الطابق الثاني»
-  location       String?
+  location      String?
   /// العنوان التفصيلي
-  address        String?
+  address       String?
   /// رابط الخريطة إن أمكن
-  mapUrl         String?
-  notes          String?
-  response       OpportunityInterviewResponse @default(PENDING)
-  respondedAt    DateTime?
-  createdById    String
-  createdAt      DateTime                     @default(now())
-  updatedAt      DateTime                     @updatedAt
+  mapUrl        String?
+  notes         String?
+  response      OpportunityInterviewResponse @default(PENDING)
+  respondedAt   DateTime?
+  createdById   String
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
 
   opportunity Opportunity            @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
   application OpportunityApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -1180,14 +1236,14 @@ model OpportunityInterview {
 
 /// اختيار موظف — يُحترم عدد الموظفين المطلوبين ويُقفل بعده حسب حالة الفرصة
 model OpportunitySelection {
-  id             String   @id @default(cuid())
-  opportunityId  String
+  id            String   @id @default(cuid())
+  opportunityId String
   /// واحد لكل طلب تقديم — لا اختيار مكرر إطلاقاً
-  applicationId  String   @unique
-  candidateId    String
-  selectedById   String
-  note           String?
-  createdAt      DateTime @default(now())
+  applicationId String   @unique
+  candidateId   String
+  selectedById  String
+  note          String?
+  createdAt     DateTime @default(now())
 
   opportunity Opportunity            @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
   application OpportunityApplication @relation(fields: [applicationId], references: [id])
@@ -1205,43 +1261,43 @@ model OpportunitySelection {
 /// كل عملية مرتبطة باختيار واحد بمفتاح idempotency فريد يمنع التكرار
 /// (الضغط المزدوج لا ينشئ عمليتين) — الحسابات integer-safe بالهلات
 model OpportunityTransaction {
-  id            String                      @id @default(cuid())
-  opportunityId String
-  selectionId   String                      @unique
+  id                        String                       @id @default(cuid())
+  opportunityId             String
+  selectionId               String                       @unique
   /// الراتب المرجعي لحظة الاحتساب (لقطة تاريخية)
-  baseAmount    Int
-  currency      String                      @default("YER")
-  feeType       OpportunityFeeType          @default(PERCENTAGE)
+  baseAmount                Int
+  currency                  String                       @default("YER")
+  feeType                   OpportunityFeeType           @default(PERCENTAGE)
   /// النسبة المئوية لحظة الاحتساب (لقطة) — لـ PERCENTAGE
-  feePercent    Float?
+  feePercent                Float?
   /// إجمالي رسوم الإدارة المحتسبة
-  feeAmount     Int
+  feeAmount                 Int
   /// نسبة عمولة HR لحظة الاحتساب (لقطة)
-  hrCommissionPercent Float
+  hrCommissionPercent       Float
   /// مستحق HR
-  hrCommissionAmount Int
+  hrCommissionAmount        Int
   /// مستحق الإدارة (feeAmount - hrCommissionAmount)
-  adminAmount   Int
-  status        OpportunityTransactionStatus @default(AWAITING_PAYMENT)
+  adminAmount               Int
+  status                    OpportunityTransactionStatus @default(AWAITING_PAYMENT)
   /// الجولة 70 — توقيت السداد الذي اختاره المرشح — null = لم يختر بعد
-  paymentTiming         OpportunityPaymentTiming?
+  paymentTiming             OpportunityPaymentTiming?
   /// لحظة اختيار المرشح للتوقيت
-  paymentTimingChosenAt DateTime?
+  paymentTimingChosenAt     DateTime?
   /// موعد الاستحقاق التقديري المحسوب من التوقيت المختار — null = مرن (خلال أول 10 أيام من الدوام)
-  paymentDueAt          DateTime?
+  paymentDueAt              DateTime?
   /// الجولة 71 — إثبات دفع الرسوم المرفوع من المرشح (صورة مخزنة في قاعدة البيانات) — null = لم يرفع بعد
-  paymentProofUrl         String?
-  paymentProofFileName    String?
-  paymentProofUploadedAt  DateTime?
+  paymentProofUrl           String?
+  paymentProofFileName      String?
+  paymentProofUploadedAt    DateTime?
   /// الجولة 71 — رفض الإدارة للإثبات: تُمسح حقول الإثبات وتُسجّل هذه الحقول للشفافية ويمكن إعادة الرفع
   paymentProofRejectedAt    DateTime?
   paymentProofRejectionNote String?
   /// مفتاح منع التكرار — فريد على مستوى القاعدة
-  idempotencyKey String                     @unique
-  note          String?
-  paidAt        DateTime?
-  createdAt     DateTime                    @default(now())
-  updatedAt     DateTime                    @updatedAt
+  idempotencyKey            String                       @unique
+  note                      String?
+  paidAt                    DateTime?
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
 
   opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
@@ -1287,7 +1343,7 @@ model OpportunityViewLog {
   kind          String
   createdAt     DateTime @default(now())
 
-  viewer User    @relation("ForsahViewViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  viewer User @relation("ForsahViewViewer", fields: [viewerId], references: [id], onDelete: Cascade)
 
   @@index([targetId])
   @@index([viewerId])
@@ -1299,27 +1355,27 @@ model OpportunityViewLog {
 /// لا يضيع أي سجل مالي أو إداري أبداً: قبل حذف الفرصة تُخزَّن لقطة JSON كاملة
 /// (الفرصة + كل الطلبات + المقابلات + الاختيارات + العمليات المالية) هنا قابلة للاسترجاع.
 model OpportunityDeletionArchive {
-  id            String   @id @default(cuid())
+  id                String   @id @default(cuid())
   /// معرف الفرصة المحذوفة — فريد (أرشفة واحدة لكل فرصة)
-  opportunityId String   @unique
+  opportunityId     String   @unique
   /// الرقم التسلسلي والعنوان والجهة لحظة الحذف (عرض سريع بلا تحليل JSON)
-  number        Int
-  title         String
-  hospitalName  String
-  audience      String
-  status        String
-  createdByName String?
+  number            Int
+  title             String
+  hospitalName      String
+  audience          String
+  status            String
+  createdByName     String?
   /// اللقطة الكاملة — JSON نصي مستقل يبقى بعد حذف الفرصة وسجلاتها
-  snapshotJson  String
+  snapshotJson      String
   /// عدادات ما حُذف مع الفرصة (cascade) — للعرض والتدقيق
-  applicationsCount Int    @default(0)
-  interviewsCount   Int    @default(0)
-  selectionsCount   Int    @default(0)
-  transactionsCount Int    @default(0)
+  applicationsCount Int      @default(0)
+  interviewsCount   Int      @default(0)
+  selectionsCount   Int      @default(0)
+  transactionsCount Int      @default(0)
   /// من نفّذ الحذف (الإدارة المنفّذة حصراً)
-  deletedById   String
-  deletedByRole String
-  deletedAt     DateTime @default(now())
+  deletedById       String
+  deletedByRole     String
+  deletedAt         DateTime @default(now())
 
   @@index([deletedAt])
   @@map("opportunity_deletion_archives")

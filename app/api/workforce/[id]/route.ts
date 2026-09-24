@@ -56,7 +56,7 @@ export async function GET(
       }
     }
 
-    const [user, documents, ratingsAgg, recentRatings, assignmentsCount] = await Promise.all([
+    const [user, documents, ratingsAgg, recentRatings, assignmentAgg] = await Promise.all([
       db.user.findUnique({
         where: { id },
         select: {
@@ -126,10 +126,15 @@ export async function GET(
           assignment: { select: { title: true } },
         },
       }),
-      db.assignment.count({ where: { nurseId: id } }),
+      // الجولة 74: إحصاء التكليفات بحالتها (إجمالي + مكتمل) — لسجل دقيق في السيرة والطباعة
+      db.assignment.groupBy({ by: ['status'], where: { nurseId: id }, _count: true }),
     ])
 
     if (!user) return jsonError('الحساب غير موجود', 404)
+
+    const assignmentsCount = assignmentAgg.reduce((s, a) => s + a._count, 0)
+    const completedAssignments =
+      assignmentAgg.find((a) => a.status === 'COMPLETED')?._count ?? 0
 
     // الجولة 34: فتح رقم التواصل حسب قاعدة السداد — الإدارة ترى دائماً
     // الجولة 36: «الموثوق جداً» يرى الرقم دائماً حتى بعد إنهاء التكليفات
@@ -172,6 +177,8 @@ export async function GET(
         workDepartments: user.workDepartments.map((w) => w.department.name),
         workSpecialties: user.workSpecialties.map((w) => w.specialty.name),
         assignmentsCount,
+        // الجولة 74: عدد التكليفات المكتملة فعلياً — للسيرة الذاتية وطباعتها
+        completedAssignments,
         ratings: {
           average: ratingsAgg._avg.overall ? Number(ratingsAgg._avg.overall.toFixed(2)) : null,
           count: ratingsAgg._count,

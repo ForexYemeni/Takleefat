@@ -346,3 +346,52 @@ export const emailSettingsSchema = z.object({
 export type SetEmailInput = z.infer<typeof setEmailSchema>
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>
 export type EmailSettingsInput = z.infer<typeof emailSettingsSchema>
+
+// ---------- الجولة 74: طلبات تعديل الملف المهني (إضافي بحت) ----------
+
+/**
+ * طلب تعديل الملف المهني من الكادر الصحي/الطبيب:
+ * حقل واحد على الأقل إجباري — والقيم الجديدة يجب أن تختلف عن الحالية
+ * (الفرق عن الحالية يتحقق على الخادم حيث تُقرأ بيانات الحساب).
+ * المؤهل يُتحقق منه على الخادم من كتالوج المؤهلات حسب جمهور صاحب الطلب،
+ * والتخصص نص حر بإطار مقيّد (كما في نماذج التسجيل)، والخبرة 0..50 سنة.
+ */
+export const profileEditRequestSchema = z
+  .object({
+    specialty: z
+      .string()
+      .trim()
+      .max(80, 'التخصص طويل جداً — الحد 80 حرفاً')
+      .optional(),
+    qualification: z
+      .string()
+      .trim()
+      .max(80, 'المؤهل طويل جداً — الحد 80 حرفاً')
+      .optional(),
+    yearsOfExperience: z.preprocess(
+      (v) => (v === '' || v === null ? undefined : v),
+      z.coerce
+        .number({ error: 'سنوات الخبرة يجب أن تكون رقماً' })
+        .int('سنوات الخبرة يجب أن تكون رقماً صحيحاً')
+        .min(0, 'سنوات الخبرة غير صحيحة — 0 للمتخرج الجديد')
+        .max(50, 'سنوات الخبرة غير صحيحة — الحد 50 سنة')
+    ).optional(),
+    note: z.string().trim().max(400, 'الملاحظة طويلة جداً — الحد 400 حرف').optional(),
+  })
+  .refine(
+    (d) =>
+      (d.specialty !== undefined && d.specialty !== '') ||
+      (d.qualification !== undefined && d.qualification !== '') ||
+      d.yearsOfExperience !== undefined,
+    { message: 'يجب إدخال قيمة جديدة لحقل واحد على الأقل (التخصص أو المؤهل أو سنوات الخبرة)' }
+  )
+
+export type ProfileEditRequestInput = z.infer<typeof profileEditRequestSchema>
+
+/** قرار المراجعة على طلب تعديل الملف المهني — الإدارة أو الموارد البشرية */
+export const profileEditDecisionSchema = z.object({
+  decision: z.enum(['APPROVED', 'REJECTED'], { error: 'القرار غير صحيح' }),
+  reviewNote: z.string().trim().max(400, 'ملاحظة المراجعة طويلة جداً — الحد 400 حرف').optional(),
+})
+
+export type ProfileEditDecisionInput = z.infer<typeof profileEditDecisionSchema>

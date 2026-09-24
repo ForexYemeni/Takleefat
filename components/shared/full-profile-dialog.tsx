@@ -14,6 +14,7 @@ import {
   Loader2,
   Lock,
   Phone as PhoneIcon,
+  Printer,
   ShieldCheck,
   Star,
   Stethoscope,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { DocumentViewer, type ViewableDocument } from '@/components/shared/document-viewer'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Stars } from '@/components/shared/star-rating'
@@ -28,6 +30,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { StaffPhone } from '@/components/shared/staff-phone'
 import { StaffAvatar } from '@/components/shared/staff-avatar'
 import { DocumentAccessPanel, type DocumentAccessState } from '@/components/shared/document-access-panel'
+import { printCv, type CvData } from '@/lib/cv-print'
 import { AFFILIATION_STATUS_LABELS } from '@/lib/network'
 import { DOCUMENT_TYPE_LABELS, GENDER_LABELS, formatDate, formatDateTime } from '@/lib/utils'
 
@@ -76,6 +79,8 @@ export interface FullProfile {
   workDepartments: string[]
   workSpecialties: string[]
   assignmentsCount: number
+  /** الجولة 74: التكليفات المكتملة فعلياً — للسيرة الذاتية وطباعتها */
+  completedAssignments?: number
   affiliations: Array<{
     status: string
     workYears: number | null
@@ -114,6 +119,47 @@ const STATUS_CV_LABELS = {
   REJECTED: 'مرفوض',
   SUSPENDED: 'موقوف',
 } as const
+
+/**
+ * الجولة 74: تحويل بيانات السيرة الكاملة إلى بنية الطباعة الموحدة (CvData)
+ * لطباعة نسخة PDF احترافية بنفس مولّد سيرة صاحب الحساب — بلا أي بيانات إضافية.
+ */
+function toCvData(profile: FullProfile): CvData {
+  return {
+    name: profile.name,
+    role: profile.role,
+    status: profile.status,
+    gender: profile.gender,
+    specialty: profile.specialty,
+    qualification: profile.qualification,
+    yearsOfExperience: profile.yearsOfExperience,
+    photoUrl: profile.profilePhotoUrl ?? null,
+    memberSince: profile.createdAt,
+    generatedAt: new Date().toISOString(),
+    workDepartments: profile.workDepartments,
+    workSpecialties: profile.workSpecialties,
+    affiliations: profile.affiliations.map((a) => ({
+      status: a.status,
+      statusLabel: AFFILIATION_STATUS_LABELS[a.status] ?? a.status,
+      workYears: a.workYears,
+      createdAt: a.createdAt,
+      hospital: a.hospital,
+    })),
+    ratings: profile.ratings,
+    stats: {
+      totalAssignments: profile.assignmentsCount,
+      completedAssignments: profile.completedAssignments ?? profile.assignmentsCount,
+      completionRate:
+        profile.assignmentsCount > 0 && profile.completedAssignments != null
+          ? Math.round((profile.completedAssignments / profile.assignmentsCount) * 100)
+          : null,
+      totalApplications: 0,
+      acceptanceRate: null,
+      isAvailable: true,
+      busyWith: null,
+    },
+  }
+}
 
 export function FullProfileDialog({
   userId,
@@ -224,6 +270,16 @@ export function FullProfileDialog({
                       <span className="text-xs font-extrabold">{profile.ratings.average}</span>
                     </span>
                   )}
+                  {/* الجولة 74: طباعة السيرة الذاتية PDF — نفس مولّد سيرة صاحب الحساب */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-[11px]"
+                    onClick={() => printCv(toCvData(profile))}
+                  >
+                    <Printer className="size-3.5" />
+                    طباعة السيرة / PDF
+                  </Button>
                 </div>
               </div>
             </div>

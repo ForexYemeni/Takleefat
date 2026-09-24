@@ -122,6 +122,9 @@ const TYPE_CATEGORY_MAP: Record<NotificationType, EmailCategory> = {
   OPPORTUNITY_PAYMENT_CONFIRMED: 'important',
   OPPORTUNITY_PAYMENT_PROOF_REJECTED: 'important',
   OPPORTUNITY_CLOSED: 'important',
+  // ---------- الجولة 74: طلبات تعديل الملف المهني (إضافي بحت) ----------
+  PROFILE_EDIT_REQUESTED: 'requests',
+  PROFILE_EDIT_DECIDED: 'requests',
 }
 
 /** قسم نوع إشعار البريد — الأنواع المباشرة تُصنَّف يدوياً */
