@@ -22,7 +22,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
-import { formatCurrency, ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
+import { ROLE_LABELS, USER_STATUS_LABELS } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +42,10 @@ import {
   REFERRAL_REWARD_STATUS_LABELS,
   REFERRAL_ORIGIN_LABELS,
   REFERRAL_AUDIT_ACTION_LABELS,
+  formatReferralCurrency as formatCurrency,
+  formatLatinNumber,
+  formatReferralDate,
+  toLatinDigits,
 } from '@/lib/referral-labels'
 
 /**
@@ -152,14 +156,7 @@ const REWARD_TINTS: Record<string, string> = {
 }
 
 function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('ar-u-nu-latn', {
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
-  } catch {
-    return '—'
-  }
+  return formatReferralDate(iso, true)
 }
 
 const ROLE_PERCENT_FIELDS = [
@@ -357,11 +354,11 @@ export function ReferralsAdmin() {
 
         {/* أرقام عامة */}
         <div className="relative mt-5 grid grid-cols-2 gap-2.5 lg:grid-cols-6">
-          <MiniStat label="إجمالي الإحالات" value={stats.totalReferrals.toLocaleString('ar-YE-u-nu-latn')} />
-          <MiniStat label="موثقة" value={(stats.byStatus.VERIFIED ?? 0).toLocaleString('ar-YE-u-nu-latn')} />
-          <MiniStat label="مستحقة الحالة" value={(stats.byStatus.REWARDED ?? 0).toLocaleString('ar-YE-u-nu-latn')} />
-          <MiniStat label="تكليفات ناتجة" value={stats.assignmentsFromReferrals.toLocaleString('ar-YE-u-nu-latn')} />
-          <MiniStat label="فرص ناتجة" value={stats.opportunitiesFromReferrals.toLocaleString('ar-YE-u-nu-latn')} />
+          <MiniStat label="إجمالي الإحالات" value={formatLatinNumber(stats.totalReferrals)} />
+          <MiniStat label="موثقة" value={formatLatinNumber(stats.byStatus.VERIFIED ?? 0)} />
+          <MiniStat label="مستحقة الحالة" value={formatLatinNumber(stats.byStatus.REWARDED ?? 0)} />
+          <MiniStat label="تكليفات ناتجة" value={formatLatinNumber(stats.assignmentsFromReferrals)} />
+          <MiniStat label="فرص ناتجة" value={formatLatinNumber(stats.opportunitiesFromReferrals)} />
           <MiniStat label="متبقي المزايا" value={formatCurrency(stats.benefits.remaining)} highlight />
         </div>
       </section>
@@ -674,7 +671,7 @@ export function ReferralsAdmin() {
                 {data.transactions.slice(0, 10).map((t) => (
                   <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/50 bg-background/60 px-3.5 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-bold">{t.referrer.name} — {t.note ?? 'خصم من رسوم المنصة'}</p>
+                      <p className="truncate text-xs font-bold">{t.referrer.name} — {t.note ? toLatinDigits(t.note) : 'خصم من رسوم المنصة'}</p>
                       <p className="text-[11px] text-muted-foreground">{fmtDate(t.createdAt)}</p>
                     </div>
                     <span className="text-sm font-black text-sky-600 dark:text-sky-400">−{formatCurrency(t.amount)}</span>

@@ -24,7 +24,6 @@ import {
   Users,
 } from 'lucide-react'
 import { apiFetcher } from '@/lib/api-client'
-import { formatCurrency } from '@/lib/utils'
 import { ROLE_LABELS } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -38,6 +37,10 @@ import {
   REFERRAL_SOURCE_LABELS,
   REFERRAL_REWARD_STATUS_LABELS,
   REFERRAL_ORIGIN_LABELS,
+  formatReferralCurrency as formatCurrency,
+  formatLatinNumber,
+  formatReferralDate,
+  toLatinDigits,
 } from '@/lib/referral-labels'
 
 /**
@@ -136,12 +139,7 @@ const JOURNEY = [
 ]
 
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleDateString('ar-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' })
-  } catch {
-    return '—'
-  }
+  return formatReferralDate(iso)
 }
 
 export function MyReferrals() {
@@ -484,7 +482,7 @@ export function MyReferrals() {
               {recentTransactions.slice(0, 5).map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-2 rounded-2xl border border-border/60 bg-background/60 px-3.5 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-foreground">{t.note ?? 'خصم من رسوم المنصة'}</p>
+                    <p className="truncate text-xs font-bold text-foreground">{t.note ? toLatinDigits(t.note) : 'خصم من رسوم المنصة'}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDate(t.createdAt)}</p>
                   </div>
                   <span className="shrink-0 text-sm font-black text-sky-600 dark:text-sky-400">
@@ -541,7 +539,7 @@ function StatCard({
         </span>
         <div className="min-w-0">
           <p className="truncate text-[11px] font-bold text-muted-foreground">{label}</p>
-          <p className="text-xl font-black text-foreground">{value.toLocaleString('ar-YE-u-nu-latn')}</p>
+          <p className="text-xl font-black text-foreground">{formatLatinNumber(value)}</p>
         </div>
       </div>
     </div>
@@ -655,7 +653,7 @@ function ReferralCard({ item }: { item: ReferralItem }) {
           </p>
           {item.status === 'CLOSED' && item.note && (
             <p className="mt-1.5 rounded-lg bg-zinc-500/8 px-2.5 py-1.5 text-[10px] font-bold leading-4 text-zinc-500 dark:text-zinc-400">
-              {item.note} — لا تأثير على أي دعواتك الأخرى.
+              {toLatinDigits(item.note)} — لا تأثير على أي دعواتك الأخرى.
             </p>
           )}
         </div>
