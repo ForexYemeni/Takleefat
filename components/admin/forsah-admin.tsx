@@ -524,7 +524,7 @@ function FeesForm({ settings, onSaved }: { settings: FeeSettings; onSaved: () =>
       </div>
       {/* مثال حي */}
       <div className="rounded-2xl bg-muted/50 p-3 text-xs font-bold leading-relaxed">
-        مثال حي — راتب 300,000: الرسوم {fee.toLocaleString('ar-YE')} — نصيب HR {hrFee.toLocaleString('ar-YE')} ({hrPercent}٪) — نصيب الإدارة {(fee - hrFee).toLocaleString('ar-YE')}
+        مثال حي — راتب 300,000: الرسوم {fee.toLocaleString('ar-YE-u-nu-latn')} — نصيب HR {hrFee.toLocaleString('ar-YE-u-nu-latn')} ({hrPercent}٪) — نصيب الإدارة {(fee - hrFee).toLocaleString('ar-YE-u-nu-latn')}
       </div>
       <Button className="rounded-xl" disabled={save.isPending} onClick={() => save.mutate()}>
         <Save className="size-4" />
@@ -1151,7 +1151,7 @@ function PaymentConfirmationsTab() {
               <p className="mt-0.5 text-xs font-bold text-muted-foreground">
                 المبلغ:{' '}
                 <span className="font-black text-foreground" dir="ltr">
-                  {item.feeAmount.toLocaleString('ar-YE')} {item.currency}
+                  {item.feeAmount.toLocaleString('ar-YE-u-nu-latn')} {item.currency}
                 </span>
                 {item.paymentTimingLabel ? ` — التوقيت: ${item.paymentTimingLabel}` : ''}
               </p>
@@ -1227,7 +1227,7 @@ function PaymentConfirmationsTab() {
                 <>
                   تأكيد استلام{' '}
                   <span className="font-black" dir="ltr">
-                    {confirmItem.feeAmount.toLocaleString('ar-YE')} {confirmItem.currency}
+                    {confirmItem.feeAmount.toLocaleString('ar-YE-u-nu-latn')} {confirmItem.currency}
                   </span>{' '}
                   من المرشح «{confirmItem.candidate?.name ?? '—'}» لفرصة «{confirmItem.opportunity.title}».
                   <br />

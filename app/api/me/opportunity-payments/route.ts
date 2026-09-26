@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
       ...admins.map((admin) =>
         notify(admin.id, {
           title: 'إثبات دفع رسوم «فرصة» بانتظار التأكيد',
-          body: `${session.user.name} رفع إثبات دفع رسوم فرصة «${application.opportunity.title}» (${transaction.feeAmount.toLocaleString('ar-YE')} ${transaction.currency}) — راجعه وأكد الدفع`,
+          body: `${session.user.name} رفع إثبات دفع رسوم فرصة «${application.opportunity.title}» (${transaction.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${transaction.currency}) — راجعه وأكد الدفع`,
           type: 'OPPORTUNITY_PAYMENT_PROOF_SUBMITTED',
           link: '/admin/forsah',
         })
@@ -322,7 +322,7 @@ export async function PATCH(req: NextRequest) {
     if (application.opportunity.createdById !== session.user.id) {
       await notify(application.opportunity.createdById, {
         title: 'اختار المرشح توقيت سداد الرسوم',
-        body: `${session.user.name} — فرصة «${application.opportunity.title}» — اختار: ${OPPORTUNITY_PAYMENT_TIMING_LABELS[timing]} — الرسوم: ${updated.feeAmount.toLocaleString('ar-YE')} ${updated.currency}`,
+        body: `${session.user.name} — فرصة «${application.opportunity.title}» — اختار: ${OPPORTUNITY_PAYMENT_TIMING_LABELS[timing]} — الرسوم: ${updated.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${updated.currency}`,
         type: 'OPPORTUNITY_PAYMENT_TIMING_SELECTED',
         link: `/hr/opportunities/${application.opportunity.id}`,
       })

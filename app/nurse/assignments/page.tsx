@@ -195,17 +195,17 @@ function feeLabel(settings: PlatformSettings): string {
   // الجولة 45: العرض النشط يطغى على الوصف — «عرض بدون رسوم إدارة»
   if (isPromoActive(settings)) {
     const until = settings.promoUntil
-      ? new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' }).format(
+      ? new Intl.DateTimeFormat('ar-YE-u-nu-latn', { day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' }).format(
           new Date(settings.promoUntil)
         )
       : 'حتى إشعار آخر'
     return `عرض بدون رسوم إدارة حتى ${until}`
   }
   if (settings.feeMode === 'APPLICATION') {
-    return `رسوم تقديم ${settings.applicationFee.toLocaleString('ar-YE')} ريال`
+    return `رسوم تقديم ${settings.applicationFee.toLocaleString('ar-YE-u-nu-latn')} ريال`
   }
   return settings.adminFeeType === 'FIXED'
-    ? `حصة إدارة بمبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE')} ريال`
+    ? `حصة إدارة بمبلغ ثابت ${settings.adminFeeFixed.toLocaleString('ar-YE-u-nu-latn')} ريال`
     : `حصة إدارة ${settings.adminPercentage}٪ من قيمة التكليف`
 }
 

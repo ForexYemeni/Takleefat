@@ -193,7 +193,7 @@ export async function POST(
         const tx = selection ? txBySelectionId.get(selection.id) : undefined
         const feeLine =
           tx && tx.feeAmount > 0
-            ? ` — رسوم الخدمة المطلوبة: ${tx.feeAmount.toLocaleString('ar-YE')} ${tx.currency} — سدّدها وفق التوقيت الذي تختاره في صفحة «فرصي»`
+            ? ` — رسوم الخدمة المطلوبة: ${tx.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${tx.currency} — سدّدها وفق التوقيت الذي تختاره في صفحة «فرصي»`
             : ''
         return notify(app.userId, {
           title: 'تم اختيارك للفرصة',

@@ -107,7 +107,7 @@ export default function NurseInvitationsPage() {
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <InfoChip icon={MapPin} label="القسم" value={inv.post.department ?? '—'} />
                 <InfoChip icon={Clock} label="المدة" value={inv.post.hours ? `${inv.post.hours} ساعة` : 'غير محددة'} />
-                <InfoChip icon={CalendarDays} label="تاريخ البدء" value={new Date(inv.post.startDate).toLocaleDateString('ar')} />
+                <InfoChip icon={CalendarDays} label="تاريخ البدء" value={new Date(inv.post.startDate).toLocaleDateString('ar-YE-u-nu-latn')} />
                 <InfoChip icon={Coins} label="القيمة" value={formatCurrency(inv.post.value)} />
               </div>
 

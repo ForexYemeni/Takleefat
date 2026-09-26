@@ -354,7 +354,7 @@ export default function AdminSettingsPage() {
                   <p className="text-xs text-muted-foreground">
                     {promoActive
                       ? promoUntilRaw
-                        ? `ينتهي تلقائياً في ${new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }).format(new Date(promoUntilRaw))}`
+                        ? `ينتهي تلقائياً في ${new Intl.DateTimeFormat('ar-YE-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }).format(new Date(promoUntilRaw))}`
                         : 'مفتوح حتى إيقافه يدوياً من هنا'
                       : 'شغّله لتحفيز الجهات والكوادر في الفترات الترويجية'}
                   </p>
@@ -379,7 +379,7 @@ export default function AdminSettingsPage() {
                 />
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   {promoUntilPreview
-                    ? `احتساب حي: يبدأ من لحظة التفعيل وينتهي تلقائياً في ${new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }).format(promoUntilPreview)} بتوقيت مكة المكرمة`
+                    ? `احتساب حي: يبدأ من لحظة التفعيل وينتهي تلقائياً في ${new Intl.DateTimeFormat('ar-YE-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }).format(promoUntilPreview)} بتوقيت مكة المكرمة`
                     : 'اتركه فارغاً لعرض مفتوح حتى توقفه يدوياً من المفتاح أعلاه'}
                 </p>
               </div>

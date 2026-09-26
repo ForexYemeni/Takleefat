@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       lines: [
         'هذه رسالة تجريبية تأكد أن الربط بين منصة تكليفات وخدمة البريد (Google Apps Script + Gmail) يعمل بنجاح.',
       ],
-      rows: [{ label: 'وقت الاختبار', value: new Date().toLocaleString('ar', { dateStyle: 'short', timeStyle: 'short' }) }],
+      rows: [{ label: 'وقت الاختبار', value: new Date().toLocaleString('ar-YE-u-nu-latn', { dateStyle: 'short', timeStyle: 'short' }) }],
       note: 'لم تطلب هذه الرسالة؟ يمكن للإدارة تجاهلها بأمان.',
     })
 

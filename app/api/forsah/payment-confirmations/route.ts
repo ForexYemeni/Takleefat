@@ -163,7 +163,7 @@ export async function PATCH(req: NextRequest) {
         const link = '/nurse/opportunities'
         await notify(candidateId, {
           title: 'تأكدت إدارة المنصة استلام رسوم الخدمة',
-          body: `فرصة «${transaction.opportunity.title}» — تم تأكيد دفع الرسوم (${updated.feeAmount.toLocaleString('ar-YE')} ${updated.currency}) — شكراً لالتزامك`,
+          body: `فرصة «${transaction.opportunity.title}» — تم تأكيد دفع الرسوم (${updated.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${updated.currency}) — شكراً لالتزامك`,
           type: 'OPPORTUNITY_PAYMENT_CONFIRMED',
           link,
         })
@@ -172,7 +172,7 @@ export async function PATCH(req: NextRequest) {
       if (transaction.opportunity.createdById !== session.user.id) {
         await notify(transaction.opportunity.createdById, {
           title: 'سُددت رسوم الخدمة لفرصتك',
-          body: `«${transaction.opportunity.title}» — أكدت الإدارة استلام رسوم المرشح (${updated.feeAmount.toLocaleString('ar-YE')} ${updated.currency}) — مستحقك: ${updated.hrCommissionAmount.toLocaleString('ar-YE')}`,
+          body: `«${transaction.opportunity.title}» — أكدت الإدارة استلام رسوم المرشح (${updated.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${updated.currency}) — مستحقك: ${updated.hrCommissionAmount.toLocaleString('ar-YE-u-nu-latn')}`,
           type: 'OPPORTUNITY_PAYMENT_COMPLETED',
           link: '/hr/financials',
         })

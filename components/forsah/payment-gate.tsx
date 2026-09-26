@@ -148,7 +148,7 @@ export function PaymentGate() {
             <div>
               <p className="text-[11px] font-extrabold text-muted-foreground">المبلغ الواجب سداده للإدارة</p>
               <p className="text-2xl font-black text-amber-700 dark:text-amber-300" dir="ltr">
-                {g.feeAmount.toLocaleString('ar-YE')} {cur}
+                {g.feeAmount.toLocaleString('ar-YE-u-nu-latn')} {cur}
               </p>
               {g.paymentDueAt && (
                 <p className="mt-0.5 text-[10px] font-bold text-muted-foreground">

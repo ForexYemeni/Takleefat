@@ -150,7 +150,7 @@ export const STATUS_BADGE_CLASSES: Record<string, string> = {
 
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '—'
-  return new Intl.DateTimeFormat('ar', {
+  return new Intl.DateTimeFormat('ar-YE-u-nu-latn', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -159,7 +159,7 @@ export function formatDate(date: string | Date | null | undefined): string {
 
 export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return '—'
-  return new Intl.DateTimeFormat('ar', {
+  return new Intl.DateTimeFormat('ar-YE-u-nu-latn', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -214,7 +214,7 @@ export const MECCA_TIME_ZONE = 'Asia/Riyadh'
 /** وقت 12 ساعي (صباحاً/مساءً) بتوقيت مكة المكرمة — مثال: «8:30 مساءً» */
 export function formatTime12(date: string | Date | null | undefined): string {
   if (!date) return '—'
-  return new Intl.DateTimeFormat('ar', {
+  return new Intl.DateTimeFormat('ar-YE-u-nu-latn', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
@@ -225,7 +225,7 @@ export function formatTime12(date: string | Date | null | undefined): string {
 /** تاريخ + وقت 12 ساعي بتوقيت مكة المكرمة — مثال: «12 سبتمبر، 8:30 مساءً» */
 export function formatDateTimeMecca(date: string | Date | null | undefined): string {
   if (!date) return '—'
-  return new Intl.DateTimeFormat('ar', {
+  return new Intl.DateTimeFormat('ar-YE-u-nu-latn', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

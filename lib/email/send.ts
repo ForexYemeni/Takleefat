@@ -236,7 +236,7 @@ export async function sendEmailVerificationCode(
     ],
     rows: [
       { label: 'رمز التحقق', value: code },
-      { label: 'صالح حتى', value: expiresAt.toLocaleString('ar', { dateStyle: 'short', timeStyle: 'short' }) },
+      { label: 'صالح حتى', value: expiresAt.toLocaleString('ar-YE-u-nu-latn', { dateStyle: 'short', timeStyle: 'short' }) },
     ],
     note: 'إذا لم تطلب هذا الرمز يمكنك تجاهل الرسالة بأمان — لن يصل أي إشعار لبريدك دون تأكيدك.',
   })

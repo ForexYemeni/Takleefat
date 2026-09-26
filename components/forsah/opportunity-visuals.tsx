@@ -127,7 +127,7 @@ export function formatSalary(
   }
   const symbol = FORSAH_CURRENCY_AR[currency] ?? 'ريال'
   return {
-    main: amount.toLocaleString('ar-YE'),
+    main: amount.toLocaleString('ar-YE-u-nu-latn'),
     suffix: `${symbol} / ${SALARY_TYPE_AR[type] ?? 'شهري'}`,
   }
 }

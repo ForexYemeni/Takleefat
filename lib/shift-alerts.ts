@@ -44,7 +44,7 @@ export async function notifyAssignmentStarts(): Promise<number> {
       await Promise.all([
         notify(a.nurseId, {
           title: 'بدأ وقت تكليفك الآن',
-          body: `التكليف (${a.title}) في ${a.facility} — بدأ وقته الآن (${new Intl.DateTimeFormat('ar', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Riyadh' }).format(a.startDate)} بتوقيت مكة المكرمة). بالتوفيق في مناوبتك!`,
+          body: `التكليف (${a.title}) في ${a.facility} — بدأ وقته الآن (${new Intl.DateTimeFormat('ar-YE-u-nu-latn', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Riyadh' }).format(a.startDate)} بتوقيت مكة المكرمة). بالتوفيق في مناوبتك!`,
           type: 'ASSIGNMENT_STARTED',
           link: staffLink,
         }),

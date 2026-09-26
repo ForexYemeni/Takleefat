@@ -90,7 +90,7 @@ export function buildCvPrintHtml(cv: CvData): string {
       (r) => `<div class="quote">
         <div class="quote-head"><b>${escapeHtml(r.assignmentTitle)}</b><span>${starRow(r.overall)}</span></div>
         ${r.comment ? `<p>«${escapeHtml(r.comment)}»</p>` : ''}
-        <small>${escapeHtml(r.receiverName)} — ${new Date(r.createdAt).toLocaleDateString('ar')}</small>
+        <small>${escapeHtml(r.receiverName)} — ${new Date(r.createdAt).toLocaleDateString('ar-YE-u-nu-latn')}</small>
       </div>`
     )
     .join('')
@@ -108,8 +108,8 @@ export function buildCvPrintHtml(cv: CvData): string {
     .map((c) => `<div class="stat"><b>${escapeHtml(c.v)}</b><span>${escapeHtml(c.l)}</span></div>`)
     .join('')
 
-  const generated = new Date(cv.generatedAt).toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' })
-  const member = new Date(cv.memberSince).toLocaleDateString('ar', { year: 'numeric', month: 'long' })
+  const generated = new Date(cv.generatedAt).toLocaleDateString('ar-YE-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' })
+  const member = new Date(cv.memberSince).toLocaleDateString('ar-YE-u-nu-latn', { year: 'numeric', month: 'long' })
 
   return `<!doctype html>
 <html dir="rtl" lang="ar"><head><meta charset="utf-8" />

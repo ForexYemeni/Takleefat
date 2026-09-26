@@ -99,7 +99,7 @@ export async function PATCH(
     if (transaction.opportunity.createdById !== session.user.id) {
       await notify(transaction.opportunity.createdById, {
         title: isPaying ? 'سُددت عملية مالية لفرصتك' : 'تحديث على عملية مالية',
-        body: `«${transaction.opportunity.title}» — الحالة: ${OPPORTUNITY_TRANSACTION_STATUS_LABELS[updated.status]} — مستحقك: ${updated.hrCommissionAmount.toLocaleString('ar-YE')}`,
+        body: `«${transaction.opportunity.title}» — الحالة: ${OPPORTUNITY_TRANSACTION_STATUS_LABELS[updated.status]} — مستحقك: ${updated.hrCommissionAmount.toLocaleString('ar-YE-u-nu-latn')}`,
         type: isPaying ? 'OPPORTUNITY_PAYMENT_COMPLETED' : 'OPPORTUNITY_PAYMENT_PENDING',
         link: `/hr/financials`,
       })

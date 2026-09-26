@@ -112,7 +112,7 @@ function MiniStat({
       </span>
       <div className="min-w-0">
         <p className="flex items-center gap-1 text-base font-black leading-none tabular-nums">
-          {value.toLocaleString('ar-EG')}
+          {value.toLocaleString('ar-YE-u-nu-latn')}
           {pulse && (
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
@@ -175,7 +175,7 @@ export function EntityCadreCommunity({
         <div className="flex shrink-0 items-center gap-1.5">
           <Badge variant="secondary" className="hidden gap-1 bg-primary/10 text-primary sm:flex">
             <Users className="size-3" />
-            {total.toLocaleString('ar-EG')} معتمد
+            {total.toLocaleString('ar-YE-u-nu-latn')} معتمد
           </Badge>
           {cadres && cadres.length > 0 && (
             <Button
@@ -217,7 +217,7 @@ export function EntityCadreCommunity({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="size-4 text-primary" />
-              كوادر {org?.name ?? 'الجهة'} — {total.toLocaleString('ar-EG')} معتمد
+              كوادر {org?.name ?? 'الجهة'} — {total.toLocaleString('ar-YE-u-nu-latn')} معتمد
             </DialogTitle>
             <DialogDescription>
               مجتمع الكوادر المعتمدين للجهة: الممرضون والأطباء الحاصلون على ارتباط (يعمل حالياً /

@@ -124,22 +124,22 @@ export function HrFinancials() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-black">{opp ? `فرصة ${opp.number} — ${opp.title}` : 'فرصة'}</p>
-                    <p className="mt-0.5 text-[10px] font-bold text-muted-foreground">{t.createdAt ? new Date(t.createdAt).toLocaleDateString('ar') : ''}</p>
+                    <p className="mt-0.5 text-[10px] font-bold text-muted-foreground">{t.createdAt ? new Date(t.createdAt).toLocaleDateString('ar-YE-u-nu-latn') : ''}</p>
                   </div>
                   <Badge variant="secondary">{TRANSACTION_STATUS_AR[t.status] ?? t.status}</Badge>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-xl bg-muted/50 p-2">
                     <p className="text-[10px] font-bold text-muted-foreground">الرسوم</p>
-                    <p className="text-sm font-black">{t.feeAmount.toLocaleString('ar-YE')}</p>
+                    <p className="text-sm font-black">{t.feeAmount.toLocaleString('ar-YE-u-nu-latn')}</p>
                   </div>
                   <div className="rounded-xl bg-emerald-500/10 p-2">
                     <p className="text-[10px] font-bold text-muted-foreground">نصيبك</p>
-                    <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">{t.hrCommissionAmount.toLocaleString('ar-YE')}</p>
+                    <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">{t.hrCommissionAmount.toLocaleString('ar-YE-u-nu-latn')}</p>
                   </div>
                   <div className="rounded-xl bg-sky-500/10 p-2">
                     <p className="text-[10px] font-bold text-muted-foreground">الإدارة</p>
-                    <p className="text-sm font-black text-sky-700 dark:text-sky-300">{t.adminAmount.toLocaleString('ar-YE')}</p>
+                    <p className="text-sm font-black text-sky-700 dark:text-sky-300">{t.adminAmount.toLocaleString('ar-YE-u-nu-latn')}</p>
                   </div>
                 </div>
               </article>

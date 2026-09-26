@@ -1109,7 +1109,7 @@ function TimelineCard({
                 <span className={cn('block text-xs', e.state === 'rejected' ? 'font-bold text-red-600 dark:text-red-400' : e.state === 'pending' ? 'font-semibold text-muted-foreground/70' : 'font-extrabold')}>
                   {e.label}
                 </span>
-                {e.date && <span className="mt-0.5 block text-[10px] font-semibold text-muted-foreground/70">{new Date(e.date).toLocaleString('ar', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
+                {e.date && <span className="mt-0.5 block text-[10px] font-semibold text-muted-foreground/70">{new Date(e.date).toLocaleString('ar-YE-u-nu-latn', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>}
               </span>
             </li>
           )

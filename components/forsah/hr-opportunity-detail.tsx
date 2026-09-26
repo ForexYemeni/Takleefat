@@ -670,7 +670,7 @@ function SelectionsTab({ opportunityId }: { opportunityId: string }) {
             <div className="text-end">
               <Badge variant="secondary">{TRANSACTION_STATUS_AR[s.transaction.status]}</Badge>
               <p className="mt-1 text-[10px] font-bold text-muted-foreground">
-                رسوم: {s.transaction.feeAmount.toLocaleString('ar-YE')} — نصيبك: {s.transaction.hrCommissionAmount.toLocaleString('ar-YE')}
+                رسوم: {s.transaction.feeAmount.toLocaleString('ar-YE-u-nu-latn')} — نصيبك: {s.transaction.hrCommissionAmount.toLocaleString('ar-YE-u-nu-latn')}
               </p>
               {s.transaction.paymentTimingLabel && (
                 <p className="mt-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-300">
@@ -717,19 +717,19 @@ function FinanceTab({ opportunityId }: { opportunityId: string }) {
           <div className="mt-2 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-muted/50 p-2">
               <p className="text-[10px] font-bold text-muted-foreground">إجمالي الرسوم</p>
-              <p className="text-sm font-black">{t.feeAmount.toLocaleString('ar-YE')}</p>
+              <p className="text-sm font-black">{t.feeAmount.toLocaleString('ar-YE-u-nu-latn')}</p>
             </div>
             <div className="rounded-xl bg-emerald-500/10 p-2">
               <p className="text-[10px] font-bold text-muted-foreground">مستحق HR</p>
-              <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">{t.hrCommissionAmount.toLocaleString('ar-YE')}</p>
+              <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">{t.hrCommissionAmount.toLocaleString('ar-YE-u-nu-latn')}</p>
             </div>
             <div className="rounded-xl bg-sky-500/10 p-2">
               <p className="text-[10px] font-bold text-muted-foreground">مستحق الإدارة</p>
-              <p className="text-sm font-black text-sky-700 dark:text-sky-300">{t.adminAmount.toLocaleString('ar-YE')}</p>
+              <p className="text-sm font-black text-sky-700 dark:text-sky-300">{t.adminAmount.toLocaleString('ar-YE-u-nu-latn')}</p>
             </div>
           </div>
           <p className="mt-1.5 text-center text-[10px] font-bold text-muted-foreground">
-            الراتب المرجعي {t.baseAmount.toLocaleString('ar-YE')}
+            الراتب المرجعي {t.baseAmount.toLocaleString('ar-YE-u-nu-latn')}
             {t.feePercent != null ? ` — ${t.feePercent}٪ رسوم` : ' — مبلغ ثابت'} — عمولة HR {t.hrCommissionPercent}٪
           </p>
         </article>

@@ -93,7 +93,7 @@ export async function POST(
             post.department ? `القسم: ${post.department}` : null,
             `القيمة: ${post.value} ريال`,
             post.hours ? `الساعات: ${post.hours}` : null,
-            `تبدأ: ${post.startDate.toLocaleDateString('ar')}`,
+            `تبدأ: ${post.startDate.toLocaleDateString('ar-YE-u-nu-latn')}`,
             message?.trim() || 'راجع التفاصيل وأجب بالقبول أو الرفض',
           ]
             .filter(Boolean)

@@ -188,9 +188,9 @@ const PAYMENT_TIMING_OPTIONS: Array<{
 function feeText(fp: FeePreview): string {
   const cur = FORSAH_CURRENCY_SYMBOLS[fp.currency] ?? fp.currency
   if (fp.feeType === 'PERCENTAGE' && fp.feePercent != null) {
-    return `${fp.feePercent}٪ من الراتب ≈ ${fp.feeAmount.toLocaleString('ar-YE')} ${cur}`
+    return `${fp.feePercent}٪ من الراتب ≈ ${fp.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${cur}`
   }
-  return `${fp.feeAmount.toLocaleString('ar-YE')} ${cur}`
+  return `${fp.feeAmount.toLocaleString('ar-YE-u-nu-latn')} ${cur}`
 }
 
 export function OpportunitiesBrowser({ basePath }: { basePath: '/nurse/opportunities' | '/doctor/opportunities' }) {
@@ -790,7 +790,7 @@ function PaymentCard({
         <>
           <p className="mt-2 text-sm font-black">
             <span className="text-xs font-bold text-muted-foreground">المبلغ المطلوب: </span>
-            {payment.feeAmount.toLocaleString('ar-YE')}{' '}
+            {payment.feeAmount.toLocaleString('ar-YE-u-nu-latn')}{' '}
             {FORSAH_CURRENCY_SYMBOLS[payment.currency] ?? payment.currency}
           </p>
           {payment.paymentTimingLabel ? (

@@ -153,7 +153,7 @@ export default async function PublicOpportunitiesPage() {
                 </div>
                 <p className="mt-3 text-sm font-black text-violet-700 dark:text-violet-300">
                   {o.salaryAmount && o.salaryAmount > 0
-                    ? `${o.salaryAmount.toLocaleString('ar-YE')} ${CURRENCY_AR[o.salaryCurrency] ?? 'ريال'} ${SALARY_AR[o.salaryType] ?? ''}`
+                    ? `${o.salaryAmount.toLocaleString('ar-YE-u-nu-latn')} ${CURRENCY_AR[o.salaryCurrency] ?? 'ريال'} ${SALARY_AR[o.salaryType] ?? ''}`
                     : 'حسب الاتفاق'}
                 </p>
                 <div className="mt-3 rounded-2xl bg-muted/50 p-3 text-center text-xs font-black text-muted-foreground">

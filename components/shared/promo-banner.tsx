@@ -33,7 +33,7 @@ export function PromoBanner() {
   if (!s || !isPromoActive(s)) return null
 
   const until = s.promoUntil
-    ? new Intl.DateTimeFormat('ar', {
+    ? new Intl.DateTimeFormat('ar-YE-u-nu-latn', {
         day: 'numeric',
         month: 'long',
         timeZone: 'Asia/Riyadh',

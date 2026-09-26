@@ -128,7 +128,7 @@ export default function NurseCardPage() {
           ratingAverage: statsData.stats.ratingAverage,
           ratingCount: statsData.stats.ratingCount,
           completedAssignments: statsData.stats.completedAssignments,
-          memberSince: new Date(profile.createdAt).toLocaleDateString('ar', {
+          memberSince: new Date(profile.createdAt).toLocaleDateString('ar-YE-u-nu-latn', {
             year: 'numeric',
             month: 'long',
           }),
