@@ -485,7 +485,7 @@ async function accrueReferralReward(input: AccrualInput): Promise<void> {
 
     await notify(referrer.id, {
       title: 'تم احتساب مزايا إحالة جديدة لك',
-      body: `${input.originLabel} — استحقاق ${amount.toLocaleString('ar-YE')} ${input.currency} (${percent}٪ من رسوم المنصة المحصلة). تُستخدم مزايا الإحالة كخصم على رسوم المنصة وفق سياسة تكليفات، ولا تمثل رصيداً نقدياً قابلاً للسحب.`,
+      body: `${input.originLabel} — استحقاق ${amount.toLocaleString('ar-YE-u-nu-latn')} ${input.currency} (${percent}٪ من رسوم المنصة المحصلة). تُستخدم مزايا الإحالة كخصم على رسوم المنصة وفق سياسة تكليفات، ولا تمثل رصيداً نقدياً قابلاً للسحب.`,
       type: 'REFERRAL_REWARD_ACCRUED',
       link: '/referrals',
     })
@@ -493,7 +493,7 @@ async function accrueReferralReward(input: AccrualInput): Promise<void> {
     if (settings.rewardsRequireReview) {
       await notifyAdmins({
         title: 'ميزة إحالة بانتظار المراجعة',
-        body: `${input.originLabel} — استحقاق ${amount.toLocaleString('ar-YE')} ${input.currency} للمُحيل — راجعه من «إدارة الإحالات» لاعتماده أو إلغائه.`,
+        body: `${input.originLabel} — استحقاق ${amount.toLocaleString('ar-YE-u-nu-latn')} ${input.currency} للمُحيل — راجعه من «إدارة الإحالات» لاعتماده أو إلغائه.`,
         link: '/admin/referrals',
       })
     }
@@ -618,7 +618,7 @@ export async function recordReferralBenefitsUsage(input: {
   if (amount > benefits.remaining) {
     return {
       ok: false,
-      error: `المبلغ يتجاوز المتبقي من المزايا (${benefits.remaining.toLocaleString('ar-YE')})`,
+      error: `المبلغ يتجاوز المتبقي من المزايا (${benefits.remaining.toLocaleString('ar-YE-u-nu-latn')})`,
     }
   }
 
@@ -663,7 +663,7 @@ export async function recordReferralBenefitsUsage(input: {
 
   await notify(input.referrerId, {
     title: 'تم استخدام جزء من مزايا الإحالة',
-    body: `خُصم ${amount.toLocaleString('ar-YE')} من مزايا إحالتك كخصم على رسوم المنصة وفق سياسة تكليفات${input.note ? ` — ${input.note}` : ''}. المتبقي: ${(benefits.remaining - amount).toLocaleString('ar-YE')}.`,
+    body: `خُصم ${amount.toLocaleString('ar-YE-u-nu-latn')} من مزايا إحالتك كخصم على رسوم المنصة وفق سياسة تكليفات${input.note ? ` — ${input.note}` : ''}. المتبقي: ${(benefits.remaining - amount).toLocaleString('ar-YE-u-nu-latn')}.`,
     type: 'REFERRAL_REWARD_USED',
     link: '/referrals',
   })

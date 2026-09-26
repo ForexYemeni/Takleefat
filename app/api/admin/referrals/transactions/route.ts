@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const benefits = await getReferralBenefits(referrerId)
 
     return NextResponse.json({
-      message: `سُجل خصم ${amount.toLocaleString('ar-YE')} من مزايا إحالة (${referrer.name}) — أُشعر المُحيل ووُثقت العملية في السجل`,
+      message: `سُجل خصم ${amount.toLocaleString('ar-YE-u-nu-latn')} من مزايا إحالة (${referrer.name}) — أُشعر المُحيل ووُثقت العملية في السجل`,
       benefits,
     })
   } catch (error) {

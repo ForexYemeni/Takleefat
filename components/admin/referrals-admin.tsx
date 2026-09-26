@@ -154,7 +154,7 @@ const REWARD_TINTS: Record<string, string> = {
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleString('ar', {
+    return new Date(iso).toLocaleString('ar-u-nu-latn', {
       day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     })
   } catch {
@@ -357,11 +357,11 @@ export function ReferralsAdmin() {
 
         {/* أرقام عامة */}
         <div className="relative mt-5 grid grid-cols-2 gap-2.5 lg:grid-cols-6">
-          <MiniStat label="إجمالي الإحالات" value={stats.totalReferrals.toLocaleString('ar-YE')} />
-          <MiniStat label="موثقة" value={(stats.byStatus.VERIFIED ?? 0).toLocaleString('ar-YE')} />
-          <MiniStat label="مستحقة الحالة" value={(stats.byStatus.REWARDED ?? 0).toLocaleString('ar-YE')} />
-          <MiniStat label="تكليفات ناتجة" value={stats.assignmentsFromReferrals.toLocaleString('ar-YE')} />
-          <MiniStat label="فرص ناتجة" value={stats.opportunitiesFromReferrals.toLocaleString('ar-YE')} />
+          <MiniStat label="إجمالي الإحالات" value={stats.totalReferrals.toLocaleString('ar-YE-u-nu-latn')} />
+          <MiniStat label="موثقة" value={(stats.byStatus.VERIFIED ?? 0).toLocaleString('ar-YE-u-nu-latn')} />
+          <MiniStat label="مستحقة الحالة" value={(stats.byStatus.REWARDED ?? 0).toLocaleString('ar-YE-u-nu-latn')} />
+          <MiniStat label="تكليفات ناتجة" value={stats.assignmentsFromReferrals.toLocaleString('ar-YE-u-nu-latn')} />
+          <MiniStat label="فرص ناتجة" value={stats.opportunitiesFromReferrals.toLocaleString('ar-YE-u-nu-latn')} />
           <MiniStat label="متبقي المزايا" value={formatCurrency(stats.benefits.remaining)} highlight />
         </div>
       </section>

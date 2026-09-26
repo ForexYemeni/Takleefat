@@ -138,7 +138,7 @@ const JOURNEY = [
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' })
+    return new Date(iso).toLocaleDateString('ar-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' })
   } catch {
     return '—'
   }
@@ -541,7 +541,7 @@ function StatCard({
         </span>
         <div className="min-w-0">
           <p className="truncate text-[11px] font-bold text-muted-foreground">{label}</p>
-          <p className="text-xl font-black text-foreground">{value.toLocaleString('ar-YE')}</p>
+          <p className="text-xl font-black text-foreground">{value.toLocaleString('ar-YE-u-nu-latn')}</p>
         </div>
       </div>
     </div>

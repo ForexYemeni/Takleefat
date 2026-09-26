@@ -67,8 +67,8 @@ export async function POST(
     return NextResponse.json({
       message:
         decision === 'APPROVE'
-          ? `اعتُمدت الميزة (${reward.amount.toLocaleString('ar-YE')} ${reward.currency}) — دخلت ضمن مزايا المُحيل المتاحة`
-          : `أُلغيت الميزة (${reward.amount.toLocaleString('ar-YE')} ${reward.currency}) ووُثّق السبب في السجل`,
+          ? `اعتُمدت الميزة (${reward.amount.toLocaleString('ar-YE-u-nu-latn')} ${reward.currency}) — دخلت ضمن مزايا المُحيل المتاحة`
+          : `أُلغيت الميزة (${reward.amount.toLocaleString('ar-YE-u-nu-latn')} ${reward.currency}) ووُثّق السبب في السجل`,
       reward: { id: updated.id, status: updated.status },
     })
   } catch (error) {
@@ -93,8 +93,8 @@ async function notifyDecision(
         decision === 'APPROVE' ? 'اعتُمدت ميزة إحالة بانتظارك' : 'أُلغيت ميزة إحالة بعد المراجعة',
       body:
         decision === 'APPROVE'
-          ? `${originLabel} — استحقاق ${amount.toLocaleString('ar-YE')} ${currency} اعتُمد وأصبح ضمن مزايا إحالتك. تُستخدم مزايا الإحالة كخصم على رسوم المنصة وفق سياسة تكليفات، ولا تمثل رصيداً نقدياً قابلاً للسحب.`
-          : `${originLabel} — استحقاق ${amount.toLocaleString('ar-YE')} ${currency} لم يُعتمد بعد المراجعة${note ? ` — السبب: ${note}` : ''}.`,
+          ? `${originLabel} — استحقاق ${amount.toLocaleString('ar-YE-u-nu-latn')} ${currency} اعتُمد وأصبح ضمن مزايا إحالتك. تُستخدم مزايا الإحالة كخصم على رسوم المنصة وفق سياسة تكليفات، ولا تمثل رصيداً نقدياً قابلاً للسحب.`
+          : `${originLabel} — استحقاق ${amount.toLocaleString('ar-YE-u-nu-latn')} ${currency} لم يُعتمد بعد المراجعة${note ? ` — السبب: ${note}` : ''}.`,
       type: decision === 'APPROVE' ? 'REFERRAL_REWARD_ACCRUED' : 'GENERIC',
       link: '/referrals',
     })
