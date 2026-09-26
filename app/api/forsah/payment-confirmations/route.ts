@@ -142,6 +142,22 @@ export async function PATCH(req: NextRequest) {
         },
       })
 
+      // ---------- الجولة 75: استحقاق الإحالة عند تأكيد رسوم «فرصة» (إضافي بحت) ----------
+      // يُحتسب مرة واحدة فقط لكل عملية مالية (قيد فريد على مستوى القاعدة)
+      try {
+        const { onReferralOpportunityFeePaid } = await import('@/lib/referrals')
+        await onReferralOpportunityFeePaid({
+          transactionId: updated.id,
+          candidateId,
+          platformFeeAmount: updated.feeAmount,
+          baseValue: updated.baseAmount,
+          currency: updated.currency,
+          opportunityTitle: transaction.opportunity.title,
+        })
+      } catch (referralError) {
+        console.error('referral opportunity hook skipped:', referralError)
+      }
+
       // إشعار المرشح — البطاقة الحاجبة تُرفع عنه تلقائياً بعد التأكيد
       if (candidateId) {
         const link = '/nurse/opportunities'

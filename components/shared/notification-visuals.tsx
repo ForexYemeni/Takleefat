@@ -3,9 +3,11 @@ import {
   BellRing,
   ClipboardList,
   FileCheck2,
+  Gift,
   KeyRound,
   ShieldCheck,
   UserCheck,
+  UserPlus,
   UserX,
   Wallet,
 } from 'lucide-react'
@@ -33,6 +35,13 @@ const TYPE_STYLE: Record<string, { icon: React.ComponentType<{ className?: strin
   DOCUMENT_ACCESS_DECIDED: { icon: ShieldCheck, tint: 'bg-emerald-500/10 text-emerald-600' },
   DOCUMENT_ACCESS_GRANTED: { icon: ShieldCheck, tint: 'bg-emerald-500/10 text-emerald-600' },
   DOCUMENT_ACCESS_REVOKED: { icon: UserX, tint: 'bg-red-500/10 text-red-600' },
+  // ---------- الجولة 75: برنامج إحالة تكليفات (إضافي بحت) ----------
+  REFERRAL_REGISTERED: { icon: UserPlus, tint: 'bg-sky-500/10 text-sky-600' },
+  REFERRAL_VERIFIED: { icon: ShieldCheck, tint: 'bg-teal-500/10 text-teal-600' },
+  REFERRAL_ASSIGNED: { icon: ClipboardList, tint: 'bg-violet-500/10 text-violet-600' },
+  REFERRAL_REWARD_ACCRUED: { icon: Gift, tint: 'bg-emerald-500/10 text-emerald-600' },
+  REFERRAL_REWARD_USED: { icon: Wallet, tint: 'bg-sky-500/10 text-sky-600' },
+  REFERRAL_DIRECT_INVITE: { icon: UserPlus, tint: 'bg-amber-500/10 text-amber-600' },
 }
 
 export function notificationVisuals(type: string): {

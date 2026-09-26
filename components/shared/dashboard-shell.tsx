@@ -24,10 +24,12 @@ import {
   Menu,
   Moon,
   Settings2,
+  Share2,
   Star,
   Stethoscope,
   Sun,
   UserCog,
+  UserPlus,
   UserRound,
   Users,
   UserSquare2,
@@ -93,6 +95,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/admin/document-access', label: 'طلبات رؤية المستندات', icon: KeyRound },
       // الجولة 74 — طلبات تعديل الملف المهني (إضافي بحت)
       { href: '/admin/profile-edits', label: 'طلبات تعديل الملفات', icon: FilePenLine },
+      // الجولة 75 — برنامج إحالة تكليفات (إضافي بحت)
+      { href: '/admin/referrals', label: 'إدارة الإحالات', icon: Share2 },
       { href: '/admin/settings', label: 'الرسوم وطرق الدفع', icon: Settings2 },
       { href: '/admin/contact', label: 'التواصل', icon: Headset },
       { href: '/admin/profile', label: 'الملف الشخصي', icon: UserRound },
@@ -108,6 +112,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/nurse/opportunities', label: 'فرصة — فرص العمل', icon: Briefcase },
       { href: '/nurse/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
       { href: '/nurse/documents', label: 'مستنداتي', icon: FileCheck2 },
+      // الجولة 75 — برنامج إحالة تكليفات (إضافي بحت)
+      { href: '/referrals', label: 'إحالاتي', icon: UserPlus },
       { href: '/nurse/card', label: 'بطاقتي المهنية', icon: IdCard },
       { href: '/nurse/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
@@ -121,6 +127,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/receiver/staff', label: 'كوادر جهتي', icon: Users },
       { href: '/receiver/favorites', label: 'الكوادر المفضلة', icon: Star },
       { href: '/receiver/document-access', label: 'طلبات المستندات', icon: KeyRound },
+      // الجولة 75 — برنامج إحالة تكليفات (إضافي بحت)
+      { href: '/referrals', label: 'إحالاتي', icon: UserPlus },
       { href: '/receiver/earnings', label: 'أرباحي', icon: Coins },
       { href: '/receiver/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
@@ -135,6 +143,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/doctor/opportunities', label: 'فرصة — فرص العمل', icon: Briefcase },
       { href: '/doctor/invitations', label: 'الاستدعاءات المباشرة', icon: MailPlus },
       { href: '/doctor/documents', label: 'مستنداتي', icon: FileCheck2 },
+      // الجولة 75 — برنامج إحالة تكليفات (إضافي بحت)
+      { href: '/referrals', label: 'إحالاتي', icon: UserPlus },
       { href: '/doctor/card', label: 'بطاقتي المهنية', icon: IdCard },
       { href: '/doctor/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
@@ -148,6 +158,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/supervisor/staff', label: 'أطبائي', icon: Stethoscope },
       { href: '/supervisor/favorites', label: 'الأطباء المفضلون', icon: Star },
       { href: '/supervisor/document-access', label: 'طلبات المستندات', icon: KeyRound },
+      // الجولة 75 — برنامج إحالة تكليفات (إضافي بحت)
+      { href: '/referrals', label: 'إحالاتي', icon: UserPlus },
       { href: '/supervisor/earnings', label: 'أرباحي', icon: Coins },
       { href: '/supervisor/profile', label: 'الملف الشخصي', icon: UserRound },
     ],
@@ -163,6 +175,8 @@ const NAV_CONFIG: Record<DashboardRole, { roleLabel: string; profilePath: string
       { href: '/hr/interviews', label: 'المقابلات', icon: CalendarClock },
       // الجولة 74 — طلبات تعديل الملف المهني (إضافي بحت)
       { href: '/hr/profile-edits', label: 'طلبات تعديل الملفات', icon: FilePenLine },
+      // الجولة 75 — برنامج إحالة تكليفات (إضافي بحت)
+      { href: '/referrals', label: 'إحالاتي', icon: UserPlus },
       { href: '/hr/financials', label: 'المالية والعمولات', icon: Wallet },
       { href: '/hr/profile', label: 'الملف الشخصي', icon: UserRound },
     ],

@@ -98,6 +98,18 @@ export async function PATCH(
         where: { id },
         data: { paymentStatus: paymentParsed.data.paymentStatus },
       })
+
+      // ---------- الجولة 75: استحقاق الإحالة عند تأكيد دفع رسوم التكليف (إضافي بحت) ----------
+      // يقرأ التكليف طازجاً بعد التسوية — يُحتسب فقط إذا وصلت الرسوم فعلاً ولم يُحسب سابقاً
+      if (isPaid) {
+        try {
+          const { onReferralAssignmentFeePaid } = await import('@/lib/referrals')
+          await onReferralAssignmentFeePaid(id)
+        } catch (referralError) {
+          console.error('referral assignment hook skipped:', referralError)
+        }
+      }
+
       await db.assignmentLog.create({
         data: {
           assignmentId: id,

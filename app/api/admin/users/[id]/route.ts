@@ -549,6 +549,13 @@ export async function PATCH(
 
     // إشعار المستخدم بقرار المراجعة
     if (status === 'APPROVED') {
+      // ---------- الجولة 75: تحديث حالة الإحالة إلى «موثق» (إضافي بحت — لا يمس الاعتماد نفسه) ----------
+      try {
+        const { onReferralReferredVerified } = await import('@/lib/referrals')
+        await onReferralReferredVerified(id)
+      } catch (referralError) {
+        console.error('referral verify hook skipped:', referralError)
+      }
       await notify(id, {
         title: 'تم اعتماد حسابك',
         body: 'تهانينا! تم اعتماد حسابك في منصة تكليفات ويمكنك الآن استخدام جميع الخدمات.',

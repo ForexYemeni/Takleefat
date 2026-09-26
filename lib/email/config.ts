@@ -125,6 +125,13 @@ const TYPE_CATEGORY_MAP: Record<NotificationType, EmailCategory> = {
   // ---------- الجولة 74: طلبات تعديل الملف المهني (إضافي بحت) ----------
   PROFILE_EDIT_REQUESTED: 'requests',
   PROFILE_EDIT_DECIDED: 'requests',
+  // ---------- الجولة 75: برنامج إحالة تكليفات (إضافي بحت — تصنف ضمن إشعارات الحساب) ----------
+  REFERRAL_REGISTERED: 'account',
+  REFERRAL_VERIFIED: 'account',
+  REFERRAL_ASSIGNED: 'account',
+  REFERRAL_REWARD_ACCRUED: 'account',
+  REFERRAL_REWARD_USED: 'account',
+  REFERRAL_DIRECT_INVITE: 'account',
 }
 
 /** قسم نوع إشعار البريد — الأنواع المباشرة تُصنَّف يدوياً */

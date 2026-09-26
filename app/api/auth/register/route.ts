@@ -5,6 +5,7 @@ import { registerSchema } from '@/lib/validations/auth'
 import { handleApiError, jsonError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notifications'
 import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
+import { bindReferralOnRegistration, REFERRAL_COOKIE } from '@/lib/referrals'
 
 /**
  * POST /api/auth/register — إنشاء حساب جديد (كادر صحي / مستلم إداري / طبيب)
@@ -115,6 +116,16 @@ export async function POST(req: NextRequest) {
     })
 
     // إشعار جميع مديري النظام بوجود طلب تسجيل جديد (+ جهة جديدة بانتظار الاعتماد)
+    // ---------- الجولة 75: ربط برنامج الإحالة (إضافي بحت — لا يمس أي سلوك قائم) ----------
+    // قراءة كوكي رابط الدعوة أو مطابقة دعوة مباشرة بالهاتف → ربط الإحالة + إشعار المُحيل.
+    // أي فشل يُسجل ولا يعطل التسجيل إطلاقاً — ولا استحقاق على مجرد التسجيل.
+    try {
+      const refCode = req.cookies.get(REFERRAL_COOKIE)?.value?.trim() || null
+      await bindReferralOnRegistration(user.id, phone, refCode)
+    } catch (referralError) {
+      console.error('referral binding skipped:', referralError)
+    }
+
     const admins = await db.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
     const roleLabel =
       role === 'DOCTOR' ? 'طبيب' : role === 'NURSE' ? 'كادر صحي' : 'مستلم إداري'
@@ -145,7 +156,9 @@ export async function POST(req: NextRequest) {
         : []),
     ])
 
-    return NextResponse.json(
+    // ---------- استجابة التسجيل — الجولة 75: يُمسح كوكي الدعوة بعد الربط لمنع
+    // نسبة أي تسجيل لاحق على نفس الجهاز لمُحيل لا علاقة له به ----------
+    const response = NextResponse.json(
       {
         message:
           role === 'NURSE' || role === 'DOCTOR'
@@ -157,6 +170,8 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     )
+    response.cookies.set(REFERRAL_COOKIE, '', { path: '/', maxAge: 0 })
+    return response
   } catch (error) {
     return handleApiError(error)
   }
