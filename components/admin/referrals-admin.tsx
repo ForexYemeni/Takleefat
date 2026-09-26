@@ -434,18 +434,15 @@ export function ReferralsAdmin() {
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   {ROLE_PERCENT_FIELDS.map((f) => (
-                    <div key={f.key} className="space-y-1.5">
-                      <Label htmlFor={`pct-${f.key}`} className="text-xs font-bold">{f.label}</Label>
-                      <Input
-                        id={`pct-${f.key}`}
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.5"
-                        value={settings[f.key]}
-                        onChange={(e) => patchDraft({ [f.key]: Number(e.target.value) } as Partial<SettingsShape>)}
-                      />
-                    </div>
+                    <NumberField
+                      key={f.key}
+                      id={`pct-${f.key}`}
+                      label={f.label}
+                      labelClassName="text-xs font-bold"
+                      value={settings[f.key]}
+                      onChange={(v) => patchDraft({ [f.key]: v } as Partial<SettingsShape>)}
+                      allowDecimal
+                    />
                   ))}
                 </div>
               </section>
@@ -473,8 +470,8 @@ export function ReferralsAdmin() {
                 <Textarea
                   rows={3}
                   maxLength={400}
-                  value={settings.policyNote ?? ''}
-                  onChange={(e) => patchDraft({ policyNote: e.target.value })}
+                  value={toLatinDigits(settings.policyNote ?? '')}
+                  onChange={(e) => patchDraft({ policyNote: toLatinDigits(e.target.value) })}
                   placeholder="تُستخدم مزايا الإحالة كخصم على رسوم المنصة وفق سياسة تكليفات، ولا تمثل رصيداً نقدياً قابلاً للسحب."
                 />
               </section>
@@ -797,7 +794,7 @@ export function ReferralsAdmin() {
                 rows={2}
                 maxLength={300}
                 value={decisionNote}
-                onChange={(e) => setDecisionNote(e.target.value)}
+                onChange={(e) => setDecisionNote(toLatinDigits(e.target.value))}
                 placeholder="سبب القرار إن وجد..."
               />
             </div>
@@ -832,11 +829,12 @@ export function ReferralsAdmin() {
               <Label htmlFor="usage-amount" className="text-xs font-bold">قيمة الخصم</Label>
               <Input
                 id="usage-amount"
-                type="number"
-                min={1}
-                max={usageDialog?.remaining ?? undefined}
+                type="text"
+                inputMode="decimal"
+                dir="ltr"
+                className="text-left"
                 value={usageAmount}
-                onChange={(e) => setUsageAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                onChange={(e) => setUsageAmount(toLatinDigits(e.target.value).replace(/[^\d.]/g, ''))}
                 placeholder="0"
               />
             </div>
@@ -846,7 +844,7 @@ export function ReferralsAdmin() {
                 id="usage-note"
                 maxLength={300}
                 value={usageNote}
-                onChange={(e) => setUsageNote(e.target.value)}
+                onChange={(e) => setUsageNote(toLatinDigits(e.target.value))}
                 placeholder="مثال: خصم رسوم تكليف أو فرصة عمل"
               />
             </div>
@@ -893,19 +891,38 @@ function NumberField({
   label,
   value,
   onChange,
+  id,
+  allowDecimal = false,
+  labelClassName,
 }: {
   label: string
   value: number
   onChange: (v: number) => void
+  id?: string
+  allowDecimal?: boolean
+  labelClassName?: string
 }) {
+  // الجولة 80: حقل رقمي حتمي — type="text" + inputMode (لوحة أرقام الجوال) + تطبيع
+  // toLatinDigits فتُعرض القيم بالأرقام اللاتينية 0-9 على كل الأجهزة مهما كانت لغتها،
+  // لأن type="number" نفسه يعرض أرقاماً هندية-عربية على بعض المتصفحات حسب لغة الجهاز.
+  const [text, setText] = useState<string | null>(null)
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] font-bold leading-5 text-muted-foreground">{label}</Label>
+      <Label htmlFor={id} className={labelClassName ?? 'text-[11px] font-bold leading-5 text-muted-foreground'}>{label}</Label>
       <Input
-        type="number"
-        min={0}
-        value={value}
-        onChange={(e) => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        id={id}
+        type="text"
+        inputMode={allowDecimal ? 'decimal' : 'numeric'}
+        dir="ltr"
+        className="text-left"
+        value={text ?? String(value ?? 0)}
+        onChange={(e) => {
+          const normalized = toLatinDigits(e.target.value).replace(allowDecimal ? /[^\d.]/g : /[^\d]/g, '')
+          setText(normalized)
+          const n = allowDecimal ? Number(normalized) : Math.floor(Number(normalized) || 0)
+          onChange(Number.isFinite(n) ? Math.max(0, n) : 0)
+        }}
+        onBlur={() => setText(null)}
       />
     </div>
   )

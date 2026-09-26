@@ -373,7 +373,7 @@ export function MyReferrals() {
               <Input
                 id="ref-name"
                 value={inviteName}
-                onChange={(e) => setInviteName(e.target.value)}
+                onChange={(e) => setInviteName(toLatinDigits(e.target.value))}
                 placeholder="مثال: أحمد صالح"
                 maxLength={80}
                 required
