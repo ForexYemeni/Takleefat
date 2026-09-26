@@ -57,6 +57,8 @@ interface ReferralItem {
   createdAt: string
   registeredAt: string | null
   verifiedAt: string | null
+  /** سبب الإغلاق الآلي أو الإقصاء الإداري — يُعرض للإغلاق الآلي فقط */
+  note: string | null
   referred: { id: string; name: string; phone: string | null; role: string; status: string; specialty: string | null } | null
   activity: { assignments: number; opportunities: number; applications: number }
   rewardsTotal: number
@@ -112,6 +114,7 @@ const STATUS_TINTS: Record<string, string> = {
   VERIFIED: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
   REWARDED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   BLOCKED: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  CLOSED: 'bg-zinc-500/10 text-zinc-500 dark:text-zinc-400',
 }
 
 const REWARD_TINTS: Record<string, string> = {
@@ -580,10 +583,12 @@ function ReferralTimeline({ item }: { item: ReferralItem }) {
   const reached = (stage: number) => {
     const order = ['INVITED', 'REGISTERED', 'VERIFIED', 'REWARDED']
     const idx = order.indexOf(item.status)
+    if (item.status === 'CLOSED') return stage === 0
     if (item.status === 'BLOCKED') return stage === 0 || (stage === 1 && item.registeredAt)
     return idx >= stage
   }
   const blocked = item.status === 'BLOCKED'
+  const closed = item.status === 'CLOSED'
 
   const stages = [
     { label: 'مدعو', done: reached(0) },
@@ -605,7 +610,9 @@ function ReferralTimeline({ item }: { item: ReferralItem }) {
                 s.done
                   ? blocked
                     ? 'border-red-500 bg-red-500 text-white'
-                    : 'border-primary bg-primary text-white'
+                    : closed
+                      ? 'border-zinc-400 bg-zinc-400 text-white'
+                      : 'border-primary bg-primary text-white'
                   : 'border-border bg-background text-muted-foreground/50'
               )}
             >
@@ -646,6 +653,11 @@ function ReferralCard({ item }: { item: ReferralItem }) {
             {item.registeredAt ? ` · سجّل ${formatDate(item.registeredAt)}` : ''}
             {item.verifiedAt ? ` · وُثّق ${formatDate(item.verifiedAt)}` : ''}
           </p>
+          {item.status === 'CLOSED' && item.note && (
+            <p className="mt-1.5 rounded-lg bg-zinc-500/8 px-2.5 py-1.5 text-[10px] font-bold leading-4 text-zinc-500 dark:text-zinc-400">
+              {item.note} — لا تأثير على أي دعواتك الأخرى.
+            </p>
+          )}
         </div>
         {item.rewardsTotal > 0 && (
           <span className="shrink-0 rounded-xl bg-emerald-500/10 px-3 py-1.5 text-sm font-black text-emerald-600 dark:text-emerald-400">

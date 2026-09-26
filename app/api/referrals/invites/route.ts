@@ -72,6 +72,19 @@ export async function POST(req: NextRequest) {
       return jsonError('سبق أن دعوت هذا الرقم وسجّل منه حساب — لا يمكن تكرار الدعوة', 409)
     }
 
+    // الجولة 76 — منع الازدواج عالمياً: نفس الرقم لا يقبل دعوتين معلقتين من مُحيلين مختلفين
+    // (كانت تُسمح سابقاً فتظهر صفّتان لنفس الرقم بعد التسجيل — واحدة مربوطة وأخرى معلقة إلى الأبد)
+    const pendingElsewhere = await db.referral.findFirst({
+      where: { invitedPhone: phone, status: 'INVITED', referrerId: { not: session.user.id } },
+      select: { id: true },
+    })
+    if (pendingElsewhere) {
+      return jsonError(
+        'هذا الرقم لديه دعوة معلقة من مُحيل آخر — لا يمكن تكرار الدعوة لنفس الرقم حتى تسجيل صاحبه أو إغلاق الدعوة القديمة',
+        409
+      )
+    }
+
     const referral = await db.referral.create({
       data: {
         referrerId: session.user.id,

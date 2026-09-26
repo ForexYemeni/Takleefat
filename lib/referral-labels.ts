@@ -33,6 +33,7 @@ export const REFERRAL_STATUS_LABELS: Record<string, string> = {
   VERIFIED: 'موثق',
   REWARDED: 'تم احتساب الاستحقاق',
   BLOCKED: 'مستبعد',
+  CLOSED: 'أُغلقت — سجّل الرقم عبر دعوة أخرى',
 }
 
 export const REFERRAL_REWARD_STATUS_LABELS: Record<string, string> = {
@@ -60,6 +61,7 @@ export const REFERRAL_AUDIT_ACTION_LABELS: Record<string, string> = {
   REFERRAL_DIRECT_INVITE: 'دعوة مباشرة جديدة',
   REFERRAL_BOUND_LINK: 'ربط مُحال من رابط دعوة',
   REFERRAL_BOUND_DIRECT: 'ربط مُحال من دعوة مباشرة',
+  REFERRAL_DUPLICATES_CLOSED: 'إغلاق آلي لدعوات مكررة بنفس الرقم',
   REFERRAL_SELF_REFERRAL_BLOCKED: 'منع إحالة ذاتية',
   REFERRAL_VERIFIED: 'توثيق حساب مُحال',
   REFERRAL_REWARD_ACCRUED: 'احتساب ميزة إحالة',

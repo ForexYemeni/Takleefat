@@ -157,11 +157,66 @@ export async function ensureReferralCode(userId: string) {
 // ---------- ربط الإحالة عند التسجيل ----------
 
 /**
+ * الجولة 76 — إغلاق آلي للدعوات المباشرة المكررة لنفس الرقم بعد ربط إحداها بنجاح.
+ * كانت تُسمح دعوتان معلقتان لنفس الرقم من مُحيلين مختلفين، فبعد التسجيل تبقى الوصفة
+ * غير المربوطة «مدعو» إلى الأبد وتظهر كشخص ثانٍ بنفس الرقم — الآن تُغلق آلياً بحالة
+ * CLOSED مع سبب موثق، ولا تُحسب ضمن الإحصاءات النشطة. لا يمس الدعوة المربوطة أبداً.
+ */
+async function closeDuplicatePendingInvites(
+  phone: string,
+  keepId: string,
+  referredUserId: string
+): Promise<void> {
+  try {
+    const stale = await db.referral.findMany({
+      where: {
+        invitedPhone: phone,
+        referredId: null,
+        status: 'INVITED',
+        id: { not: keepId },
+      },
+      select: { id: true, referrerId: true },
+    })
+    for (const row of stale) {
+      await db.referral
+        .update({
+          where: { id: row.id },
+          data: {
+            status: 'CLOSED',
+            note: 'أُغلقت آلياً — الرقم سجّل في المنصة عبر دعوة أخرى',
+          },
+        })
+        .catch(() => null)
+      await logReferralAudit({
+        actorId: referredUserId,
+        actorRole: 'SYSTEM',
+        action: 'REFERRAL_DUPLICATES_CLOSED',
+        entityType: 'Referral',
+        entityId: row.id,
+        meta: { phone, boundReferralId: keepId },
+      })
+      // إشعار صاحب الدعوة المغلقة ليكون على العلم بدل انتظار لا طائل منه
+      if (row.referrerId !== referredUserId) {
+        await notify(row.referrerId, {
+          title: 'أُغلقت دعوة مكررة لنفس الرقم',
+          body: 'الرقم الذي دعوتَه سجّل في تكليفات عبر دعوة أخرى، فأُغلقت نسختك المكررة آلياً حفاظاً على دقة الإحالات — لا تأثير على أي دعواتك الأخرى.',
+          type: 'REFERRAL_REGISTERED',
+          link: '/referrals',
+        }).catch(() => null)
+      }
+    }
+  } catch (error) {
+    console.error('closeDuplicatePendingInvites failed:', error)
+  }
+}
+
+/**
  * ربط المُحال الجديد بالإحالة — يُستدعى حصراً من مسار التسجيل بعد إنشاء الحساب.
  * المصدران:
  * 1) كوكي رابط الدعوة (refCode) — إن كان صالحاً ونشطاً ولم يكن إحالة ذاتية.
  * 2) مطابقة الدعوة المباشرة برقم الهاتف (آخر دعوة معلقة بنفس الرقم).
  * لا يعطل التسجيل أبداً — أي فشل يُسجل ولا يُرمى.
+ * الجولة 76: بعد أي ربط ناجح تُغلق آلياً بقية الدعوات المعلقة المكررة لنفس الرقم.
  */
 export async function bindReferralOnRegistration(
   referredUserId: string,
@@ -213,6 +268,8 @@ export async function bindReferralOnRegistration(
             type: 'REFERRAL_REGISTERED',
             link: '/referrals',
           })
+          // الجولة 76: إغلاق الدعوات المباشرة المكررة المعلقة بنفس رقم المُحال الجديد
+          await closeDuplicatePendingInvites(referredPhone, created.id, referredUserId)
           return
         }
       }
@@ -255,6 +312,8 @@ export async function bindReferralOnRegistration(
             type: 'REFERRAL_REGISTERED',
             link: '/referrals',
           })
+          // الجولة 76: إغلاق بقية الدعوات المكررة المعلقة بنفس الرقم (من مُحيلين آخرين)
+          await closeDuplicatePendingInvites(referredPhone, direct.id, referredUserId)
         }
       }
     }

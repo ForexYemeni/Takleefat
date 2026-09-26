@@ -140,6 +140,7 @@ const STATUS_TINTS: Record<string, string> = {
   VERIFIED: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
   REWARDED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   BLOCKED: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  CLOSED: 'bg-zinc-500/10 text-zinc-500 dark:text-zinc-400',
 }
 
 const REWARD_TINTS: Record<string, string> = {
@@ -186,7 +187,8 @@ export function ReferralsAdmin() {
     staleTime: 20_000,
   })
 
-  // نسخة محلية قابلة للتحرير من الإعدادات
+  // نسخة محلية قابلة للتحرير من الإعدادات — الجولة 76: تُهيأ من المحفوظ عند أول تعديل
+  // (كانت تبدأ null فتُهدر أول نقرة على أي حقل وتظل النموذج مجمداً تماماً)
   const [draft, setDraft] = useState<SettingsShape | null>(null)
   const settings = draft ?? data?.settings ?? null
 
@@ -196,7 +198,11 @@ export function ReferralsAdmin() {
   )
 
   const patchDraft = (patch: Partial<SettingsShape>) => {
-    setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
+    setDraft((prev) => {
+      if (prev) return { ...prev, ...patch }
+      // أول تعديل: ابدأ نسخة العمل من الإعدادات المحفوظة ثم طبّق التغيير عليها فوراً
+      return data?.settings ? { ...data.settings, ...patch } : null
+    })
   }
 
   const saveSettings = async () => {
@@ -476,7 +482,13 @@ export function ReferralsAdmin() {
                 />
               </section>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {draft && (
+                  <span className="me-auto inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                    <span className="size-1.5 rounded-full bg-amber-500" />
+                    توجد تعديلات غير محفوظة — اضغط «حفظ الإعدادات» لتطبيقها
+                  </span>
+                )}
                 <Button variant="outline" onClick={() => setDraft(null)} disabled={!draft}>
                   <Undo2 className="size-4" />
                   استعادة

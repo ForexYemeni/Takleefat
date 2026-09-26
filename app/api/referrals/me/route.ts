@@ -108,6 +108,8 @@ export async function GET(req: NextRequest) {
         createdAt: r.createdAt,
         registeredAt: r.registeredAt,
         verifiedAt: r.verifiedAt,
+        // سبب الإغلاق الآلي فقط (نص نظامي آمن) — ملاحظات الإقصاء الإداري تبقى داخلية
+        note: r.status === 'CLOSED' ? r.note : null,
         referred: r.referred
           ? {
               id: r.referred.id,
@@ -171,7 +173,8 @@ export async function GET(req: NextRequest) {
       inviteLink,
       visits: codeRow.visits,
       stats: {
-        totalInvited: items.length,
+        // الجولة 76: الدعوات المغلقة آلياً (ازدواج رقم) لا تُحسب ضمن إجمالي المدعوين
+        totalInvited: items.filter((i) => i.status !== 'CLOSED').length,
         verified: verifiedCount,
         active: activeCount,
         assignments: assignmentsFromReferrals,
