@@ -1,18 +1,37 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireRole, handleApiError } from '@/lib/api-helpers'
+import { requireRole, handleApiError, ApiError } from '@/lib/api-helpers'
 import { profilePhotoUrl } from '@/lib/document-access'
 
 /**
  * الجولة 74 — مراجعة طلبات تعديل الملف المهني (إضافي بحت كلياً)
  * ================================================================
- * GET /api/profile-edit-requests — قائمة الطلبات للإدارة والموارد البشرية
+ * GET /api/profile-edit-requests — قائمة الطلبات للإدارة ولحسابات الموارد البشرية
+ *      المفعّل لها الإذن من الإدارة (الجولة 81) — الإدارة تملك المراجعة دائماً
  *      (قيد المراجعة أولاً ثم الأحدث) مع بيانات الطالب وقيمه الحالية
  *      — الرقم مقنّع: المراجعة لا تحتاج الاتصال المباشر هنا.
  */
 export async function GET() {
   try {
-    await requireRole('ADMIN', 'HR')
+    const session = await requireRole('ADMIN', 'HR')
+
+    // الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية:
+    // الإدارة تملك المراجعة دائماً بلا إعداد، وحسابات الموارد البشرية اختيارية
+    // يفعّلها الإدارة لكل حساب على حدة (profileEditReviewAccess) — يُقرأ من
+    // القاعدة لحظياً فالسحب يسري فوراً حتى على الجلسات المفتوحة
+    const operating = session.user.activeRole ?? session.user.role
+    if (operating === 'HR') {
+      const hr = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { profileEditReviewAccess: true },
+      })
+      if (!hr?.profileEditReviewAccess) {
+        throw new ApiError(
+          'مراجعة طلبات تعديل الملفات مصرّحة للإدارة، ولحسابات الموارد البشرية المفعّل لها الإذن من الإدارة فقط',
+          403
+        )
+      }
+    }
 
     const [requests, pendingCount] = await Promise.all([
       db.profileEditRequest.findMany({

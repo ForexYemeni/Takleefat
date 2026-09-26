@@ -10,6 +10,7 @@ import {
   Coins,
   Eye,
   FileBarChart,
+  FilePenLine,
   Inbox,
   Send,
   Sparkles,
@@ -48,7 +49,7 @@ interface ForsahStats {
   adminAmount: number
 }
 
-export function HrDashboard() {
+export function HrDashboard({ profileEditAccess = false }: { profileEditAccess?: boolean }) {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['forsah-dashboard'],
     queryFn: () => apiFetcher<{ stats: ForsahStats }>('/api/forsah/dashboard'),
@@ -57,6 +58,18 @@ export function HrDashboard() {
   })
 
   const stats = data?.stats
+
+  // الجولة 81 — طلبات تعديل الملفات المهنية تظهر مباشرة في الصفحة الرئيسية للموارد
+  // البشرية للحساب المفعّل له الإذن من الإدارة حصراً (profileEditAccess) — استعلام
+  // مستقل عن بيانات «فرصة» فلا يتأثر بإغلاق النظام، وفشله يخفي البطاقة بصمت فقط
+  const { data: profileEditsData } = useQuery({
+    queryKey: ['profile-edit-requests-hr-home'],
+    queryFn: () => apiFetcher<{ pendingCount: number }>('/api/profile-edit-requests'),
+    staleTime: 30_000,
+    retry: 1,
+    enabled: profileEditAccess,
+  })
+  const pendingProfileEdits = profileEditsData?.pendingCount ?? 0
 
   const statCards: { label: string; value: string; icon: React.ComponentType<{ className?: string }>; tone: string }[] = [
     { label: 'إجمالي الفرص', value: String(stats?.totalOpportunities ?? 0), icon: Briefcase, tone: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300' },
@@ -105,6 +118,50 @@ export function HrDashboard() {
           </div>
         </div>
       </header>
+
+      {/* الجولة 81 — طلبات تعديل الملفات المهنية — تظهر حصراً للحساب المفعّل له
+          الإذن من الإدارة: عدّاد حي للطلبات قيد المراجعة مع دخول مباشر للمراجعة */}
+      {profileEditAccess && profileEditsData && (
+        <Link
+          href="/hr/profile-edits"
+          className={cn(
+            'group flex items-center gap-3 rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md',
+            pendingProfileEdits > 0
+              ? 'border-amber-300 bg-gradient-to-l from-amber-50 to-transparent dark:border-amber-500/30 dark:from-amber-950/40'
+              : 'bg-card'
+          )}
+        >
+          <span
+            className={cn(
+              'flex size-10 shrink-0 items-center justify-center rounded-xl',
+              pendingProfileEdits > 0
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                : 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300'
+            )}
+          >
+            <FilePenLine className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 text-sm font-black">
+              طلبات تعديل الملفات المهنية
+              {pendingProfileEdits > 0 && (
+                <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white tabular-nums">
+                  {pendingProfileEdits} قيد المراجعة
+                </span>
+              )}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+              {pendingProfileEdits > 0
+                ? 'طلبات الكادر والأطباء لتعديل التخصص أو المؤهل أو سنوات الخبرة بانتظار قرارك — اعتمادها يطبّق القيم فوراً'
+                : 'لا طلبات قيد المراجعة حالياً — يظهر طلب أي كادر أو طبيب هنا فور إرساله مع إشعار مباشر'}
+            </p>
+          </div>
+          <span className="flex shrink-0 items-center gap-1 text-xs font-black text-violet-700 dark:text-violet-300">
+            مراجعة الطلبات
+            <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
+          </span>
+        </Link>
+      )}
 
       {/* Quick Actions */}
       <nav aria-label="الإجراءات السريعة" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">

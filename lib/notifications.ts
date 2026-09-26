@@ -97,3 +97,29 @@ export async function notifyAdmins(
     console.error('notifyAdmins failed:', error)
   }
 }
+
+/**
+ * نسخ إشعارات لحسابات الموارد البشرية — الجولة 81 (إضافي بحت كلياً):
+ * طلبات تعديل الملفات المهنية مصرّحة للإدارة دائماً، ولحسابات HR اختيارية
+ * يفعّلها الإدارة لكل حساب (profileEditReviewAccess) — فيصل الإشعار حصراً
+ * للحسابات المفعّل لها الإذن (داخلي + بريد + دفع) على نفس نمط notifyAdmins
+ * حرفياً، وفشلها لا يمس العملية الأساسية أبداً.
+ */
+export async function notifyHrs(
+  input: NotifyInput,
+  exceptUserId?: string
+): Promise<void> {
+  try {
+    const hrs = await db.user.findMany({
+      where: { role: 'HR', status: 'APPROVED', profileEditReviewAccess: true },
+      select: { id: true },
+    })
+    await Promise.allSettled(
+      hrs
+        .filter((h) => h.id !== exceptUserId)
+        .map((h) => notify(h.id, input))
+    )
+  } catch (error) {
+    console.error('notifyHrs failed:', error)
+  }
+}

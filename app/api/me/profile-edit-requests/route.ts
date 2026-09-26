@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireRole, handleApiError, jsonError, ApiError } from '@/lib/api-helpers'
 import { profileEditRequestSchema } from '@/lib/validations/user'
 import { isValidQualification, qualificationErrorMessage } from '@/lib/qualifications'
-import { notify, notifyAdmins } from '@/lib/notifications'
+import { notify, notifyAdmins, notifyHrs } from '@/lib/notifications'
 import { profilePhotoUrl } from '@/lib/document-access'
 
 /**
@@ -14,7 +14,7 @@ import { profilePhotoUrl } from '@/lib/document-access'
  *      · حقل واحد على الأقل بقيمة جديدة مختلفة عن الحالية
  *      · المؤهل يُتحقق منه من كتالوج الإدارة حسب جمهور صاحب الطلب (كادر/طبيب)
  *      · لا يُقبل طلب جديد إذا كان لديه طلب قيد المراجعة (نمنع التكدس)
- *      · عند الإرسال: إشعار داخلي + بريد + دفع للإدارة (PROFILE_EDIT_REQUESTED)
+ *      · عند الإرسال: إشعار داخلي + بريد + دفع للإدارة ولحسابات الموارد البشرية (PROFILE_EDIT_REQUESTED — الجولة 81)
  */
 export async function GET() {
   try {
@@ -158,6 +158,14 @@ export async function POST(req: NextRequest) {
         body: `${user.name} يطلب: ${fieldsSummary}${note ? ` — ملاحظته: ${note}` : ''}`,
         type: 'PROFILE_EDIT_REQUESTED',
         link: '/admin/profile-edits',
+      })
+      // الجولة 81 — حسابات الموارد البشرية تملك صلاحية مراجعة الطلبات وحسمها منذ
+      // الجولة 74 — يحق لها أن يصلها الإشعار فور وصول أي طلب جديد (داخلي + بريد + دفع)
+      await notifyHrs({
+        title: '✏️ طلب تعديل ملف مهني جديد',
+        body: `${user.name} يطلب: ${fieldsSummary}${note ? ` — ملاحظته: ${note}` : ''}`,
+        type: 'PROFILE_EDIT_REQUESTED',
+        link: '/hr/profile-edits',
       })
     } catch (e) {
       console.error('profile-edit notify failed:', e)

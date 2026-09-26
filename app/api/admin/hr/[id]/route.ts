@@ -108,6 +108,33 @@ export async function PATCH(
       message = 'حُدّثت صلاحيات الحساب — تسري فوراً على جلساته'
     }
 
+    // الجولة 81 — تفعيل/سحب إذن مراجعة طلبات تعديل الملفات المهنية:
+    // الإدارة تملك المراجعة دائماً، وحسابات HR اختيارية يقررها الإدارة لكل حساب —
+    // التسري فوري (الشاشة والقائمة والإشعارات تقرأ القاعدة لحظياً) ويُسجّل تدقيقاً ويُشعَر الحساب
+    if (data.action === 'SET_PROFILE_EDIT_ACCESS' && typeof data.profileEditReviewAccess === 'boolean') {
+      const granted = data.profileEditReviewAccess
+      await db.user.update({ where: { id }, data: { profileEditReviewAccess: granted } })
+      await logForsahAudit({
+        actorId: session.user.id,
+        actorRole: 'ADMIN',
+        action: 'HR_PROFILE_EDIT_ACCESS_CHANGED',
+        entityType: 'HR',
+        entityId: id,
+        meta: { profileEditReviewAccess: granted },
+      })
+      await notify(id, {
+        title: granted ? '✏️ أُذِن حسابك بمراجعة طلبات تعديل الملفات' : 'سُحب إذن مراجعة طلبات تعديل الملفات',
+        body: granted
+          ? 'يمكنك الآن مراجعة طلبات الكادر والأطباء لتعديل تخصصهم أو مؤهلهم أو سنوات خبرتهم واعتمادها من قسم «طلبات تعديل الملفات».'
+          : 'أوقفت الإدارة إذن حسابك لمراجعة هذه الطلبات — ستُخفى الشاشة من لوحتك وتظل المراجعة للإدارة.',
+        type: 'GENERIC',
+        link: granted ? '/hr/profile-edits' : '/hr',
+      })
+      message = granted
+        ? 'فُعّل إذن مراجعة طلبات تعديل الملفات لهذا الحساب — تسري فوراً'
+        : 'سُحب إذن مراجعة طلبات تعديل الملفات — اختفت الشاشة من لوحته فوراً'
+    }
+
     const fresh = await db.user.findUnique({
       where: { id },
       select: {
@@ -116,6 +143,7 @@ export async function PATCH(
         status: true,
         forsahPermissions: true,
         forsahCommissionPercent: true,
+        profileEditReviewAccess: true,
         jobTitle: true,
         hospitalName: true,
       },

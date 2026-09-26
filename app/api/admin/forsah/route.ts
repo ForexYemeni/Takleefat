@@ -40,6 +40,7 @@ export async function GET() {
           status: true,
           forsahPermissions: true,
           forsahCommissionPercent: true,
+          profileEditReviewAccess: true,
           createdAt: true,
           _count: { select: { forsahOpportunitiesCreated: true } },
         },

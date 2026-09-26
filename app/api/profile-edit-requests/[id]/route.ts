@@ -23,6 +23,22 @@ export async function PATCH(
     const session = await requireRole('ADMIN', 'HR')
     const { id } = await params
 
+    // الجولة 81 — الإدارة تحسم دائماً؛ حسابات الموارد البشرية بحسب الإذن
+    // المفعّل لها من الإدارة (يُقرأ من القاعدة لحظياً فالسحب يسري فوراً)
+    const operating = session.user.activeRole ?? session.user.role
+    if (operating === 'HR') {
+      const hr = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { profileEditReviewAccess: true },
+      })
+      if (!hr?.profileEditReviewAccess) {
+        throw new ApiError(
+          'حسم طلبات تعديل الملفات مصرّح للإدارة، ولحسابات الموارد البشرية المفعّل لها الإذن من الإدارة فقط',
+          403
+        )
+      }
+    }
+
     const body = await req.json().catch(() => ({}))
     const parsed = profileEditDecisionSchema.safeParse(body)
     if (!parsed.success) {

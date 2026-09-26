@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
         status: data.status,
         forsahPermissions: permissions,
         forsahCommissionPercent: data.forsahCommissionPercent,
+        // الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية (اختياري — الإدارة تقرّه عند الإنشاء)
+        profileEditReviewAccess: data.profileEditReviewAccess ?? false,
       },
       select: { id: true, name: true, phone: true, status: true, forsahPermissions: true },
     })

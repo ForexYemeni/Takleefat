@@ -199,6 +199,8 @@ export const hrCreateSchema = z
       .regex(/[A-Za-z]/, 'كلمة المرور يجب أن تحتوي على حروف')
       .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على أرقام'),
     status: z.enum(['APPROVED', 'PENDING'], { error: 'حالة الحساب مطلوبة' }).default('APPROVED'),
+    // الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية (اختياري — false افتراضياً)
+    profileEditReviewAccess: z.boolean().optional(),
     forsahPermissions: z
       .array(z.string().min(1))
       .max(20, 'قائمة الصلاحيات طويلة جداً')
@@ -236,7 +238,7 @@ export const hrDeleteSchema = z.object({
 
 /** تعديل حساب موارد بشرية من الإدارة */
 export const hrUpdateSchema = z.object({
-  action: z.enum(['UPDATE', 'SET_STATUS', 'RESET_PASSWORD', 'SET_PERMISSIONS'], {
+  action: z.enum(['UPDATE', 'SET_STATUS', 'RESET_PASSWORD', 'SET_PERMISSIONS', 'SET_PROFILE_EDIT_ACCESS'], {
     error: 'نوع التعديل غير صحيح',
   }),
   name: z.string().trim().max(80).optional(),
@@ -251,6 +253,8 @@ export const hrUpdateSchema = z.object({
     .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على أرقام')
     .optional(),
   forsahPermissions: z.array(z.string()).max(20).optional(),
+  // الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية (تفعيل/سحب من الإدارة)
+  profileEditReviewAccess: z.boolean().optional(),
   forsahCommissionPercent: z
     .preprocess(
       (v) => (v === '' || v === null || v === undefined ? null : v),

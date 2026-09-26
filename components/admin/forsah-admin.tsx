@@ -16,6 +16,7 @@ import {
   Power,
   PowerOff,
   Save,
+  FilePenLine,
   ScrollText,
   Send,
   ShieldCheck,
@@ -35,6 +36,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -344,6 +346,12 @@ export function ForsahAdminManager() {
                       {h.hospitalName && <span>{h.hospitalName}</span>}
                       <span>{h._count.forsahOpportunitiesCreated} فرصة</span>
                       <span>{h.forsahPermissions.length} صلاحية</span>
+                      {/* الجولة 81 — شارة إذن مراجعة طلبات تعديل الملفات */}
+                      {h.profileEditReviewAccess && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                          مراجعة الملفات مفعّلة
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -546,6 +554,8 @@ interface HrAccount {
   status: string
   forsahPermissions: string[]
   forsahCommissionPercent: number | null
+  /** الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية (يفعّله الإدارة لكل حساب) */
+  profileEditReviewAccess: boolean
   _count: { forsahOpportunitiesCreated: number }
 }
 
@@ -573,6 +583,8 @@ function HrAccountDialog({
   const [permissions, setPermissions] = useState<string[]>(
     mode === 'create' ? [...defaults] : [...(account?.forsahPermissions ?? [])]
   )
+  // الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية (اختياري — الإدارة تفعّله لمن يشاء)
+  const [profileEditAccess, setProfileEditAccess] = useState(account?.profileEditReviewAccess ?? false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // الجولة 68: المنشأة تُختار حصراً من الجهات الصحية المسجلة — بلا أي إدخال حر
@@ -605,6 +617,7 @@ function HrAccountDialog({
         password,
         status,
         forsahPermissions: permissions,
+        profileEditReviewAccess: profileEditAccess,
         forsahCommissionPercent: commission === '' ? null : Number(commission),
       }),
     onSuccess: (res) => {
@@ -791,6 +804,42 @@ function HrAccountDialog({
               <Button size="sm" variant="outline" className="mt-2 w-full rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'SET_PERMISSIONS', forsahPermissions: permissions })}>
                 <Save className="size-3.5" />
                 حفظ الصلاحيات
+              </Button>
+            )}
+          </div>
+
+          {/* الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية: الإدارة تملك المراجعة
+              دائماً، ولحسابات الموارد البشرية إذن اختياري يفعّله الإدارة لكل حساب —
+              التفعيل يُظهر الشاشة والقائمة ويُشعِر الحساب بكل طلب جديد، والسحب يخفيها فوراً */}
+          <div className="rounded-2xl border p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-xs font-black">
+                  <FilePenLine className="size-3.5 text-amber-600" />
+                  مراجعة طلبات تعديل الملفات المهنية
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-black',
+                      profileEditAccess
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : 'bg-muted text-muted-foreground'
+                    )}
+                  >
+                    {profileEditAccess ? 'مفعّل لهذا الحساب' : 'غير مفعّل'}
+                  </span>
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                  الإدارة تراجع هذه الطلبات دائماً. فعّل الإذن ليصله هذا الحساب طلبات الكادر والأطباء
+                  (تعديل التخصص/المؤهل/سنوات الخبرة) لمراجعتها واعتمادها مع إشعار فوري بكل طلب —
+                  وسحبه يخفي الشاشة والإشعارات فوراً.
+                </p>
+              </div>
+              <Switch checked={profileEditAccess} onCheckedChange={setProfileEditAccess} className="shrink-0" aria-label="إذن مراجعة طلبات تعديل الملفات" />
+            </div>
+            {mode === 'edit' && (
+              <Button size="sm" variant="outline" className="mt-2 w-full rounded-xl" disabled={act.isPending} onClick={() => act.mutate({ action: 'SET_PROFILE_EDIT_ACCESS', profileEditReviewAccess: profileEditAccess })}>
+                <Save className="size-3.5" />
+                حفظ إذن المراجعة
               </Button>
             )}
           </div>

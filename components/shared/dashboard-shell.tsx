@@ -187,6 +187,12 @@ interface DashboardShellProps {
   role: DashboardRole
   userName: string
   children: React.ReactNode
+  /**
+   * الجولة 81 — إذن مراجعة طلبات تعديل الملفات المهنية لحسابات الموارد
+   * البشرية (يُمرَّر من لوحة HR حصراً) — false يخفي «طلبات تعديل الملفات»
+   * من القائمة؛ undefined لبقية اللوحات = سلوك قائم بلا أي تغيير
+   */
+  profileEditAccess?: boolean
 }
 
 /**
@@ -200,7 +206,7 @@ const FORSAH_NAV_HREFS = new Set(['/nurse/opportunities', '/doctor/opportunities
  * هيكل لوحة التحكم — تكليفات | Takleefat
  * شريط جانبي ثابت على الشاشات الكبيرة + قائمة منزلقة على الجوال
  */
-export function DashboardShell({ role, userName, children }: DashboardShellProps) {
+export function DashboardShell({ role, userName, children, profileEditAccess }: DashboardShellProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -218,7 +224,11 @@ export function DashboardShell({ role, userName, children }: DashboardShellProps
   })
   const forsahEnabled = forsahStatus?.enabled ?? true
   const navItems = NAV_CONFIG[role].items.filter(
-    (item) => forsahEnabled || role === 'ADMIN' || !FORSAH_NAV_HREFS.has(item.href)
+    (item) =>
+      (forsahEnabled || role === 'ADMIN' || !FORSAH_NAV_HREFS.has(item.href)) &&
+      // الجولة 81 — «طلبات تعديل الملفات» تُخفى من قائمة الموارد البشرية إن لم
+      // يفعّل الإدارة الإذن لحسابه (profileEditAccess=false من لوحة HR)
+      !(item.href === '/hr/profile-edits' && profileEditAccess === false)
   )
   const roleLabel = NAV_CONFIG[role].roleLabel
 
