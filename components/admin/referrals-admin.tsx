@@ -42,7 +42,7 @@ import {
   REFERRAL_REWARD_STATUS_LABELS,
   REFERRAL_ORIGIN_LABELS,
   REFERRAL_AUDIT_ACTION_LABELS,
-} from '@/lib/referrals'
+} from '@/lib/referral-labels'
 
 /**
  * «إدارة الإحالات» — الجولة 75 | لوحة الإدارة

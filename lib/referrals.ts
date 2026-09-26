@@ -2,6 +2,34 @@ import { randomBytes } from 'crypto'
 import { db } from '@/lib/db'
 import { notify, notifyAdmins } from '@/lib/notifications'
 import type { ReferralSettings } from '@prisma/client'
+import {
+  REFERRAL_ELIGIBLE_ROLES,
+  isReferralEligibleRole,
+  referralPercentForRolePure,
+  REFERRAL_COOKIE,
+  REFERRAL_COOKIE_MAX_AGE,
+  REFERRAL_STATUS_LABELS,
+  REFERRAL_REWARD_STATUS_LABELS,
+  REFERRAL_SOURCE_LABELS,
+  REFERRAL_ORIGIN_LABELS,
+  REFERRAL_AUDIT_ACTION_LABELS,
+} from '@/lib/referral-labels'
+
+// الثوابت والتسميات الحقة في lib/referral-labels (نقية آمنة للعميل) —
+// يُعاد تصديرها هنا للتوافق مع مستوردي الخادم دون تكرار مصدر الحقيقة
+export {
+  REFERRAL_ELIGIBLE_ROLES,
+  isReferralEligibleRole,
+  referralPercentForRolePure as referralPercentForRole,
+  REFERRAL_COOKIE,
+  REFERRAL_COOKIE_MAX_AGE,
+  REFERRAL_STATUS_LABELS,
+  REFERRAL_REWARD_STATUS_LABELS,
+  REFERRAL_SOURCE_LABELS,
+  REFERRAL_ORIGIN_LABELS,
+  REFERRAL_AUDIT_ACTION_LABELS,
+}
+export type { ReferralEligibleRole } from '@/lib/referral-labels'
 
 /**
  * برنامج إحالة تكليفات — الجولة 75 | تكليفات | Takleefat
@@ -17,69 +45,7 @@ import type { ReferralSettings } from '@prisma/client'
  *   — نفس فلسفة الإشعارات وسجل تدقيق «فرصة».
  */
 
-/** الأدوار المؤهلة لاستخدام نظام الإحالة — الإدارة (ADMIN) مستثناة نهائياً */
-export const REFERRAL_ELIGIBLE_ROLES = [
-  'NURSE',
-  'DOCTOR',
-  'DOCTOR_SUPERVISOR',
-  'RECEIVER',
-  'HR',
-] as const
-
-export type ReferralEligibleRole = (typeof REFERRAL_ELIGIBLE_ROLES)[number]
-
-export function isReferralEligibleRole(role: string): boolean {
-  return (REFERRAL_ELIGIBLE_ROLES as readonly string[]).includes(role)
-}
-
-/** كوكي رابط الدعوة — httpOnly لمدة 30 يوماً */
-export const REFERRAL_COOKIE = 'tkf_ref'
-export const REFERRAL_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
-
-// ---------- التسميات العربية الموحدة ----------
-
-export const REFERRAL_STATUS_LABELS: Record<string, string> = {
-  INVITED: 'مدعو',
-  REGISTERED: 'أنشأ حساباً',
-  VERIFIED: 'موثق',
-  REWARDED: 'تم احتساب الاستحقاق',
-  BLOCKED: 'مستبعد',
-}
-
-export const REFERRAL_REWARD_STATUS_LABELS: Record<string, string> = {
-  PENDING_REVIEW: 'بانتظار المراجعة',
-  ACCRUED: 'مستحق',
-  PARTIALLY_USED: 'استُخدم جزء منه',
-  USED: 'استُخدم بالكامل',
-  CANCELLED: 'ملغى',
-}
-
-export const REFERRAL_SOURCE_LABELS: Record<string, string> = {
-  LINK: 'رابط دعوة',
-  DIRECT: 'دعوة مباشرة',
-}
-
-export const REFERRAL_ORIGIN_LABELS: Record<string, string> = {
-  ASSIGNMENT: 'تكليف',
-  OPPORTUNITY: 'فرصة عمل',
-}
-
-/** أوصاف أفعال سجل التدقيق للعرض الإداري */
-export const REFERRAL_AUDIT_ACTION_LABELS: Record<string, string> = {
-  REFERRAL_CODE_CREATED: 'إنشاء كود إحالة شخصي',
-  REFERRAL_TRACK_VISIT: 'زيارة صفحة دعوة',
-  REFERRAL_DIRECT_INVITE: 'دعوة مباشرة جديدة',
-  REFERRAL_BOUND_LINK: 'ربط مُحال من رابط دعوة',
-  REFERRAL_BOUND_DIRECT: 'ربط مُحال من دعوة مباشرة',
-  REFERRAL_SELF_REFERRAL_BLOCKED: 'منع إحالة ذاتية',
-  REFERRAL_VERIFIED: 'توثيق حساب مُحال',
-  REFERRAL_REWARD_ACCRUED: 'احتساب ميزة إحالة',
-  REFERRAL_REWARD_SKIPPED: 'تخطي احتساب (شرط غير مستوفى)',
-  REFERRAL_REWARD_DECIDED: 'قرار مراجعة استحقاق',
-  REFERRAL_BENEFITS_USED: 'استخدام مزايا كخصم من الرسوم',
-  REFERRAL_STATUS_CHANGED: 'تغيير حالة إحالة',
-  REFERRAL_SETTINGS_UPDATED: 'تحديث إعدادات برنامج الإحالة',
-}
+export type { ReferralSettings }
 
 // ---------- الإعدادات ----------
 
@@ -110,27 +76,6 @@ export async function getReferralSettings(): Promise<ReferralSettings> {
     return row ?? { ...REFERRAL_SETTINGS_DEFAULTS }
   } catch {
     return { ...REFERRAL_SETTINGS_DEFAULTS }
-  }
-}
-
-/** نسبة الإحالة الفعالة لدور مُحيل معين */
-export function referralPercentForRole(
-  settings: ReferralSettings,
-  role: string
-): number {
-  switch (role) {
-    case 'NURSE':
-      return settings.percentNURSE
-    case 'DOCTOR':
-      return settings.percentDOCTOR
-    case 'DOCTOR_SUPERVISOR':
-      return settings.percentDOCTOR_SUPERVISOR
-    case 'RECEIVER':
-      return settings.percentRECEIVER
-    case 'HR':
-      return settings.percentHR
-    default:
-      return 0
   }
 }
 
@@ -420,7 +365,7 @@ async function accrueReferralReward(input: AccrualInput): Promise<void> {
     return
   }
 
-  const percent = referralPercentForRole(settings, referrer.role)
+  const percent = referralPercentForRolePure(settings, referrer.role)
   if (percent <= 0) {
     await skip('نسبة الإحالة صفر لهذا الدور')
     return

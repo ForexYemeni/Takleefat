@@ -38,7 +38,7 @@ import {
   REFERRAL_SOURCE_LABELS,
   REFERRAL_REWARD_STATUS_LABELS,
   REFERRAL_ORIGIN_LABELS,
-} from '@/lib/referrals'
+} from '@/lib/referral-labels'
 
 /**
  * «إحالاتي» — الجولة 75 | برنامج إحالة تكليفات
